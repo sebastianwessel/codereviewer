@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseChangeImpactCorpusManifestJson } from '../change-impact-eval/change-impact-corpus.schema.js'
+import { parseIntentCorpusManifestJson } from '../intent-eval/intent-corpus.schema.js'
 import { describe, expect, test } from 'vitest'
 import {
   containsAnswerKey,
@@ -338,7 +339,8 @@ const parserByCorpus: Readonly<Record<string, (json: string) => unknown>> = {
   'real-repo-cross-file': parseRealRepoCorpusManifestJson,
   'security-advisory-2026': parseRealRepoCorpusManifestJson,
   'multi-defect-2026': parseRealRepoCorpusManifestJson,
-  'change-impact-dependents': parseChangeImpactCorpusManifestJson
+  'change-impact-dependents': parseChangeImpactCorpusManifestJson,
+  'intent-fulfilment': parseIntentCorpusManifestJson
 }
 
 describe('every shipped corpus manifest', () => {

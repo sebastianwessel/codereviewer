@@ -89,6 +89,15 @@ describe('evaluation package scripts', () => {
     )
     expect(packageJson.scripts['eval:impact-corpus']).toBeUndefined()
 
+    // The intent-fulfilment corpus (spec 23) hydrates only, for the same reason
+    // and with one of its own: hydration is local git and free, while a run spends
+    // one model call per obligation. A combined script would make the expensive
+    // half look like part of preparing the corpus.
+    expect(packageJson.scripts['eval:intent-corpus:hydrate']).toContain(
+      'hydrate-intent-corpus'
+    )
+    expect(packageJson.scripts['eval:intent-corpus']).toBeUndefined()
+
     // removed scripts must not exist
     const removed = [
       'eval',

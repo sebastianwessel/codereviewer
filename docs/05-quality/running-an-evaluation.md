@@ -148,6 +148,27 @@ Its scorer is a separate command with a separate option set, because the diff
 reviewer's corpus and this one answer different questions and must never be
 pooled.
 
+### Intent-fulfilment corpus
+
+```bash
+npm run eval:intent-corpus:hydrate
+```
+
+**Local git only** — no network request, no model call, no spend. Every commit the
+manifest names is in this repository's own history, so hydration checks out each
+change's head into `<case-root>/<case-id>/repo/` and assembles the stated intent
+beside it from the declared slices of the declared document at the declared
+commit.
+
+It **asserts the pre-written guarantee** with
+`git merge-base --is-ancestor <intentCommit> <baseCommit>` and throws rather than
+materialise a case whose intent could have been written to describe the change —
+which is the defect of a corpus built from commit messages, and the reason this
+corpus exists.
+
+Same rule as above: **no combined hydrate-and-run script**. Hydration is free; a
+run spends one model call per obligation.
+
 ---
 
 ## `eval impact`
@@ -274,6 +295,95 @@ corpus.
 | `0` | At least one case scored |
 | `1` | Nothing could be scored — an un-hydrated corpus must never look like a completed measurement |
 | `2` | Usage/config error, including `--slice-root` and an unknown `--case` id |
+
+---
+
+## `eval intent`
+
+Scores the intent-fulfilment corpus (`specs/23` §Evaluation). A **third** command,
+for the same reason `eval impact` is a second one: three corpora answer three
+different questions with three different answer keys. It does not accept
+`--slice-root`, its cases are `case.json` under a `--case-root`, and its artefact
+carries a `reportKind` no other report can parse as.
+
+```bash
+codereviewer eval intent [flags]
+```
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--config <path>` | discovery | Load this config file instead of discovery |
+| `--manifest <path>` | `eval/corpora/intent-fulfilment/manifest.json` | Answer key to score against |
+| `--case-root <path>` | `.codereviewer/eval/intent-cases/intent-fulfilment` | Hydrated checkouts to run over |
+| `--case <case-id>` | all | Filter cases. **Repeatable.** An unknown id fails the run |
+| `--log-level`, `--debug`, `--log-file` | — | As `eval run` |
+
+The lane is **forced on** and every case runs at its declared `maxObligations`.
+There is no zero-spend arm: this lane's cheapest honest run is one extraction, one
+judgement per obligation, and one explanation, and a run that read nothing would
+report nothing.
+
+### What it reports, in spec 23's own order
+
+Spec 23 fixes its decision rule before any measurement — *ship only if the
+false-satisfied rate is low* — so the claim count leads every table:
+
+1. **False-satisfied claims**, named individually, split by whether an `evidenced`
+   or a `not-contradicted` verdict cleared them. A wrong `not-contradicted` counts
+   on the same footing as a wrong `evidenced`, per the pre-registration, and the
+   same row is also a recall loss.
+2. **Outstanding recall** — enumerated outstanding obligations the run left on the
+   list a human reads.
+3. **Coverage**, and how much of what the run said the answer key covers at all.
+
+The two arms — pre-written intent and the post-hoc commit-message control — are
+printed in separate tables with **no total between them**.
+
+### What it cannot tell you
+
+- **The false-satisfied RATE as spec 23 defines it.** Its denominator is every
+  obligation reported `evidenced` or `not-contradicted`, and the answer key holds a
+  truth only for the obligations a human enumerated as outstanding. The claim
+  **count** is exactly spec 23's numerator; the share printed beside it has a
+  different denominator and is labelled with it. The spec's own rate is reported as
+  `not-measured` with that reason in the artefact, never as a number.
+- **Obligation-extraction fidelity.** The human obligation count is printed beside
+  the reported count; the statement-by-statement comparison is not made.
+- **Whether an unanchored obligation is right.** An obligation citing a clause no
+  expectation anchors is unscored, and that count is printed beside every rate.
+
+### Absence is never zero
+
+| Situation | Reported as |
+| --- | --- |
+| An input limit bound and the engine exited 4 | `refused` — correct behaviour, excluded from every rate with its code printed |
+| No hydrated checkout under `--case-root` | `not-hydrated` |
+| The checkout's commits or answer key disagree with the manifest | `stale-checkout` |
+| The engine threw | `engine-error` |
+| The lane reported `disabled` / `provider-unavailable` / no usable intent | `capability-disabled`, `provider-unavailable`, `no-intent` |
+
+A refused case is **not** a case with zero obligations. Spec 23 requires every
+input limit to refuse rather than truncate, so exit 4 is the engine answering
+correctly; counting it as a scored zero would drag every rate down while looking
+like a result. Note that a case configured near its obligation limit can refuse in
+one round and score in the next, which moves the denominator between rounds on its
+own.
+
+### Artefacts and exit codes
+
+Written under `.codereviewer/eval/intent-fulfilment/`, and again under
+`.codereviewer/eval/intent-fulfilment/runs/<run-id>/`:
+
+| Artefact | Contents |
+| --- | --- |
+| `intent-eval-report.json` | Structured source of truth: coverage, the two arms, every false-satisfied claim, per-case results, provenance |
+| `intent-eval-summary.md` | The rendered document; also printed to stdout |
+
+| Code | When |
+| --- | --- |
+| `0` | At least one case scored |
+| `1` | Nothing could be scored — including "no provider resolved", which must never look like a run that found nothing wrong |
+| `2` | Usage/config error, including `--slice-root` |
 
 ---
 

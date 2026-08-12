@@ -396,8 +396,8 @@ rather than a wiring bug.** `runVerificationForReview` is on the `review` comman
 lane, but wiring it into the eval would score nothing: this flow adjudicates
 external CLAIMS, and an eval case carries none. It needs its own corpus and its own
 entry point, the way change-impact has `eval impact` with
-`eval/corpora/change-impact-dependents` and intent-fulfilment has `intent check`
-with its own corpus. That corpus is claims paired with ground-truth verdicts, and
+`eval/corpora/change-impact-dependents` and intent-fulfilment has `eval intent`
+with `eval/corpora/intent-fulfilment`. That corpus is claims paired with ground-truth verdicts, and
 it does not exist.
 
 Until each exists, the honest statement is that neither half of this flow has a

@@ -131,6 +131,55 @@ export const computeChangeImpactAnswerKeyDigestByCase = (
     ])
   )
 
+// And a third pair, for the intent-fulfilment corpus, separate for the same reason
+// the second pair is separate from the first.
+//
+// The scope is exactly what decides whether a run got a row right: the expectation
+// id and the intent lines it anchors. The `statement` and the `rationale` are
+// deliberately OUTSIDE it — they are what a human reads to check the label, and
+// rewording one for clarity must not invalidate a comparison between two runs that
+// scored the identical join.
+const intentAnswerKeyContent = (corpusCase: {
+  readonly outstandingExpectations: readonly {
+    readonly id: string
+    readonly intentLineRanges: readonly (readonly [number, number])[]
+  }[]
+}): unknown =>
+  corpusCase.outstandingExpectations.map((expectation) => ({
+    id: expectation.id,
+    intentLineRanges: expectation.intentLineRanges.map((range) => [...range])
+  }))
+
+type IntentDigestableCase = {
+  readonly id: string
+  readonly outstandingExpectations: readonly {
+    readonly id: string
+    readonly intentLineRanges: readonly (readonly [number, number])[]
+  }[]
+}
+
+export const computeIntentAnswerKeyDigest = (
+  cases: readonly IntentDigestableCase[]
+): string =>
+  stableJsonDigest(
+    [...cases]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((corpusCase) => ({
+        id: corpusCase.id,
+        outstandingExpectations: intentAnswerKeyContent(corpusCase)
+      }))
+  )
+
+export const computeIntentAnswerKeyDigestByCase = (
+  cases: readonly IntentDigestableCase[]
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    cases.map((corpusCase) => [
+      corpusCase.id,
+      stableJsonDigest(intentAnswerKeyContent(corpusCase))
+    ])
+  )
+
 // Cases both runs scored, whose expectations differ between them. An empty list
 // means every shared case was scored against the same answer key, whatever else
 // differs about the two runs.

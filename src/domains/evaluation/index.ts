@@ -122,6 +122,82 @@ export {
   type ChangeImpactEvalReport
 } from './change-impact-eval/change-impact-eval-report.js'
 export { renderChangeImpactEvalSummary } from './change-impact-eval/change-impact-eval-rendering.js'
+// Intent-fulfilment corpus (spec 23 §Evaluation). A third corpus with a third
+// answer key, exported beside the other two and never merged with them.
+export {
+  countOutstandingExpectationsByArm,
+  intentArms,
+  IntentArmSchema,
+  IntentCorpusCaseSchema,
+  IntentCorpusManifestSchema,
+  IntentMismatchOriginSchema,
+  IntentSourceSchema,
+  OutstandingExpectationSchema,
+  parseIntentCorpusManifest,
+  parseIntentCorpusManifestJson,
+  type IntentArm,
+  type IntentArmCounts,
+  type IntentCorpusCase,
+  type IntentCorpusManifest,
+  type IntentMismatchOrigin,
+  type IntentSourceDefinition,
+  type OutstandingExpectation
+} from './intent-eval/intent-corpus.schema.js'
+export {
+  assembleIntentBody,
+  defaultIntentManifestPath,
+  defaultIntentOutputRoot,
+  hydrateIntentCorpus,
+  intentHydrationSource,
+  renderIntentDocument,
+  INTENT_CASE_ARTIFACT_NAME,
+  INTENT_CASE_CONTEXT_DIRECTORY,
+  INTENT_CASE_INTENT_DOCUMENT,
+  INTENT_CASE_WORK_TREE,
+  type AssembledIntent,
+  type HydratedIntentCase,
+  type HydrateIntentCorpusOptions,
+  type HydrateIntentCorpusResult,
+  type IntentCaseResult,
+  type IntentLineMapEntry
+} from './intent-eval/intent-corpus-hydration.js'
+export {
+  intentUnmeasuredReasons,
+  listPlacement,
+  scoreIntentCases,
+  OUTSTANDING_LIST_PLACEMENT,
+  SPEC_DENOMINATOR_NOT_MEASURABLE,
+  type ExpectationOutcome,
+  type IntentArmMetrics,
+  type IntentCaseInput,
+  type IntentCaseOutcome,
+  type IntentCaseScore,
+  type IntentCoverage,
+  type IntentFalseSatisfiedMetrics,
+  type IntentRate,
+  type IntentScore,
+  type IntentUnmeasuredReason,
+  type ScoredIntentExpectation
+} from './intent-eval/intent-eval-scoring.js'
+export {
+  buildIntentEvalReport,
+  parseIntentEvalReport,
+  IntentEvalReportSchema,
+  INTENT_EVAL_ARTIFACT_ROOT,
+  INTENT_EVAL_REPORT_ARTIFACT_NAME,
+  INTENT_EVAL_SUMMARY_ARTIFACT_NAME,
+  type IntentEvalReport
+} from './intent-eval/intent-eval-report.js'
+export { renderIntentEvalSummary } from './intent-eval/intent-eval-rendering.js'
+export {
+  intentMetricComparability,
+  intentMetricsAffectedBetween,
+  INTENT_METRICS_VERSION,
+  INTENT_METRICS_VERSION_HISTORY,
+  type IntentComparabilityKey,
+  type IntentMetricComparability,
+  type IntentMetricsVersionDivergence
+} from './intent-eval/intent-metrics-versions.js'
 export {
   readEngineIdentity,
   ENGINE_COMMIT_UNKNOWN,
@@ -274,7 +350,9 @@ export {
 export {
   computeAnswerKeyDigest,
   computeChangeImpactAnswerKeyDigest,
-  computeChangeImpactAnswerKeyDigestByCase
+  computeChangeImpactAnswerKeyDigestByCase,
+  computeIntentAnswerKeyDigest,
+  computeIntentAnswerKeyDigestByCase
 } from './report/eval-report-provenance.js'
 export {
   loadEvalCasesFromFixtures

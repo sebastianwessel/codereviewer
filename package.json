@@ -69,6 +69,7 @@
     "eval:corpus:hydrate": "node --import tsx scripts/hydrate-real-repo-corpus.ts",
     "eval:corpus": "node --import tsx scripts/hydrate-real-repo-corpus.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/corpus-slices/real-repo-cross-file --review-mode pr --review-depth thorough --max-concurrent-tasks 1",
     "eval:impact-corpus:hydrate": "node --import tsx scripts/hydrate-change-impact-corpus.ts",
+    "eval:intent-corpus:hydrate": "node --import tsx scripts/hydrate-intent-corpus.ts",
     "provider:install:openai": "npm install @purista/harness-openai",
     "provider:install:bedrock": "npm install @purista/harness-bedrock",
     "provider:install:azure": "npm install @purista/harness-azure-foundry",

@@ -1,6 +1,6 @@
 # Datasets
 
-Eight corpora exist, and they measure genuinely different things. Quoting a number
+Nine corpora exist, and they measure genuinely different things. Quoting a number
 without naming its corpus is meaningless — recall on a curated-subset answer key
 and recall on an exhaustive one are not the same quantity.
 
@@ -13,6 +13,7 @@ and recall on an exhaustive one are not the same quantity.
 | Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 72 | 74 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
 | Multi-defect 2026 | `eval/corpora/multi-defect-2026/manifest.json` | 5 | 11 | **required** | Whether the engine reports more than one defect in a single reviewed file |
 | Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
+| Intent-fulfilment | `eval/corpora/intent-fulfilment/manifest.json` | 28 | 67 | **required** (local git, free) | Whether the intent lane wrongly clears an obligation nobody did |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
 > **The real-repository and change-impact corpora must never be pooled.** They are
@@ -615,6 +616,65 @@ are recorded in the manifest under `screening.rejections`.
 
 ---
 
+## Intent-fulfilment corpus
+
+**What it is.** `eval/corpora/intent-fulfilment/manifest.json` — **28 cases in two
+arms, 67 enumerated outstanding obligations**, built from *this repository's own
+history*. Defined by `specs/23` §Evaluation, scored by `eval intent`.
+
+**How a case is shaped.** A pre-written case (`pw*`, 21 cases over 13 commits)
+takes its stated intent from a verbatim slice of a `specs/*.md` section **as it
+existed at a commit that is a strict ancestor of the change under test**: approved
+before the implementation existed, written in the register a real ticket is, and
+several sections carry clauses the project genuinely never implemented. The
+post-hoc arm (`ph*`, 7 cases) judges the *same diffs* against each change's own
+commit message. The two are **never pooled** — a commit message is written after
+the work, so obligations read out of one are addressed by construction.
+
+**Hydration is free.** `npm run eval:intent-corpus:hydrate` is local git only: no
+network request, no model call. It asserts the pre-written guarantee with
+`git merge-base --is-ancestor` and throws rather than materialise a case whose
+intent could have been written to describe the change.
+
+**The answer key.** Each row is one obligation a human read in the excerpt and
+found genuinely not done at head, **in the human's own words**, including items no
+extraction ever proposed. It is a fixed enumeration, never extended because a run
+surfaced something new, and nothing in it derives from engine output. There is no
+`addressed` direction: spec 23's decision rule is stated on the false-satisfied
+rate, whose numerator is exactly these rows.
+
+**How a reported obligation is joined to a row.** By the **citation** spec 23
+already requires every obligation to carry, resolved back to the source document
+through a line map hydration writes — never by matching statement text, which
+would need a lexical threshold tuned against the engine being graded. Anchors
+partition the excerpt, so one obligation can never answer for two rows.
+
+**What it measures.** False-satisfied claims first, each named individually and
+split by whether an `evidenced` or a `not-contradicted` verdict cleared them; then
+outstanding recall over the same rows; then coverage.
+
+**What it cannot measure.**
+
+- **The false-satisfied RATE as spec 23 defines it.** That denominator is every
+  obligation reported `evidenced` or `not-contradicted`, and the key holds a truth
+  only for the enumerated outstanding rows. The report carries the field as
+  `not-measured` with that reason rather than printing a number that would be
+  quoted as the rate. The claim **count** is exactly spec 23's numerator.
+- **Obligation-extraction fidelity.** The human obligation count is printed beside
+  the reported count; the statement-by-statement comparison is not made.
+- **Whether an unanchored obligation is right.** An obligation citing a clause no
+  row anchors is unscored, and that count is printed beside every rate.
+- **Anything held out.** Every case is `dev`. The commits are unpublished history,
+  which is strong material, but the manifest declares no training cutoff and
+  therefore claims no held-out status.
+
+**Why it is small.** The binding constraint is not case supply but **anchorability**:
+a row enters only where its clause occupies lines no other row claims. Two items of
+the surviving 69-item enumeration were left out for that reason rather than given
+an invented sentence boundary, and `curation.rejections` names both.
+
+---
+
 ## Fix-lane fixture
 
 **What it is.** `eval/fixtures/typescript/fix-lane/repo/` — two files:
@@ -650,6 +710,7 @@ this is a wiring test with one positive and one negative, not an evaluation.
 | Is line placement correct? | Proof-quality slices (**only** corpus with `path-line` keys) |
 | Does cross-file reasoning work? | Real-repository cross-file |
 | Does `impact check` name a dependent a change broke? | Change-impact dependents |
+| Does the intent lane wrongly clear an obligation nobody did? | **Intent-fulfilment** — the only corpus with a stated intent written before the change |
 | Are security mechanisms covered? | **Security advisory 2026** — the only corpus with a denominator in every mechanism |
 | Does the reviewer find a defect that needs another file? | Security advisory 2026 (per context depth), then Real-repository cross-file |
 | Does the engine report more than one defect in one file? | **Multi-defect 2026** — the only corpus with more than one verified-co-present defect per case |

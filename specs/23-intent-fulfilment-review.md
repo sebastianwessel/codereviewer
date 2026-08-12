@@ -13,6 +13,9 @@ its own verdict, and leaves the headline count (see *Obligations Kept By Changin
 Nothing*). **UNMEASURED: no accuracy figure in this spec postdates it.**
 Provider-cut intent: 2026-08-03 — a source the ingestion provider had already cut is
 **disclosed, never refused** (see *Limits Refuse; They Never Truncate*)
+Instrument: 2026-08-12 — the lane is measured by `eval intent` over a **committed**
+corpus (see *How this lane is measured* under Evaluation). Every figure recorded in
+this document predates it and came from a scorer no clean checkout could run.
 
 ## Output Vocabulary (2026-08-01): `evidenced`, not `addressed`
 
@@ -504,7 +507,11 @@ that spends a call per obligation to add 18.1% of the lane's false positives.
 
 **The default changed on 2026-08-11 and the measurement did not.** The lane is now
 on by default, so this failure mode reaches every reader instead of only the ones
-who opted in. That is a product decision about which questions a review answers,
+who opted in. What changed on 2026-08-12 is the INSTRUMENT and not the number:
+`eval intent` and a committed corpus make the route measurable from a clean
+checkout for the first time (see *How this lane is measured* under Evaluation).
+The route itself is still open, still unmitigated, and still unmeasured on the
+current engine. That is a product decision about which questions a review answers,
 made with the route above known and unfixed; what contains it is unchanged and is
 what makes the decision defensible — the lane cannot gate under any configuration,
 its output is advisory, an `evidenced` verdict whose cited lines are not lines the
@@ -876,6 +883,97 @@ false-satisfied rate is low.** A capability that misses unaddressed obligations 
 merely incomplete; one that wrongly certifies them is harmful, and no amount of
 recall compensates.
 
+### How this lane is measured (2026-08-12): `eval intent`
+
+Built as a first-class command with a committed corpus, for one reason: **every
+figure in this document was produced by an instrument that no clean checkout
+could run.** The scorers lived under the gitignored `.codereviewer/` tree, and the
+default flipped on 2026-08-11, so the false-satisfied route below now reaches every
+reader of every pull request while resting on an instrument that was not in the
+repository.
+
+| | |
+| --- | --- |
+| corpus | `eval/corpora/intent-fulfilment/manifest.json` — 28 cases, 67 enumerated outstanding obligations |
+| hydration | `npm run eval:intent-corpus:hydrate` — **local git only**, no network, no spend |
+| scorer | `codereviewer eval intent` |
+| artefacts | `.codereviewer/eval/intent-fulfilment/intent-eval-{report.json,summary.md}` |
+| metrics version | `2026-08-12.intent-clause-anchored` |
+
+**The corpus is this repository's own history.** A pre-written case takes its
+stated intent from a verbatim slice of a `specs/*.md` section as it existed at a
+commit that is a strict ancestor of the change under test — approved before the
+implementation existed, in the register a real ticket is written in. Hydration
+asserts that ancestry with `git merge-base --is-ancestor` and throws rather than
+materialise a case that fails it. The post-hoc arm judges the same diffs against
+each change's own commit message and is a control, reported separately and never
+pooled. No case is synthetic, and `mismatchOrigin` is in the data so one cannot be
+added silently.
+
+**The answer key is the fixed human enumeration and nothing else.** Each row is an
+obligation a human read in the excerpt and found genuinely not done at head, in the
+human's own words, including items no extraction ever proposed. It is never
+extended because a run surfaced something new, and there is no `addressed`
+direction: the decision rule above is stated on the false-satisfied rate, whose
+numerator is exactly these rows. Nothing is derived from engine output.
+
+**A reported obligation is joined to a row by the CITATION**, resolved back to the
+source document through a line map hydration writes — not by matching statement
+text, which would need a lexical threshold tuned against the engine being graded.
+This is the requirement above (*"Every reported obligation MUST cite where in the
+stated intent it came from"*) doing measurement work. Anchors partition the
+excerpt, so one reported obligation can never answer for two rows.
+
+**What the scorer computes**, in the order this spec ranks them:
+
+- **false-satisfied claims** — enumerated outstanding obligations the run reported
+  OFF the list a human reads, split by whether an `evidenced` or a
+  `not-contradicted` verdict cleared them. This is the numerator this section
+  defines, and a wrong `not-contradicted` is in it on the same footing as a wrong
+  `evidenced`, exactly as the 2026-08-06 pre-registration requires. Each claim is
+  named individually in the rendered report, because the count is the number the
+  capability is judged on;
+- **outstanding recall** — the same rows the run left on that list. A row a wrong
+  `not-contradicted` cleared is counted twice over: absent here, present above;
+- **coverage** — scored, refused, unmeasured, plus how many reported obligations
+  the key anchors at all.
+
+**What it cannot compute, stated in the artefact rather than left to a reader.**
+This section defines the false-satisfied RATE over every obligation reported
+`evidenced` or `not-contradicted`. That denominator is **permanently not
+measurable on this corpus**: the key holds a truth for the enumerated outstanding
+obligations and for nothing else, and supplying the rest would take one hand
+judgement per reported obligation per run against a non-deterministic obligation
+set. The field is present and carries `status: "not-measured"` with that reason.
+The share the report does print names its own denominator — the outstanding
+obligations the run reached — and is not this rate.
+
+Obligation-extraction fidelity is likewise not computed. The human obligation count
+is printed beside the reported count so the two are visible; the statement-by-
+statement comparison is not made and no figure pretends to it.
+
+**Four rules the instrument enforces rather than documents**, each from a recorded
+defect in this project:
+
+- an unrecognised verdict **throws**. A fifth status must not enter a published
+  number the way `not-contradicted` nearly did in 2026-08-06 — including when it
+  hides in an obligation the key never anchors, since those are silently unscored
+  by design;
+- a case that **refused** because an input limit bound is reported as a refusal and
+  excluded from every rate. Exit 4 is this spec's own required behaviour, and
+  scoring it as a case with no obligations would drag every rate down while looking
+  like a result;
+- a checkout whose stored answer key differs from the manifest is `stale-checkout`,
+  never scored. This project has already had to void a recall figure that was
+  scored against a key which had changed underneath it;
+- a run that scored nothing exits 1, so a missing provider or an un-hydrated corpus
+  cannot look like a completed measurement that found no false-satisfied claim.
+
+**No figure recorded before this entry may be compared across it.** Every earlier
+number came from a scorer joined by positional obligation id or by lexical
+statement match, on labels that are not committed. The re-measurement this spec
+already owes across 2026-08-06 is owed on this instrument.
+
 ## Verification Matrix
 
 | Requirement | Test |
@@ -897,6 +995,13 @@ recall compensates.
 | The explanation call may not write an absence of evidence as work left undone | prompt test |
 | On by default, and switchable off | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |
+| The corpus manifest satisfies its own schema, including the cross-case rules | schema test over the committed manifest, plus the shipped-manifest sweep |
+| A wrong `not-contradicted` is in the false-satisfied numerator, on the same footing as a wrong `evidenced` | scorer arithmetic test against a hand-checked fixture |
+| An unrecognised verdict throws rather than being scored as anything | scorer unit test, including one hiding in an unanchored obligation |
+| A refused case leaves every rate instead of scoring as zero | scorer unit test |
+| The frontmatter of an assembled intent costs no body lines, so every anchor lands where the answer key says | line-map test against the real frontmatter parser |
+| A checkout whose answer key has moved is never scored | `eval intent` CLI test |
+| An intent that is not an ancestor of the change is refused at hydration | `eval intent` CLI test |
 
 ## How The Lane Is Invoked
 

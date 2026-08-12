@@ -10,6 +10,7 @@ import { runConfigValidate } from './commands/config-validate.js'
 import { runDrift } from './commands/drift-check.js'
 import { runEvalCompare } from './commands/eval-compare.js'
 import { runEvalImpact } from './commands/eval-impact.js'
+import { runEvalIntent } from './commands/eval-intent.js'
 import { runEvalRecallReport } from './commands/eval-recall-report.js'
 import { runEval } from './commands/eval-run.js'
 import { runEvalSliceManifest } from './commands/eval-slice-manifest.js'
@@ -65,6 +66,14 @@ export const runCli = async (
     if (subcommand === 'impact') {
       return runEvalImpact(rest, options)
     }
+
+    // The intent-fulfilment corpus, which must not be pooled with either of the
+    // other two: spec 23 records that no existing corpus can measure this
+    // capability, because a fix commit carries no ticket and no description to
+    // disagree with. Separate subcommand, separate option set, separate artefact.
+    if (subcommand === 'intent') {
+      return runEvalIntent(rest, options)
+    }
   }
 
   if (command === 'baseline' && subcommand === 'write') {
@@ -84,6 +93,6 @@ export const runCli = async (
   }
 
   return usageError(
-    'Expected command: config validate, review, baseline write, eval run, eval impact, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, or intent check'
+    'Expected command: config validate, review, baseline write, eval run, eval impact, eval intent, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, or intent check'
   )
 }
