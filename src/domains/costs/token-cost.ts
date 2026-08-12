@@ -28,7 +28,17 @@ const assertNonNegativeInteger = (value: number, fieldName: string): void => {
   }
 }
 
-const roundUsd = (value: number): number => Math.round(value * 1_000_000) / 1_000_000
+/**
+ * The one USD rounding convention: six decimal places, which is finer than any
+ * per-token price and coarse enough to keep float addition from reaching a
+ * reader as `0.30000000000000004`.
+ *
+ * Exported so a caller that ADDS two already-priced figures — the advisory lanes
+ * accumulating a run's spend — rounds them the way every figure they are
+ * compared against was rounded, rather than defining a second convention.
+ */
+export const roundUsd = (value: number): number =>
+  Math.round(value * 1_000_000) / 1_000_000
 
 export const calculateTokenCost = (
   input: TokenCostInput

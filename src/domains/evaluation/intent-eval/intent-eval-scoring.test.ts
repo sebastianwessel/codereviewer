@@ -403,3 +403,48 @@ describe('intent scoring — degenerate results are called out', () => {
     )
   })
 })
+
+// The post-hoc arm of the shipped corpus carries SEVEN cases and ZERO outstanding
+// expectations — by construction, since only the pre-written arm enumerates them.
+// `armWarnings` guarded three degenerate shapes and not this one, so that arm
+// printed a bold `false-satisfied claims: 0` over an empty answer key: a clean
+// bill of health no run could fail to earn.
+//
+// This is the same defect the fix-lane rates and the security recall rates were
+// nulled for on 2026-08-11 — a number over an empty denominator read as a
+// measurement — reaching the intent instrument through its warning list instead of
+// through a rate.
+describe('an arm with no answer key', () => {
+  test('says its zero is over an empty key, not a result', () => {
+    const score = scoreIntentCases([
+      scoredCase([obligation({ id: 'obl_1', line: 1, status: 'evidenced' })], {
+        arm: 'posthoc',
+        outstandingExpectations: []
+      })
+    ])
+
+    expect(score.arms.posthoc.expectationCount).toBe(0)
+    expect(score.arms.posthoc.falseSatisfied.claimCount).toBe(0)
+    const warnings = score.warnings.join('\n')
+
+    expect(warnings).toContain('posthoc')
+    // The DIAGNOSIS is the point. An arm with no key already trips the
+    // empty-join warning, which sends the reader to check the hydrated line map
+    // -- and the line map is fine. Nothing enumerated an expectation for this arm
+    // to join against.
+    expect(warnings).toContain('answer key')
+    expect(warnings).not.toContain('Check the hydrated line map')
+  })
+
+  // The counterweight, and the reason this is a warning rather than a refusal: an
+  // arm that HAS a key and legitimately found nothing wrong must stay silent, or
+  // the warning trains readers to skip it.
+  test('stays silent when the arm has a key and simply found no claim', () => {
+    const score = scoreIntentCases([
+      scoredCase([obligation({ id: 'obl_1', line: 1, status: 'not-evidenced' })])
+    ])
+
+    expect(score.arms.prewritten.expectationCount).toBeGreaterThan(0)
+    expect(score.warnings.join('\n')).not.toContain('empty key')
+  })
+})

@@ -351,6 +351,39 @@ describe('finding refutation packet', () => {
     expect(packet.budgetNotice).toContain('needs-more-evidence')
   })
 
+  // THE DEFAULT PATH. `supportSignalCandidates` is filtered on `proposedBy !==
+  // 'review-agent'` and the only producer inside this engine stamps
+  // `'review-agent'` on every candidate it proposes, so on an ordinary run the
+  // array is ALREADY empty when the ladder starts. The first rung ran anyway:
+  // it emptied an empty array — shedding nothing — and added ~330 characters of
+  // notice, so the response to an over-budget packet was to make it BIGGER, and
+  // the notice told the refuter that deterministic support signals had been
+  // withheld from it when none had ever existed. That is the same
+  // absence-the-engine-created failure the notice exists to prevent, arriving
+  // through the notice itself.
+  test('a rung with nothing to shed neither runs nor claims a withholding', () => {
+    // Large enough that the packet is over budget with the support-signal rung
+    // unavailable, so the ladder must reach the review-context rung to fit.
+    const context = reviewContext('decisive context '.repeat(1200))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+      task: task([context]),
+      candidates: [modelCandidate],
+      // Nothing here was proposed by anything but the review agent — the shape
+      // of every default-path run.
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.supportSignalCandidates).toEqual([])
+    expect(packet.reviewContext).toEqual([])
+    // What WAS withheld is named.
+    expect(packet.budgetNotice).toContain('the review context')
+    // What was never there is not: a refuter told the support signals were
+    // withheld reads their absence as an artefact of the budget rather than as
+    // the ordinary state of every run, and both readings are wrong here.
+    expect(packet.budgetNotice).not.toContain('support signals')
+  })
+
   test('naming the withheld context is the last thing shed, not the first', () => {
     // Every rung of the ladder carries the notice, including the one that empties
     // the review context — the rung whose silence was most costly, because the

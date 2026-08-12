@@ -167,15 +167,52 @@ const budgetOmissionNotice = (omitted: readonly string[]): string =>
     ', '
   )}. Their absence here is an artefact of the budget, NOT evidence against any candidate. A claim you cannot support from what remains is UNPROVEN — answer needs-more-evidence rather than refuting it.)`
 
-// Shed the least load-bearing context first when a batch packet exceeds the
-// provider input budget: the deterministic support signals, then the review
-// context. A batch that still does not fit is reported so the caller can split it
-// into smaller batches rather than losing the candidates.
+// One rung of the ladder: the name the notice gives what it drops, whether this
+// packet has anything there to lose, and the emptied field.
+//
+// A rung declares `holds` because a rung that fires on an empty field is not a
+// no-op — it costs the ~330 characters of notice, so the response to an
+// over-budget packet is a BIGGER packet, and the notice then claims a
+// withholding that never happened.
+type RefutationBudgetRung = {
+  readonly omissionLabel: string
+  readonly holds: (packet: FindingRefutationBatchInput) => boolean
+  readonly shed: Partial<FindingRefutationBatchInput>
+}
+
+// Least load-bearing first: the deterministic support signals, then the review
+// context.
+//
+// `supportSignalCandidates` is filtered on `proposedBy !== 'review-agent'` and
+// the only producer inside this engine stamps `'review-agent'` on every
+// candidate it proposes, so on a default run this rung's field is ALREADY empty
+// when the ladder starts. The rung is kept rather than deleted because the array
+// is not STRUCTURALLY empty: `ReviewWorkflowInput.candidates` is a published
+// surface and a library caller can seed a candidate with any `proposedBy` (the
+// 2026-08-10 flow audit ruled on that deliberately). It has to shed only when
+// there is something to shed.
 //
 // A rung for the shared-context digest used to come first. It shed a constant
 // string of a few dozen bytes and could never have made an oversized packet fit,
 // which made it read as a reduction while doing nothing; the field is gone and so
 // is the rung.
+const refutationBudgetRungs: readonly RefutationBudgetRung[] = [
+  {
+    omissionLabel: 'the deterministic support signals',
+    holds: (packet) => packet.supportSignalCandidates.length > 0,
+    shed: { supportSignalCandidates: [] }
+  },
+  {
+    omissionLabel: 'the review context',
+    holds: (packet) => packet.reviewContext.length > 0,
+    shed: { reviewContext: [] }
+  }
+]
+
+// Descend the ladder when a batch packet exceeds the provider input budget. A
+// batch that still does not fit — including one with nothing left to shed — is
+// reported so the caller can split it into smaller batches rather than losing the
+// candidates.
 const fitFindingRefutationBatchInputToBudget = (
   refutationInput: FindingRefutationBatchInput,
   maxTaskInputBytes: number | undefined
@@ -190,27 +227,27 @@ const fitFindingRefutationBatchInputToBudget = (
     return refutationInput
   }
 
-  const withoutSupportSignals = FindingRefutationBatchInputSchema.parse({
-    ...refutationInput,
-    budgetNotice: budgetOmissionNotice(['the deterministic support signals']),
-    supportSignalCandidates: []
-  })
+  // The notice names every rung that has fired SO FAR, so the packet that is
+  // finally sent accounts for all of its own omissions in one sentence — and for
+  // none it did not make.
+  const omitted: string[] = []
+  let packet = refutationInput
 
-  if (serializedBytes(withoutSupportSignals) <= maxTaskInputBytes) {
-    return withoutSupportSignals
-  }
+  for (const rung of refutationBudgetRungs) {
+    if (!rung.holds(packet)) {
+      continue
+    }
 
-  const withoutReviewContext = FindingRefutationBatchInputSchema.parse({
-    ...withoutSupportSignals,
-    budgetNotice: budgetOmissionNotice([
-      'the deterministic support signals',
-      'the review context'
-    ]),
-    reviewContext: []
-  })
+    omitted.push(rung.omissionLabel)
+    packet = FindingRefutationBatchInputSchema.parse({
+      ...packet,
+      ...rung.shed,
+      budgetNotice: budgetOmissionNotice(omitted)
+    })
 
-  if (serializedBytes(withoutReviewContext) <= maxTaskInputBytes) {
-    return withoutReviewContext
+    if (serializedBytes(packet) <= maxTaskInputBytes) {
+      return packet
+    }
   }
 
   throw createTaskPacketBudgetExceededError({

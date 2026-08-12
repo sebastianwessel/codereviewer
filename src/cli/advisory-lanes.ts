@@ -28,10 +28,22 @@ import {
   runIntentFulfilment,
   type IntentFulfilmentReport
 } from '../domains/intent-fulfilment/index.js'
+import { roundUsd, type LaneUsage } from '../domains/costs/index.js'
 import { normalizeError } from '../shared/errors/error-normalizer.js'
 import type { Logger } from '../domains/observability/index.js'
 import type { RunContext } from '../domains/run-context/index.js'
 import type { CliRunOptions } from './cli-contract.js'
+
+// The run's model-spend ceiling and what it has spent against it so far.
+//
+// `spentUsd` is `undefined` when the spend is NOT KNOWN — no provider cost and
+// no configured price — which is a different fact from having spent nothing, and
+// the two must not be conflated: one means "there is room", the other means
+// "nobody can say".
+export type AdvisoryCostBudget = {
+  readonly maxCostUsd: number | undefined
+  readonly spentUsd: number | undefined
+}
 
 export type AdvisoryLaneInput = {
   readonly options: CliRunOptions
@@ -39,6 +51,9 @@ export type AdvisoryLaneInput = {
   readonly environment: Readonly<Record<string, string | undefined>>
   readonly baseRef: string | undefined
   readonly headRef: string | undefined
+  // REQUIRED as a key, for the same reason `explicitFiles` is: a caller has to
+  // state what this run may still spend rather than inherit an answer.
+  readonly costBudget: AdvisoryCostBudget
   // The `--file`/`--files` list, when the run was given one. REQUIRED as a key
   // even though the value may be `undefined`, so a caller has to state whether
   // this run was scoped to explicit paths rather than inherit an answer — the
@@ -112,6 +127,106 @@ const explicitFileSkipWarning = (input: {
 }): string =>
   `The ${input.name} stage produced no report because this run was scoped to an explicit file list (\`--file\`/\`--files\`), which bypasses the diff this stage reads. Run \`codereviewer ${input.command} check --base-ref <ref> --head-ref <ref>\` over the refs you want covered.`
 
+// BOTH STAGES SPEND, AND `review.maxCostUsd` DID NOT REACH THEM.
+//
+// The cap is checked once, on the review's own cost, before the success result
+// is built (`run/results/completion-state.ts`). Both stages run after that, from
+// `review.ts`, and neither carried any cost accounting of its own — so a
+// configured cap bounded the review and nothing else. The intent stage pays a
+// provider PER OBLIGATION (`intentFulfilment.maxObligations`, default 100), so
+// what the cap failed to bound is material rather than marginal. Latent while
+// both stages were off by default; live since they were flipped on.
+//
+// ONE CEILING, NOT THREE. The number an operator writes in `review.maxCostUsd`
+// is what they are willing to spend on `codereviewer review`. A per-stage cap
+// would let one invocation spend a multiple of that number with every stage
+// reporting itself within budget, so the stages consume the HEADROOM the review
+// left, in the order they run, each measured against what the ones before it
+// actually spent.
+//
+// BOUNDED YET UNABLE TO FAIL THE RUN — in tension only if "bounded" is read as
+// "gated". Specs 22 and 23 forbid an advisory stage failing the pipeline, and
+// this stops SPENDING rather than judging: a stage with no headroom does not
+// start, the review keeps its own exit code and quality gate, and the reader
+// gets the warning below. No budget outcome here can reach the gate.
+//
+// STOPPED BEFORE, NOT REPORTED AFTER. An overrun reported afterwards is a
+// receipt, not a bound — the money is spent by the time it is written. The check
+// sits ahead of the diff, so a stage with no headroom issues no git subprocess
+// and resolves no provider.
+//
+// WHAT IT DOES NOT BOUND, said plainly because a half-described bound is worse
+// than none: a stage that STARTS with headroom runs to completion, so the run's
+// true ceiling is the cap plus one stage's spend. Cutting a stage off mid-flight
+// would have to publish a partial report, and neither spec defines one. The fix
+// and verification lanes (spec 12) also spend after the review's check; their
+// spend is COUNTED here, but they are not themselves gated — the same argument
+// applies to them and it is a separate change.
+//
+// SPECS 04, 22 AND 23 DO NOT COVER THIS. Spec 04 documents `maxCostUsd` as a
+// check on the review's computed cost that fails the run; neither stage spec
+// mentions cost. This is ahead of the specs rather than derived from them, and
+// is recorded here rather than written into `specs/`, which is the human's to
+// change — exactly as the explicit-file narrowing above is. The sentence they
+// are owed: a stage that spends is bounded by the run's cost budget, and it
+// stops instead of failing.
+//
+// `undefined` when the stage may proceed. The rule lives in one place because
+// both stages ask the same question and a second copy would drift.
+const advisoryBudgetSkipWarning = (input: {
+  readonly name: string
+  readonly command: string
+  readonly budget: AdvisoryCostBudget
+}): string | undefined => {
+  const { maxCostUsd, spentUsd } = input.budget
+
+  // No cap configured, or a spend nobody can compute — spec 04 already states
+  // the review's own cap goes unenforced when cost is unavailable, and refusing
+  // a stage on a total that does not exist would be inventing an overrun.
+  if (maxCostUsd === undefined || spentUsd === undefined) {
+    return undefined
+  }
+
+  // `>=`, where the review's own check uses `>`. That check judges an amount
+  // already spent; this one asks whether there is room to spend more. A run
+  // landing exactly on its cap passes the review and arrives here with nothing
+  // left, and no stage can spend zero.
+  if (spentUsd < maxCostUsd) {
+    return undefined
+  }
+
+  return `The ${input.name} stage produced no report because this run had already spent ${spentUsd} USD of its ${maxCostUsd} USD budget (review.maxCostUsd), and this stage spends per model call. It was stopped before spending rather than reported over budget afterwards; the review itself is unaffected. Raise review.maxCostUsd, or run \`codereviewer ${input.command} check --base-ref <ref> --head-ref <ref>\` under its own budget.`
+}
+
+/**
+ * Folds one stage's spend into the budget the next stage is measured against.
+ *
+ * The figure is the `usage` block the stage already publishes on its own report,
+ * so enforcement and the artifact a reader inspects cannot disagree.
+ */
+export const advisoryCostBudgetAfterLane = (
+  budget: AdvisoryCostBudget,
+  usage: LaneUsage | undefined
+): AdvisoryCostBudget => {
+  // No usage block at all: the stage resolved no provider or made no call and
+  // spent nothing. A KNOWN zero, unlike the unpriced case below.
+  if (usage === undefined) {
+    return budget
+  }
+
+  return {
+    maxCostUsd: budget.maxCostUsd,
+    spentUsd:
+      // Tokens the run has no price for. Treating them as free would wave the
+      // next stage through on a total known to be too low, which is the silent
+      // optimism this repository keeps finding; the total becomes unknown
+      // instead, which stops enforcement rather than faking it.
+      usage.costUsd === undefined || budget.spentUsd === undefined
+        ? undefined
+        : roundUsd(budget.spentUsd + usage.costUsd)
+  }
+}
+
 // The stage did not produce a report, and the reader is told which one and why —
 // an advisory stage that vanishes without a word is indistinguishable from one
 // that found nothing.
@@ -184,6 +299,18 @@ const runImpactStage = async (
     }
   }
 
+  // After the explicit-file check, because that run would not have spent
+  // anything anyway: the reason a reader is owed is the structural one.
+  const budgetSkip = advisoryBudgetSkipWarning({
+    name: 'change-impact',
+    command: 'impact',
+    budget: input.costBudget
+  })
+
+  if (budgetSkip !== undefined) {
+    return { report: undefined, warnings: [budgetSkip] }
+  }
+
   return await guardAdvisoryStage({
     name: 'change-impact',
     logger: input.logger,
@@ -241,6 +368,16 @@ const runIntentStage = async (
     }
   }
 
+  const budgetSkip = advisoryBudgetSkipWarning({
+    name: 'intent-fulfilment',
+    command: 'intent',
+    budget: input.costBudget
+  })
+
+  if (budgetSkip !== undefined) {
+    return { report: undefined, warnings: [budgetSkip] }
+  }
+
   return await guardAdvisoryStage({
     name: 'intent-fulfilment',
     logger: input.logger,
@@ -295,7 +432,17 @@ export const runAdvisoryStagesForReview = async (
   input: AdvisoryLaneInput
 ): Promise<AdvisoryLaneResults> => {
   const impact = await runImpactStage(input)
-  const intent = await runIntentStage(input)
+  // The second stage is measured against what the first one actually spent.
+  // Checking both against the review's spend alone would let the second run on
+  // headroom the first had already consumed — the sequential order is what makes
+  // a shared ceiling enforceable at all.
+  const intent = await runIntentStage({
+    ...input,
+    costBudget: advisoryCostBudgetAfterLane(
+      input.costBudget,
+      impact.report?.usage
+    )
+  })
 
   return {
     impact: impact.report,

@@ -1,5 +1,6 @@
 export {
   combineRunTokenUsage,
+  roundUsd,
   summarizeRunCost,
   COST_UNAVAILABLE_WARNING,
   type RunCostSummary,

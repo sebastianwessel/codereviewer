@@ -477,6 +477,24 @@ const armWarnings = (metrics: IntentArmMetrics): readonly string[] => {
 
   const warnings: string[] = []
 
+  // FIRST, because it changes what every warning below means. An arm that
+  // enumerates nothing has no answer key, so its `false-satisfied claims: 0` is
+  // not a result -- it is the only value that arm can produce, and a reader who
+  // takes it for a clean bill of health has been misled by arithmetic over an
+  // empty set. The shipped corpus has exactly this shape: the post-hoc arm carries
+  // seven cases and zero outstanding expectations, because only the pre-written
+  // arm enumerates them.
+  //
+  // It returns EARLY rather than adding to the list. The empty-join warning below
+  // is true here too, and it sends the reader to check the hydrated line map --
+  // which is fine. Two warnings where the second misdiagnoses the first is worse
+  // than one that says what actually happened.
+  if (metrics.expectationCount === 0) {
+    return [
+      `${metrics.arm}: this arm enumerates no outstanding obligation, so it has no answer key and every count below is over an empty set. Its zero false-satisfied claims is the only value it can report, not a finding. Read the ${metrics.arm} arm for coverage and obligation counts alone.`
+    ]
+  }
+
   if (metrics.obligationCount > 0 && metrics.anchoredObligationCount === 0) {
     warnings.push(
       `${metrics.arm}: not one of the ${metrics.obligationCount} reported obligation(s) cites a clause the answer key anchors, so every rate in this arm is over an empty join. Check the hydrated line map before reading anything.`

@@ -19,7 +19,10 @@ import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import { createRunContext } from '../../domains/run-context/index.js'
-import { runAdvisoryStagesForReview } from '../advisory-lanes.js'
+import {
+  advisoryCostBudgetAfterLane,
+  runAdvisoryStagesForReview
+} from '../advisory-lanes.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import {
   runFixForReview,
@@ -146,6 +149,24 @@ export const runReview = async (
       environment: loadedConfig.environment,
       baseRef,
       headRef,
+      // What this invocation may still spend. The review's own cost budget is
+      // checked before its report exists and so cannot see anything that runs
+      // after it; the stages that DO run after it consume the headroom it left
+      // rather than spending beside the cap.
+      //
+      // The fix and verification lanes above spend too, and their spend is
+      // COUNTED here — they publish it on the same `LaneUsage` block, and
+      // starting the advisory stages from the review's cost alone would hand
+      // them headroom those lanes had already used. Folded with the same
+      // accumulator the advisory stages use on each other, so every stage's
+      // spend enters the total exactly one way.
+      costBudget: [fixLane.report?.usage, verificationReport?.usage].reduce(
+        advisoryCostBudgetAfterLane,
+        {
+          maxCostUsd: loadedConfig.config.review.maxCostUsd,
+          spentUsd: result.report.run.costUsd
+        }
+      ),
       // Passed rather than dropped: an explicit-file run has no diff for either
       // stage to read, and both of them refuse it out loud instead of answering
       // over the ambient refs.
