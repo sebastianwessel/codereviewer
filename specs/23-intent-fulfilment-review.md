@@ -774,6 +774,13 @@ document. **That ingestion MUST be reused, not reimplemented.**
 
 ## Requirements
 
+- **A run with no diff is not a run this stage can answer**, for the reason spec 22
+  gives for change-impact, and with one cost of its own: this lane spends a model
+  call per obligation, so answering the wrong change set is not merely wrong, it is
+  paid for. `review --files` produces no intent report and says so, naming
+  `intent check`.
+
+
 - The command MUST reuse spec 11's change-intent ingestion, plus intake, provider
   resolution, configuration, and reporting.
 - Output MUST be **advisory**. The command MUST NOT be able to fail a pipeline on

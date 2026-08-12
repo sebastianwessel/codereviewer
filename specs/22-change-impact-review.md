@@ -116,6 +116,17 @@ claim in user-facing documentation.
 
 ## Requirements
 
+- **A run with no diff is not a run this stage can answer.** `review --files`
+  reviews an explicit list, so there is no base/head pair and no change set; the
+  reference traversal would then run over the repository's own git state rather
+  than over what was reviewed, and report symbols in files the run never opened.
+  The stage therefore produces no report for such a run and says so, naming
+  `impact check` as the command that answers the question directly. This is a
+  narrowing of "runs when `changeImpact.enabled` is true" and was found on
+  2026-08-11 by reviewing the session's changes as one change: the flag defaulting
+  on is what made a pre-existing gap reachable.
+
+
 - The command MUST reuse repository intake, provider resolution, configuration,
   path service, and reporting. It MUST NOT reimplement them.
 - The command MUST NOT extend the diff reviewer's admission gate. That gate
