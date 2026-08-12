@@ -228,7 +228,7 @@ capability:
 codereviewer impact check --base-ref origin/main --head-ref HEAD
 ```
 
-```json
+```json impact-report
 {
   "schemaVersion": "3.0",
   "status": "disabled",

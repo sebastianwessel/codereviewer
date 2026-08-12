@@ -10,7 +10,23 @@ export {
   type GeneratedArtifactStatus
 } from './drift-checker.js'
 export {
+  artifactContracts,
+  artifactContractTags,
+  artifactScanRoots,
+  checkArtifactExamples,
+  checkArtifactExamplesInFile,
+  findArtifactExampleProblems,
+  renderArtifactExampleIssues,
+  ArtifactExampleCheckResultSchema,
+  ArtifactExampleIssueKindSchema,
+  ArtifactExampleIssueSchema,
+  type ArtifactExampleCheckResult,
+  type ArtifactExampleIssue,
+  type ArtifactExampleIssueKind
+} from './artifact-example-checker.js'
+export {
   checkConfigDocumentFile,
+  isConfigExampleValue,
   checkConfigExamples,
   checkConfigExamplesInFile,
   configScanRoots,

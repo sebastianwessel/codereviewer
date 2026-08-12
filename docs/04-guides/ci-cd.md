@@ -172,7 +172,7 @@ Branch your pipeline on the exit code, not on parsing stdout.
 
 On success stdout carries a single JSON object:
 
-```json
+```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
 { "runId": "…", "qualityGatePassed": true, "artifactDir": ".codereviewer/runs/<runId>" }
 ```
 

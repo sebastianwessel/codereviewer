@@ -51,10 +51,11 @@ npm test
 Vitest over `src/**/*.test.ts`. **Hermetic and free**: it never calls a real
 model provider. `src/**/*.live.test.ts` is excluded.
 
-This suite includes the check that validates every JSON configuration example
-printed in `docs/` and `skills/` — see
-[Configuration examples in documentation](#configuration-examples-in-documentation)
-below for the convention it relies on.
+This suite includes the two checks that validate the JSON printed in this
+repository's Markdown against the schemas that produce and consume it — see
+[Configuration examples and configuration files](#configuration-examples-and-configuration-files)
+and [Artifact examples](#artifact-examples) below for the conventions they rely
+on.
 
 ### 3. Generated-schema check
 
@@ -157,16 +158,15 @@ where the defect that motivated the check actually lived.
   fixture, or an illustration with a `…` elision in it carries no top-level
   configuration key, so it is never parsed as configuration.
 
-Two markers on the fence's info string handle the cases classification cannot
-reach on its own. Neither is needed anywhere today; they exist so a page that
-needs one is not forced to choose between a wrong classification and a silent
-skip.
+Markers on the fence's info string handle the cases classification cannot reach
+on its own.
 
 | Info string | Meaning |
 | --- | --- |
 | `json` | Classified by content, per the rules above. |
 | `json config` | Force validation. Use it for an example content classification would miss (an intentionally empty `{}`). A block marked this way that is not valid JSON is a failure — an elision is not allowed under this marker. |
 | `json not-config` | Not a configuration example. Use it only if a non-configuration document genuinely needs a top-level key name the schema also uses. |
+| any other marker | Also not a configuration example. A marker is an explicit statement of what a block is, and the artifact check below uses the same slot — declaring a contract is declaring the block is not configuration. Without this rule a `run-summary` excerpt would be judged by the configuration schema, since both have a top-level `provider`. |
 
 ### If the check fails
 
@@ -182,6 +182,95 @@ same way from the test side — `scripts/` must still yield exactly the one
 configuration file this repository runs with, and that file is additionally
 parsed by name, so a walk that stops seeing `*.json` fails instead of reporting a
 clean sweep of nothing.
+
+---
+
+## Artifact examples
+
+A configuration example is something a reader **writes**. An artifact example is
+something the engine **emits** — a report, a manifest, a comment draft — and it
+rots the same way. `docs/02-getting-started/install-and-run.md` printed an
+`impact check` report with `"schemaVersion": "1.1"` and a three-key summary for a
+week after the producer moved to `3.0` with a seventeen-field summary, on the
+page a new user reads first.
+
+`src/domains/drift/artifact-example-checker.ts` walks every artifact example
+under `README.md`, `docs/`, `skills/` and `specs/` against the exported Zod
+contract its producer actually uses, under `npm test`.
+
+### It checks three things, not four
+
+A documented artifact example is almost always an **excerpt** — the three fields
+the page is talking about, with `"…"` where a real timestamp or object name
+would be. So the example is **not parsed** against the contract. Three things are
+checked:
+
+1. every key in the example **exists** in the contract, recursively, inside
+   nested objects and array elements alike;
+2. a `schemaVersion` shown equals the literal the producer emits today;
+3. a value in a **closed enum** position is one of that enum's members.
+
+Completeness is not required and leaf values are not validated. An excerpt is
+legitimate; a key the producer cannot emit is not.
+
+### Declaring what a block is
+
+An artifact excerpt cannot be classified by content the way a configuration
+example can — `{ "path": …, "line": … }` fits six contracts, and a wrong guess
+validates against the wrong one. So a block **declares its contract in the fence's
+info string**, in the same slot `json config` already uses:
+
+````markdown
+```json impact-report
+{ "schemaVersion": "3.0", "status": "completed" }
+```
+````
+
+**Every ` ```json ` block in those roots must be accounted for**: a configuration
+example (classified by content, per the section above), a declared contract, or a
+declared exemption. A block that is none of those fails the suite naming the file
+and the line. You do not have to know this mechanism exists before adding an
+example — the failure tells you.
+
+| Info string | Meaning |
+| --- | --- |
+| `json <contract-tag>` | Walked against that contract. |
+| `json no-contract <reason>` | No contract describes this block. The reason is required and must be a sentence, not a token — an exemption you cannot read is a skip list. |
+
+The tags, each backed by the exported schema of the producer named beside it:
+
+| Tag | Artifact |
+| --- | --- |
+| `review-report` | the report written to `report.json` |
+| `run-summary` | the `run` block of a review report |
+| `run-index` | `<artifactDir>/index.json` |
+| `review-comment` | an inline review comment draft |
+| `baseline` | the file `baseline write` writes |
+| `impact-report` | `impact check` |
+| `intent-report` | `intent check` |
+| `eval-report` | `eval run` |
+| `eval-slice-manifest` | `eval slice-manifest` |
+| `eval-case` | an entry of `eval/fixtures/sample-eval-cases.json` |
+| `eval-slice-case` | a slice pack `slice.json` |
+| `expected-finding` | an `expectedFindings` entry |
+| `no-finding-zone` | an `expectedNoFindingZones` entry |
+| `corpus-manifest`, `corpus-case` | a real-repository corpus manifest and its cases |
+| `removed-comment-disclosure-review` | the disclosure judgement on a corpus case |
+| `impact-corpus-manifest`, `impact-corpus-case` | the change-impact corpus manifest and its cases |
+
+There is deliberately no `sarif` tag. SARIF is a third-party format this
+repository does not define — `sarif-validation.ts` asserts a few structural
+invariants before writing, not a key set — so the tag could only be backed by a
+hand-transcribed copy of the OASIS schema, which would rot exactly like the
+example it was meant to check. A page that prints SARIF must say so with
+`no-contract`.
+
+### If the check fails
+
+Fix the example against the producer, not the checker. Run the command where you
+can (`impact check` and `config validate` make no provider call) and read the
+contract where you cannot. Adding `no-contract` to a block that really is an
+artifact turns the check into the thing it replaced.
 
 ---
 

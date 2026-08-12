@@ -33,7 +33,7 @@ codereviewer review --base-ref origin/main --head-ref HEAD
 
 On success the command prints JSON to stdout:
 
-```json
+```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
 {
   "runId": "run-3f2c…",
   "qualityGatePassed": true,

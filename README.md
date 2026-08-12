@@ -151,7 +151,7 @@ a passing, empty review.
 codereviewer review --base-ref origin/main --head-ref HEAD
 ```
 
-```json
+```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
 { "runId": "run-fb8f5cc8…", "qualityGatePassed": true, "artifactDir": ".codereviewer/runs/run-fb8f5cc8…" }
 ```
 

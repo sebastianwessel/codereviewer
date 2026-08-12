@@ -5,7 +5,7 @@ This is the single place these are listed.
 
 Errors are printed to **stderr** as one JSON object:
 
-```json
+```json no-contract CLI error envelope; StructuredError in src/shared/errors/error-normalizer.ts is a TypeScript type, not a Zod contract
 { "code": "provider_auth", "message": "…" }
 ```
 

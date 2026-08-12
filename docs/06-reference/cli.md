@@ -108,7 +108,7 @@ There are no `--mode`, `--depth`, `--severity`, `--format`, or threshold flags o
 
 Stdout on completion (gate passed or failed):
 
-```json
+```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
 {
   "runId": "…",
   "qualityGatePassed": true,
@@ -135,7 +135,7 @@ codereviewer baseline write [--config <path>] [--report <path>]
 Writes to `baseline.path` (default `.codereviewer/baseline.json`), creating
 parent directories. Stdout:
 
-```json
+```json no-contract baseline write stdout envelope, built inline in src/cli/commands/baseline-write.ts with no exported contract
 { "baselinePath": "…", "sourceReportPath": "…", "entryCount": 0 }
 ```
 
@@ -395,7 +395,7 @@ destination file**, with the changed symbols that reach it named on it and their
 sites nested beneath. `changedSymbols` is the symbol-side table: what the change
 altered about each symbol, and how far the search could see.
 
-```json
+```json impact-report
 {
   "schemaVersion": "3.0",
   "status": "completed",
@@ -849,7 +849,7 @@ and all of them exit `0`:
 
 ### Report shape
 
-```json
+```json intent-report
 {
   "schemaVersion": "1.0",
   "status": "completed",

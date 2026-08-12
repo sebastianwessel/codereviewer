@@ -2,7 +2,7 @@
 
 Every failure surfaces as a single JSON object on stderr:
 
-```json
+```json no-contract CLI error envelope; StructuredError in src/shared/errors/error-normalizer.ts is a TypeScript type, not a Zod contract
 { "code": "…", "message": "…" }
 ```
 

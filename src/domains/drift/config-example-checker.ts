@@ -96,17 +96,24 @@ export type JsonBlock = {
   readonly body: string
 }
 
-// The two markers a fenced block may carry after `json`, and what each one means.
+// The markers a fenced block may carry after `json`, and what they mean here.
 //
 // `config` FORCES validation for a block content classification would not reach
 // on its own — an empty `{}`, or an example whose only key is one the schema
 // gained after the page was written. `not-config` is the escape hatch for the
 // reverse: a non-configuration document (a report, an error envelope, a fixture)
-// that happens to use a top-level configuration key name. Neither is required
-// today; both exist so that a page which needs one is not forced to choose
-// between a wrong classification and a silent skip.
+// that happens to use a top-level configuration key name.
+//
+// ANY OTHER MARKER ALSO MEANS "not configuration". A marker is an explicit
+// declaration of what the block is, and `artifact-example-checker.ts` uses the
+// same slot to name the artifact contract a block shows. Declaring a contract is
+// declaring the block is not a config example, and inferring otherwise would put
+// a report excerpt in front of the configuration schema — `RunSummarySchema` and
+// the configuration document both have a top-level `provider`, so this is a
+// collision waiting rather than a hypothetical one. The rule generalises instead
+// of naming the sibling's vocabulary here, which would be two modules holding
+// one list.
 const forceConfigMarker = 'config'
-const notConfigMarker = 'not-config'
 
 // Opening fence: any indentation, three or more backticks, then an info string.
 // Indentation is captured so a fence nested inside a list item is closed by its
@@ -199,8 +206,13 @@ const parseJson = (body: string): { readonly value: unknown } | { readonly error
  * with foreign ones is the shape a half-updated example takes, and the strict
  * schema is what should judge it — being told `runId` is unrecognised is strictly
  * better than being skipped for having it.
+ *
+ * Exported because `artifact-example-checker.ts` must know which untagged blocks
+ * this checker already owns before it reports the rest as undeclared. The rule
+ * lives here, where the configuration schema does; the sibling reads it rather
+ * than keeping a second copy that could disagree about the same block.
  */
-const isConfigExample = (value: unknown): boolean =>
+export const isConfigExampleValue = (value: unknown): boolean =>
   typeof value === 'object' &&
   value !== null &&
   !Array.isArray(value) &&
@@ -229,11 +241,12 @@ export const checkConfigExamplesInFile = (
   let configExampleCount = 0
 
   for (const block of blocks) {
-    if (block.marker === notConfigMarker) {
+    const forced = block.marker === forceConfigMarker
+
+    if (block.marker !== '' && !forced) {
       continue
     }
 
-    const forced = block.marker === forceConfigMarker
     const parsed = parseJson(block.body)
 
     if ('error' in parsed) {
@@ -253,7 +266,7 @@ export const checkConfigExamplesInFile = (
       continue
     }
 
-    if (!forced && !isConfigExample(parsed.value)) {
+    if (!forced && !isConfigExampleValue(parsed.value)) {
       continue
     }
 
@@ -315,7 +328,7 @@ export const checkConfigDocumentFile = (
     }
   }
 
-  if (!isConfigExample(parsed.value)) {
+  if (!isConfigExampleValue(parsed.value)) {
     return { isConfigDocument: false, issues: [] }
   }
 

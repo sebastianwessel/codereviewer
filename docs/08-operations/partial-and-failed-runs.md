@@ -97,7 +97,7 @@ health.
 
 ### `error.json`
 
-```json
+```json no-contract CLI error envelope; StructuredError in src/shared/errors/error-normalizer.ts is a TypeScript type, not a Zod contract
 {
   "code": "provider_context_length",
   "message": "…",
@@ -138,7 +138,7 @@ blocked run has produced nothing to write.
 `<artifactDir>/index.json` is the only enumeration of runs. Run directories are
 otherwise opaque.
 
-```json
+```json run-index
 {
   "runs": [
     { "runId": "…", "startedAt": "…", "completedAt": "…", "status": "completed", "reportPath": ".codereviewer/runs/…/report.json" },

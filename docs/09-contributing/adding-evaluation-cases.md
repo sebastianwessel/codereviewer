@@ -109,7 +109,7 @@ error, because it would pollute a per-mechanism denominator.
 
 `expectedNoFindingZones` declares where a finding would be **wrong**:
 
-```json
+```json no-finding-zone
 {
   "path": "src/format.ts",
   "lineRange": [1, 20],
@@ -128,7 +128,7 @@ everything scores perfect recall.
    Keep it minimal — just enough code for the defect to be real.
 2. Add an entry to `eval/fixtures/sample-eval-cases.json`:
 
-```json
+```json eval-case
 {
   "id": "typescript-negative",
   "language": "typescript",
@@ -167,7 +167,7 @@ Layout:
 
 `slice.json`:
 
-```json
+```json eval-slice-case
 {
   "id": "semantic-authz-cross-file",
   "title": "Cross-file authorization fallback regression",
@@ -220,7 +220,7 @@ commit's parent into the git-ignored artifact directory.
 
 Add a case to `eval/corpora/real-repo-cross-file/manifest.json`:
 
-```json
+```json corpus-case
 {
   "id": "fastify-decorator-shadows-builtin-request-properties",
   "language": "javascript",
@@ -236,7 +236,17 @@ Add a case to `eval/corpora/real-repo-cross-file/manifest.json`:
   "parentCommit": "6e6be153127cbe6e025f73efba78d1db7dd5788b",
   "reviewedPaths": ["lib/decorate.js", "lib/reply.js", "lib/request.js"],
   "reviewIntent": "Keep decorator existence checks to static props and prototype lookups",
-  "expectedFindings": [ … ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "lib/decorate.js",
+      "lineRange": [93, 101],
+      "matchMode": "path-semantic",
+      "tier": "logic",
+      "semanticSummary": "Decorator existence checks only inspect the constructor's static props list and its prototype, so properties assigned inside the constructor body are invisible and decorating one silently shadows core request state."
+    }
+  ],
   "expectedNoFindingZones": [],
   "tags": []
 }
@@ -281,14 +291,16 @@ carrying prose (content starting with `//`, `#`, `*`, `/*`, `--` or `<!--` and
 holding five or more words) and **fails the case until every flagged comment is
 resolved**:
 
-```json
-"removedCommentDisclosureReview": {
-  "reviewedAt": "2026-07-27",
-  "verdict": "non-disclosing",
-  "rationale": "A licence header whose copyright year the fix bumped. It names no code and no behaviour, so it cannot give the expectation away.",
-  "acknowledgedComments": [
-    "* Copyright 2014-2026 Example s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license."
-  ]
+```json corpus-case
+{
+  "removedCommentDisclosureReview": {
+    "reviewedAt": "2026-07-27",
+    "verdict": "non-disclosing",
+    "rationale": "A licence header whose copyright year the fix bumped. It names no code and no behaviour, so it cannot give the expectation away.",
+    "acknowledgedComments": [
+      "* Copyright 2014-2026 Example s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license."
+    ]
+  }
 }
 ```
 
