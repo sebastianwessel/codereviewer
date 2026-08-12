@@ -20,10 +20,27 @@ Stage 1 used to split a change when its bytes exceeded a configured budget
   exceeded the default budget on **37%** of them — while 240 KB is roughly 60k
   tokens against context windows of 200k to over 1M.
 
-And splitting is not free. This project measured whole-file holistic review as
-**out-recalling** the chunked alternative, and every split costs an extra task — a
-full discovery call plus its refutation. So the budget routinely bought a worse
-review at a higher price.
+And splitting is not free: every split costs an extra task — a full discovery call
+plus its refutation.
+
+> **Corrected 2026-08-01, by the A/B this spec proposed.** This paragraph
+> originally continued *"This project measured whole-file holistic review as
+> out-recalling the chunked alternative … So the budget routinely bought a worse
+> review at a higher price."* **That claim was unsourced and is now refuted.** It
+> traced to a single sentence inside a cost analysis in the results ledger with no
+> measurement behind it, and the arms run to test it went the other way: proactive
+> (chunked, more tasks) **43.7%** against reactive (whole, one task) **35.2%**, a
+> paired **−8.5pp**. See *Measured Outcome* below.
+>
+> **It also conflated two different mechanisms under one word.** "Splitting" a
+> *file* into pieces and spreading a task's *files* over more discovery calls have
+> opposite measured signs: sub-file partitioning measured **−2.9pp** (11/23,
+> p = 0.058, 10 seeds, code removed — spec 27, 2026-08-07), while spreading files
+> across more calls measured **+11.3pp** at `maxFilesPerDiscoveryCall: 2` (spec 27,
+> 2026-08-01). The byte budget was an instance of the second, and the argument
+> against it was made with evidence about the first. The rest of the *Why* above —
+> guessed values, bytes as a poor token proxy, and a budget firing on 37% of
+> commits — is unaffected and is what actually carries the change.
 
 ## Design
 
@@ -89,7 +106,9 @@ A refused oversized request is rejected before generation, so its waste is an
 input-validation round trip rather than a completed call. Against that, every
 unnecessary split today costs a whole extra task. Reactive splitting is therefore
 expected to be **cheaper** on the 63% of changes that never needed splitting.
-**Expected, not measured.**
+**Measured 2026-08-01: −14% ($7.41 → $6.40), direction confirmed.** The prediction
+above was written before the run and is left in place as a prediction; it is no
+longer the only thing said about cost.
 
 ## Measurement Plan
 
@@ -120,3 +139,67 @@ Pre-registered, before any run:
 - A recall gain is the *expected* direction, because this replaces a worse review
   mode with a better one. That expectation is a prediction and MUST NOT be reported
   as a result.
+
+## Measured Outcome (2026-08-01, $13.81)
+
+Ran as specified. Pinned engines `5902de3` (arm 0, proactive) and `c11579c` (arm 1,
+reactive), 21 affected crb cases, 71 expectations, paired at expectation level,
+`openai/gpt-5.3-codex`, zero provider errors in either arm. Results ledger,
+*"Spec 26 reactive splitting — A/B, 21 affected crb cases"*.
+
+| | proactive | reactive |
+|---|---|---|
+| recall (paired) | 43.7% | **35.2%** |
+| adjusted precision | 83.8% | **96.2%** |
+| candidates refuted | 106 | 75 |
+| findings emitted | 113 | 84 |
+| cost | $7.41 | $6.40 (**−14%**) |
+
+Paired delta **−8.5pp**, 95% CI [−16.9, 0.0], discordant 10 (gained 2, lost 8),
+McNemar z −1.90, **p = 0.058**.
+
+**The premise is confirmed, and it is confirmed completely.** The provider refused
+**zero** packets — no `context_length_exceeded` anywhere — across all 21 cases,
+including one carrying **1.2 MB** of changed source, on cases selected as the
+largest in the benchmark (137 KB – 1.2 MB). The old byte budget was splitting for no
+provider-side reason whatsoever. That is the strongest available evidence for
+deleting it, and it is why the design stands.
+
+**The recall loss is real, and it is not about splitting.** Reactive splitting never
+engaged, so the only difference between the arms was TASK COUNT: the old budget's
+batching made several tasks per case, the new assembly makes one, and candidates
+fell 106 → 75 with findings 113 → 84 in step. Discovery yield is **per task**, not
+per defect present. The ledger's conclusion was *"do not ship it as the default
+until discovery yield stops being per-task"*.
+
+**What makes the shipped default defensible is spec 27, and only spec 27.** Removing
+the byte budget removed a false justification and, with it, an unclaimed real
+benefit: the budget had been partitioning the reviewer's attention while saying it
+was fitting packets into a context window. `maxFilesPerDiscoveryCall: 2` restores
+that multiplication on a stated rule instead of a guessed byte count, reaching 46.5%
+against the old proactive default's 43.7%. **Raising `maxFilesPerDiscoveryCall` back
+to `unlimited` to "save the extra tasks" re-applies the reasoning this section
+corrects and gives back 11.3pp of recall** — the two changes are one decision and
+must be read together. Spec 27 carries the full analysis under *Why This Does Not
+Contradict Spec 26*.
+
+## The Split Path Has Never Fired
+
+**Every requirement above governing the split itself is defended by unit tests
+alone.** The same measurement that confirmed the premise establishes this: zero
+provider refusals over 21 cases at up to 1.2 MB means the recursion, the depth
+bound, the hunk clipping, the absolute-line-origin rule and the 8 MB runaway ceiling
+have **never executed against a real provider in any recorded run**. 100% of the
+measured effect came from *deleting* the budget and 0% from the mechanism that
+replaced it.
+
+This is stated because it changes what the tests are. They are not a backstop behind
+a measurement; they are the **only** line of defence, and a regression in this path
+would be invisible to every eval this project runs — most sharply the hunk-clipping
+requirement, which describes a defect found and fixed in code no provider has yet
+asked to run.
+
+**Trigger, so the first real evidence is not discarded.** If any run ever produces a
+normalised `context_length_exceeded`, that run is the first observation about this
+half of the spec: its packet size, the depth reached, and whether the halves scored
+MUST be recorded in the results ledger rather than treated as a transient failure.

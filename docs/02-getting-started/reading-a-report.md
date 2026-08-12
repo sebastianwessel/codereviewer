@@ -84,12 +84,14 @@ a reviewer:
   stated band, not as this pin's own measured variance, until a fresh figure is
   published.
 
-> The literal wording the CLI currently prints in this header (the numbers baked
-> into `markdown-reporter.ts` / `summary-comment.ts`) still names the older
-> 2026-08-02 figures (61.1% recall, sd 0.96pp, 99.1% adjusted precision) as of
-> this writing; the table above states the current measurement from
-> [Current results](../05-quality/current-results.md), and the printed header
-> is due to be re-synced to it.
+> Both surfaces now print one shared transcription (`measuredReliability`), so
+> they can no longer disagree with each other — but as of this writing that
+> transcription still names the **2026-08-05** ledger entry (in-diff recall
+> 68.3%, sd 2.89pp, adjusted precision 96.2%, engine `db78900`), one baseline
+> behind the 2026-08-06 control arm the table above states. The transcription is
+> due to be re-synced to the newest ledger entry, which is the one place that
+> owns this figure; see [Current
+> results](../05-quality/current-results.md).
 
 → [What limits recall](../05-quality/what-limits-recall.md),
 [Current results](../05-quality/current-results.md)

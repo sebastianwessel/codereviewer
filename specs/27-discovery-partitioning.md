@@ -135,6 +135,9 @@ size.
   run, so the figure existed and was discarded every time.
 - The default MUST leave behaviour unchanged until the value is measured. Shipping a
   chosen-by-feel default is the failure this project has now corrected five times.
+  (The shipped `2` does not fully satisfy this: it was set from a single-seed sweep on
+  an engine that violated the shared-context requirement above. See *The Sweep Ran On
+  A Broken Engine* below.)
 
 ## Cost
 
@@ -195,6 +198,80 @@ is nothing left to buy.
 Partitioning engages only above two changed files, so small changes are unaffected;
 the cost falls on large changes, which are the ones the unpartitioned reviewer served
 worst.
+
+### The Sweep Ran On A Broken Engine: The Mechanism Survives, The Operating Point Does Not
+
+**The shipped default of 2 is UNPROVEN, and the sentence "below 2 there is nothing
+left to buy" is not supported by the run that produced it.** This is recorded rather
+than acted on: changing a default is a measurement decision, and the measurement that
+would settle it has not been run.
+
+**Verified by `git`, not inferred.** The sweep arms ran at `4751277` (the spec 27
+commit); the fix `4a4118d` — *"partitions were silently losing every referenced
+definition"* — landed the next day, and
+`git merge-base --is-ancestor 4751277 4a4118d` returns true. The sweep engine
+strictly predates the fix. The defect: the partition context router matched context
+documents against the partition's own file paths, while a referenced definition is by
+construction an **unchanged** dependency file deliberately kept out of `task.paths`,
+so that check never succeeded and **every referenced-definition digest was dropped
+from every partitioned discovery call.** The control was spec 26's arm 1 at
+`c11579c`, running unpartitioned, where `partitionTaskForDiscovery(task, undefined)`
+returns the task unchanged and the router never ran. **So the control kept its
+referenced definitions and every treatment arm lost them** — a direct violation of
+this spec's own Requirement 3 (*"Every partition MUST receive the same shared context
+the undivided task would have"*) by the very runs that set the default.
+
+**The direction of the confound decides which conclusion survives, and they part
+company:**
+
+- **"Partitioning helps" SURVIVES.** Losing referenced definitions handicaps the
+  treatment and never the control, so +11.3pp was measured *while carrying* the
+  defect. A clean re-run can only improve it. No number is withdrawn.
+- **The operating point does NOT survive.** The case for `2` over `1` — 27% cheaper
+  at identical recall, and *"below 2 there is nothing left to buy"* — rests entirely
+  on `1` and `2` returning **exactly** the same figures (46.5% / 97.1%) from
+  independent single runs. But the defect fired whenever partitioning engaged, and
+  the finer the setting the more tasks that was: at `1` every task with ≥2 changed
+  files lost its digests, at `2` every task with ≥3, at `4` only those with ≥5. **The
+  arm the argument needs to be no better was the arm penalised across the most
+  tasks.** Remove the handicap and the knee may well sit below 2.
+
+**Three compounding weaknesses in the same run, each independently checkable.** It is
+**one seed per arm**, against a variance the ledger later pooled at sd 5.71pp with the
+conclusion *"three seeds resolve ~11pp"* — and the claimed effect is +11.3pp.
+`p = 0.033` is the **best of four** comparisons (≈0.13 with a Bonferroni correction).
+And this spec's own Measurement Plan pre-registered two arms and stated *"A default
+MUST NOT be set from this run alone"*, which is exactly what then happened. The
+ledger's own remedy — *"Re-running the control on `4751277` (~$6.40) would remove the
+caveat"* — was never acted on.
+
+**What is riding on it.** `maxFilesPerDiscoveryCall: 2` is an always-on default
+costing **+89%** on the corpus where it was measured ($6.40 → $12.09), and every cost
+figure this project publishes carries that multiplier. `unlimited` has never been
+measured since the fix, and the current 64.0% security baseline was itself measured
+**at 2**, so no post-fix control exists to compare against anywhere in the record.
+
+**What a post-fix control would have to show**, so the question is answerable rather
+than merely open:
+
+- Three arms — `unlimited`, `2`, `1` — on the **current** engine, one pin for all
+  three, `dirty=0`, on `security-advisory-2026` (the corpus with the live baseline),
+  with arm order alternated and the judge pinned.
+- **At least the seed count the resolution band requires.** Three seeds resolve about
+  11pp; the effect being defended is 11.3pp, so three seeds is the floor and not a
+  comfortable one. Report the paired per-expectation test, not run-level means.
+- **Keeping 2 requires two findings, not one**: that `2` beats `unlimited` by more
+  than the band, *and* that `1` does not beat `2` by more than the band. The first
+  re-establishes the mechanism; only the second establishes the knee, and only the
+  second is what the default rests on.
+- Record cost per arm. **The answer may be cheaper rather than dearer** — if the knee
+  is at `1` the cost rises, but if the clean gap between `unlimited` and `2` is
+  smaller than measured, the +89% buys less than the record claims. That is what
+  makes this the cheapest open recall question rather than an expensive one.
+
+Until that run exists, `2` stays as it is — a default set on a confounded sweep and
+labelled as such, which is a better state than a default quietly presented as
+measured.
 
 ## Sub-File Partitioning — MEASURED AND REJECTED (2026-08-07)
 

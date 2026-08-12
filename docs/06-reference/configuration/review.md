@@ -272,7 +272,10 @@ it is deliberately not part of this.
 measurement was null both ways: recall 63.1% → 62.2% (sign test 3 gained / 7 lost,
 p = 0.3438) and adjusted precision 98.6% → 99.3%, on `openai/gpt-5.3-codex`. So
 this does not make the reviewer better at finding things. It makes each finding
-show the line it rests on.
+show the line it rests on. Its pre-registered accuracy decision, with all four
+cells written down before the run, was **keep it, disabled**; the default flip a
+day later is a separate product decision on a criterion that pre-registration did
+not name. The key is on, and it did not pass the accuracy gate.
 
 It costs **+5.6% input tokens** per discovery call. Set `enabled: false` to return
 that to zero; the disabled path is byte-for-byte the packet from before this

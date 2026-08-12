@@ -314,8 +314,12 @@ Every figure in this section predates the harness-wide suppression of conversati
 history on 2026-07-27 (see *Conversation History* in `05-review-workflow-and-runtime.md`).
 None of them is comparable to a current run; they are retained as the record of why
 the guard was adopted. Note also that this section measures the **injection guard**,
-not Mechanism 1 — the dedicated security pass's own A/B result is not recorded in this
-spec (see *Known Divergences From This Spec* below).
+not Mechanism 1 — the dedicated security pass's own A/B result is transcribed
+**above**, under *Measured Outcome Of The Dedicated Security Pass*, where it is
+recorded as uninterpretable at n = 1 rather than as absent. (This sentence formerly
+said the result was not recorded in this spec; it was written before the 2026-08-01
+amendment that transcribed it, and inverted a measurement status for any reader who
+reached it first.)
 
 Extending the guard to the general reviewer and the refuter was made for consistency
 rather than for recall, and it does improve recall — by less than a small corpus first
@@ -697,14 +701,20 @@ weakness class, language, fix size, severity. Whether any analyzer flags a case
 played no part, so recall measured here is a statement about the reviewer and not
 about a scanner.
 
-| | round one | grown |
-| --- | --- | --- |
-| cases | 25 | **51** (15 dev, 36 held-out) |
-| expected findings | 26 | **52** |
-| distinct repositories | 24 | **34** |
-| cross-file expectations | 8 | **14** |
-| languages | all seven | all seven |
-| mechanisms | all ten | all ten |
+| | round one | round two | re-screen | as it stands |
+| --- | --- | --- | --- | --- |
+| cases | 25 | 51 (15 dev, 36 held-out) | **70** (18 dev, 52 held-out) | **72** |
+| expected findings | 26 | 52 | **72** | 74 |
+| distinct repositories | 24 | 34 | **44** | 46 |
+| cross-file expectations | 8 | 14 | — | — |
+| languages | all seven | all seven | all seven | all seven |
+| mechanisms | all ten | all ten | all ten | all ten |
+
+The third column is the corpus the current baseline was measured on; the fourth is
+the manifest today, after one case was re-admitted on review and one more added.
+**A figure measured in one column is never restated against another** — the case
+count is the denominator, so the columns are different measurements of different
+populations, not a trend.
 
 The second round exists because the first round's own baseline said so: at sd
 7.69pp over three seeds, 26 expectations could not resolve an intervention worth
@@ -727,8 +737,61 @@ published with its counts.
 
 ### Measured Baseline
 
-Provider `openai/gpt-5.3-codex`, engine pinned `49f0c669`, three seeds, 2026-08-07,
-on the 50-case corpus. Report: `reports/2026-08-07-security-corpus-baseline.md`.
+**Current: recall 64.0% (sd 2.22pp), adjusted precision 95.0%.** Provider
+`openai/gpt-5.3-codex`, engine pinned `359161b`, **ten seeds**, 2026-08-07, on the
+**70-case** corpus (72 expectations, 44 repositories), taken from the control arm of
+the sub-file partitioning A/B at no extra cost. Results ledger, *"Sub-file
+partitioning REJECTED, and the 70-case baseline"*; detail in
+`reports/2026-08-07-subfile-partitioning-result.md`.
+
+| | mean | detail |
+| --- | --- | --- |
+| recall | **64.0%** | sd 2.22pp over 10 seeds |
+| precision, adjusted | **95.0%** | 25 genuine false positives over 886 raw findings |
+| precision, raw | 72.9% | — |
+
+**By mechanism**, control arm: `path-traversal` 94.4% and `concurrency-resource`
+69.3% at the top; **`xss` 40.0%**, `ssrf` 54.0%, `injection` 55.0% and
+`authorization` 63.3% below the mean.
+
+**By context depth**: `local` 86.7%, `caller` 90.0%, `cross-function` 82.4%,
+`callee` 62.5%, `implementation` 51.1%, **`cross-file` 49.3%**,
+`analyzer-path-dependent` 0%.
+
+**Two rows carry the work, and neither is the one this spec used to name.** `xss` at
+40.0% is the lowest substantial mechanism; `cross-file` at 49.3% is the worst depth
+row with a real denominator and the largest bucket in the corpus, measured with
+cross-file retrieval already enabled by default. It is also the standing baseline for
+spec 16's acceptance criterion.
+
+**The corpus has grown twice since this run and the figure is NOT restated against
+it.** One case was re-admitted on review (71 cases / 73 expectations), and the
+manifest now carries 72; 64.0% was measured on 70 and a re-baseline is owed before
+any figure is quoted against the corpus as it stands. A rate does not survive a
+denominator change.
+
+#### Superseded: the 50-case baseline, and the diagnosis it produced
+
+Everything below this line is a **dated record**. Provider `openai/gpt-5.3-codex`,
+engine pinned `49f0c669`, three seeds, 2026-08-07, on the 50-case corpus. Report:
+`reports/2026-08-07-security-corpus-baseline.md`. It was superseded the same day by
+the ten-seed run above, which the ledger states explicitly: *"This SUPERSEDES the
+~61% figure, which described the old 51-case corpus and was never comparable to this
+one."* The two are not a change — they measure different corpora at different seed
+counts.
+
+**The headline diagnosis below is REVERSED by the superseding run, and the reversal
+had already been paid for once.** On 18 observations across three seeds,
+`authorization` read 7/18 = 39% and this section called it *"the worst substantial
+mechanism"* and the row that *"matters more than any other here"*. At ten seeds on
+70 cases it reads **63.3% — essentially at the corpus mean** — and the worst
+substantial mechanism is `xss` at 40.0%. A pre-registered authorization-scope prompt
+clause was built against the 39% figure and **rejected as null** (7 gained / 8 lost,
+p = 1.0; `reports/2026-08-07-authorization-scope-result.md`), which is what this
+section's own closing rule predicts: *"a perfect row on a small denominator is an
+artifact, which is what the 'directions, not numbers' rule exists to prevent."* The
+rule applies to a bad row on a small denominator in exactly the same way, and it was
+not applied here.
 
 | | mean | sd |
 | --- | --- | --- |
@@ -762,6 +825,12 @@ matters more than any other row here: this spec's opening evidence is that
 authorization and access-control logic carry ~59% of real security findings. On the
 25-case corpus the row was 2/6 and dismissible as noise. On 18 observations it is
 the worst substantial mechanism.
+
+> **REVERSED — do not act on the paragraph above.** At ten seeds on 70 cases
+> `authorization` reads **63.3%**, at the corpus mean, and `xss` at **40.0%** is the
+> lowest substantial mechanism. 7/18 was a low draw on eighteen observations. The
+> intervention this paragraph funded was run and was null; see *Measured Baseline*
+> above.
 
 **By context depth**: local 18/21, caller 5/6, callee 12/18, cross-function 15/24,
 implementation 22/36, **cross-file 20/42 (48%)**, analyzer-path-dependent 1/6.

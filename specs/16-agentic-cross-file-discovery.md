@@ -14,8 +14,21 @@ the diff, and bounded signature-level digests of directly-imported unchanged fil
 (the referenced-definition context injection defined under *Review Planning* in
 `05-review-workflow-and-runtime.md`). Defects whose presence depends on the
 *behavior* of code in another
-file are therefore invisible: on the committed benchmark, cross-file recall is
-**0%**. The dominant cross-file misses are high-severity authorization defects — a
+file are therefore invisible: on the committed benchmark, cross-file recall was
+measured at **0%**.
+
+> **That 0% is void as a baseline, and the retraction belongs here rather than 280
+> lines below where it used to sit alone.** It is a property of the slices it was
+> measured on, not of the engine: a changed-files-only slice contains no other file
+> to read, so a cross-file defect cannot be represented in it at all. **The standing
+> baseline for this capability is `cross-file` recall of 49.3%** on the 70-case
+> `security-advisory-2026` corpus (10 seeds, engine `359161b`,
+> `openai/gpt-5.3-codex`; spec 15 *Measured Baseline*) — the worst depth row with a
+> real denominator and the largest bucket in that corpus. That is a far more useful
+> statement of the gap than "0% on slices containing no other file", and it is what
+> *Acceptance* below is now written against.
+
+The dominant cross-file misses are high-severity authorization defects — a
 changed file calls a helper defined elsewhere (e.g. `getOrCreateResource`,
 `findByName`) and the bug is a mismatch between how that helper creates a resource
 and how the changed code looks it up. Catching these requires the callee's *body*,
@@ -87,12 +100,22 @@ findings as today.
   are deterministic; the model's decision to call a tool is not. Like every other
   model lane it is quarantined: findings still pass untrusted refutation and
   deterministic admission, so the precision guarantees are unchanged.
-- **Additive to recall only.** With the mode disabled, discovery is a single-shot
-  review with no tools and the run is byte-for-byte unchanged: the cross-file prompt
-  segment is a strict SUFFIX of the base discovery prompt, so the disabled prompt is
-  unchanged to the byte and every configuration shares the longest possible cached
-  prefix. Enabling it can only let the model see more; it never removes a finding the
-  single-shot pass would make.
+- **Additive in the PACKET, not in the findings.** With the mode disabled, discovery
+  is a single-shot review with no tools and the run is byte-for-byte unchanged: the
+  cross-file prompt segment is a strict SUFFIX of the base discovery prompt, so the
+  disabled prompt is unchanged to the byte and every configuration shares the longest
+  possible cached prefix. That is a property of the prompt and the packet, and it is
+  the whole of what is guaranteed.
+
+  **It does NOT generalise to outcomes, and this spec used to claim it did** ("it
+  never removes a finding the single-shot pass would make"). The measurement below
+  refutes that: run 1 gained 7 and **lost 2**, run 2 gained 6 and **lost 4**. Enabled,
+  the model spends steps on reads and its output distribution moves — the *Deterministic
+  mediation, non-deterministic use* bullet directly above says so. Six expectations
+  the single-shot pass found were lost across two paired runs on an 87-expectation
+  corpus. The lane is a measured **trade** that came out positive in direction twice,
+  not a free addition, which is why *"if a regression appears, this is the first
+  switch to flip"* is a coherent instruction rather than a contradiction.
 - **Partitioned with the task.** A task whose files are partitioned across several
   discovery calls (spec 27) exposes the tools on each call, and each call carries its
   own bounded tool budget.
@@ -294,12 +317,14 @@ Two caveats on the figures, so nobody re-derives them:
   default of 100). The shipped configuration — no proactive per-read cap, halve-and-
   retry on a provider overflow — is **unmeasured**. So is the interaction with a
   larger tool-call budget.
-- The **0% cross-file recall** quoted in *Purpose* is a property of the slices it was
-  measured on, not of the engine: a changed-files-only slice contains no other file to
-  read, so a cross-file defect cannot be represented in it at all. The user
-  documentation on datasets records this directly. The consequence is that the final
-  acceptance criterion below cannot be evaluated against that baseline; it needs a
-  general cross-file recall metric, which does not exist yet.
+- The **0% cross-file recall** once quoted in *Purpose* is a property of the slices it
+  was measured on, not of the engine: a changed-files-only slice contains no other
+  file to read, so a cross-file defect cannot be represented in it at all. The user
+  documentation on datasets records this directly. **The general cross-file recall
+  metric this caveat said "does not exist yet" has existed since 2026-08-07**: the
+  security corpus reports recall by context depth over a real denominator, and the
+  `cross-file` row reads 49.3%. *Acceptance* below is stated against that metric,
+  and the retraction has been moved up into *Purpose* where the claim is made.
 
 ## Acceptance
 
@@ -312,5 +337,13 @@ Two caveats on the figures, so nobody re-derives them:
   baseline, or the gate.
 - A narrowed read is disclosed to the model, reports the file's total line count, and
   can be re-issued for a specific line range.
-- Any cross-file recall improvement is demonstrated by measurement (cross-file recall
-  vs the 0% baseline) without a regression to overall recall or adjusted precision.
+- Any cross-file recall improvement is demonstrated by measurement against the metric
+  that exists: **`cross-file` recall on `security-advisory-2026`, reported per context
+  depth, with the lane on and off, at ≥ 3 seeds per arm, arm order alternated, and a
+  pinned judge** — without a regression to overall recall or adjusted precision. The
+  standing value to beat is **49.3%** (10 seeds, 70-case corpus, engine `359161b`),
+  measured with this lane already on, so an off-arm is required and the comparison is
+  not against 0%. The criterion previously named "the 0% baseline", which the same
+  spec declares void: a criterion whose only comparator is a measurement artefact
+  cannot be met by any measurement, and it stood unevaluable while the number that
+  would evaluate it was printed by every security-corpus run.

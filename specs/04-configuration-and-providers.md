@@ -153,7 +153,7 @@ off, the packet is byte-for-byte what it was before the section existed.
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Ask discovery to quote the line that shows the defect, and verify it deterministically. ON since 2026-08-11 on readability, not quality: the A/B was null for recall and precision, and the change is that a finding shows the line it rests on. Costs +5.6% input tokens; `false` returns that to zero. |
+| `enabled` | boolean | `true` | Ask discovery to quote the line that shows the defect, and verify it deterministically. **Two separate decisions:** its accuracy pre-registration landed on KEEP, DISABLED (2026-08-10, recall 63.1% → 62.2%, 3 gained / 7 lost, p = 0.3438), and the default was then flipped ON as a product decision on readability (2026-08-11) — it did not pass the accuracy gate. Costs +5.6% input tokens; `false` returns that to zero. |
 
 Specified in full in spec 05 §Discovery Citations, including the MUST that an
 absent, malformed or unverifiable citation leaves the candidate exactly as it would

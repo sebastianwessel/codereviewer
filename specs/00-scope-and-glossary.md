@@ -50,11 +50,19 @@ content of every changed file — by design, and the measured numbers below
 confirm that scoping holds rather than merely describing an aspiration.
 
 On the 37-case real-repository corpus (`openai/gpt-5.3-codex`, engine
-pinned), `review` has measured roughly 60-67% recall on the defects sitting
-inside the reviewed diff across several recorded runs (most recently a 61.1%
-mean over three pinned runs, 2026-08-02), and **0%** on the defects sitting
-elsewhere in a changed file — 0 of 27 on one measured denominator, replicated
-as 0 of 81 against an independently labeled answer key. Every one of those
+pinned), `review` has measured roughly two in three of the defects sitting
+inside the reviewed diff across several recorded runs, and **0%** on the
+defects sitting elsewhere in a changed file — 0 of 27 on one measured
+denominator, replicated as 0 of 81 against an independently labeled answer
+key. **This document deliberately restates no in-diff rate of its own.** That
+figure has one owner — the newest `reports/eval-results-ledger.md` entry for
+this corpus and population, mirrored in
+`docs/05-quality/current-results.md` — and this page cites it rather than
+carrying a fourth copy to go stale; the rule and its reasons are in
+`05-review-workflow-and-runtime.md` under *The Published Rate Has One Owner*.
+The out-of-diff zero is restated here because it is what the scope boundary
+below rests on, it is a count over a full denominator rather than a rate, and
+it has not moved in any recorded run. Every one of those
 misses was in a file the reviewer had been shown in full: none needed
 retrieval, a larger context window, or a bigger model, so this is not a
 context or retrieval limitation, and giving the reviewer more of either does

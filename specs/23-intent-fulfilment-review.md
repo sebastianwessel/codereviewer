@@ -512,12 +512,57 @@ who opted in. What changed on 2026-08-12 is the INSTRUMENT and not the number:
 checkout for the first time (see *How this lane is measured* under Evaluation).
 The route itself is still open, still unmitigated, and still unmeasured on the
 current engine. That is a product decision about which questions a review answers,
-made with the route above known and unfixed; what contains it is unchanged and is
-what makes the decision defensible — the lane cannot gate under any configuration,
-its output is advisory, an `evidenced` verdict whose cited lines are not lines the
-change touched is downgraded and counted, and the judgement call returns no free
-text. Nothing here reduces the obligation to fix the route, and nothing about the
-flip is evidence that it is smaller than measured.
+made with the route above known and unfixed. Nothing here reduces the obligation to
+fix the route, and nothing about the flip is evidence that it is smaller than
+measured.
+
+#### What actually contains this, and what does not
+
+This paragraph previously listed four containers: the lane cannot gate, its output
+is advisory, an `evidenced` verdict citing lines the change did not touch is
+downgraded and counted, and the judgement call returns no free text. **That list was
+wrong, and it was wrong in a way this document already had the evidence to see.**
+The damage this failure mode does is located in a reader's head — *"confidently
+asserting an obligation is satisfied when it is not, because that stops a human
+looking"* — and none of those four items reaches it:
+
+- **"Cannot gate" and "advisory" contain PIPELINE damage.** They mean the run does
+  not fail a build. A reviewer who reads `evidenced` and stops checking is harmed
+  identically whether the pipeline is green or red. Real properties, different
+  failure.
+- **The changed-line check was measured blind to this exact route.** *Second
+  Amendment as proposed*, below, records that `unevidencedAddressedCount` and
+  `uncitedObligationCount` were **zero in all 34 runs** while four verdicts were
+  false-satisfied, because both citations were real lines the change really touched.
+  The check asks *"is this a line the change touched?"* and cannot ask *"is this
+  line evidence for THIS claim?"*. Listing it as a container contradicts the
+  measurement forty lines further down.
+- **The no-free-text rule on the judgement call contains the OPPOSITE error.** It
+  exists to suppress over-rejection (26–36% rising to 73–88%), which produces false
+  *not-evidenced* — the direction this spec ranks as cheap. It does nothing about a
+  false `evidenced`.
+
+**What does act on the reader is already in this spec, and belongs here:**
+
+- **The output may not certify completion** (*The Output Is A Search Result, Not A
+  Certificate*). A report that never asserts completion cannot assert a wrong one,
+  and the headline count is `notEvidencedCount` — what is left — never a satisfied
+  count a reader could read as a clearance.
+- **The vocabulary is `evidenced`, not `addressed`** (*Output Vocabulary*). The word
+  names what the run saw in the changed lines; `addressed` answered a question about
+  head that the engine never asked, and 54 of 83 classified false positives were
+  that collision rather than errors.
+- **The explanation call may not write absence of evidence as work undone.** The
+  free-prose surface is the part a skimming reader takes as the whole account, and
+  it is the one surface where a `evidenced`/`not-evidenced` verdict could be
+  restated as a completion claim.
+
+**None of these three reduces the RATE of a wrong `evidenced`.** They change only
+what a reader is licensed to conclude from one, which is the containment this
+failure mode admits of and the honest limit of the claim. The first three items of
+the old list keep their place as what they are — containment of pipeline damage and
+of the over-rejection mechanism — and the changed-line check keeps its place as a
+structural guard against uncited verdicts, which is a real and different job.
 
 **What changed on 2026-08-06, and what did not.** The largest bucket of false
 positives — 33 of 83, obligations satisfied by absence — is addressed at the
@@ -878,10 +923,44 @@ Metrics, reported separately and never blended:
   claims, but a wrong one of either kind is a reason a reviewer stops looking, which
   is what this metric exists to count.
 
-Decision rule, fixed before the first measurement: **ship only if the
+Decision rule, as first fixed before any measurement: **ship only if the
 false-satisfied rate is low.** A capability that misses unaddressed obligations is
 merely incomplete; one that wrongly certifies them is harmful, and no amount of
-recall compensates.
+recall compensates. That ranking stands and is not being weakened.
+
+**The rule is restated on a computable quantity, 2026-08-12, because the rate it
+named is not one.** *How this lane is measured*, below, establishes that the
+false-satisfied RATE's denominator — every obligation reported `evidenced` or
+`not-contradicted` — is **permanently not measurable on this corpus**, and the
+rendered report prints `not measured` in that cell. A gate stated on a number the
+instrument declares unobtainable cannot fail, which means it cannot pass either;
+leaving it in that form would let a shipped default rest on a blank. Two things
+must therefore change, and both are recorded rather than smoothed over:
+
+- **The gate binds on the false-satisfied CLAIM COUNT over the fixed human
+  enumeration** — of the 67 enumerated outstanding obligations, how many a run
+  cleared with an `evidenced` or a `not-contradicted` verdict. That is the number
+  the scorer computes, the number the report leads with, and the number this spec
+  ranks first. The rate remains the ideal and is recorded as unobtainable, not
+  dropped: obtaining it would take one hand judgement per reported obligation per
+  run against a non-deterministic obligation set.
+- **The bar is ≤ 4 claims, in each of two rounds.** Four is not chosen for
+  roundness: it is the count this exact error class last produced — *"4
+  false-satisfied verdicts"* over 34 cases, recorded under *Second Amendment as
+  proposed* above — against a corpus of comparable scale (21 pre-written cases
+  carrying all 67 rows). A bar set above the last measured count would ratify a
+  regression as a pass. Two rounds are required because this stage agrees with
+  itself on only 87.0% of verdicts (results ledger, 2026-08-02), so a single round
+  cannot distinguish a low count from a lucky one.
+
+**And this is now a KEEP gate, not a ship gate, because the lane already shipped.**
+The default flipped on 2026-08-11; the instrument that could evaluate any form of
+this gate arrived on 2026-08-12. **The flip was therefore taken with neither number
+in existence** — not the rate, not the count — and that is stated here rather than
+left for a reader to reconstruct, because everywhere else this spec is careful to
+say what a decision rested on. Failing the bar returns `intentFulfilment.enabled`
+to `false` by default; it does not remove the lane, which remains available to
+anyone who opts in with the failure mode above in view.
 
 ### How this lane is measured (2026-08-12): `eval intent`
 

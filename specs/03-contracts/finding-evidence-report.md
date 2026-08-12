@@ -510,6 +510,24 @@ a flattering claim about a search that did not happen, and an empty findings lis
 under them reads as a clearance. The same rule binds every surface that carries
 the claim — `report.json` provenance, SARIF, and the pull-request comment.
 
+**Where those rates come from is part of the contract, not an implementation
+detail.** Every reader-facing rate must be a transcription of one named entry in
+`reports/eval-results-ledger.md` — the newest entry measuring that population on
+that corpus — held in a single module both renderers import, with a test that
+checks the transcribed fields against the cited entry. Nothing may compute,
+round, or paraphrase a rate into a second copy. Until this rule was written, five
+different figures were in circulation as "current" and nothing bound the printed
+one to the record: the reporter kept quoting a baseline the ledger had retired,
+because a stale number and a fresh one are indistinguishable to a renderer that
+does not know which measurement it is quoting.
+
+Each transcription must carry, beside the number, the provider and model, the
+corpus and its case count, the population scored, the pinned engine and the run
+count — the constraints spelt out in `05-review-workflow-and-runtime.md` under
+*The Published Rate Has One Owner*. A rate whose measured configuration differs
+from the run printing it is still quotable, but only with that difference stated:
+every published rate predates the 2026-08-11 default flips.
+
 ## SARIF Report
 
 R1 must render `report.sarif` from the canonical `ReviewReport`. SARIF is an

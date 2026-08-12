@@ -24,6 +24,21 @@ quote for the review stage.** Everything under [Historical
 record](#historical-record) further down predates it and is kept as a dated
 record of how that figure was reached, not as an alternative to quote instead.
 
+**This page mirrors one owner; it is not itself the owner.** The published rate
+lives in the newest `reports/eval-results-ledger.md` entry that measured the
+population and corpus being quoted, and every headline below names the entry it
+was transcribed from. Nothing here recomputes a number, and no spec, report, or
+renderer should carry a rate of its own instead of citing this chain. Note also
+that a **blended** recall figure (in-diff and out-of-diff pooled) and an
+**in-diff** figure are different quantities roughly twenty points apart on the
+same run — a newer one of either kind does not supersede an older one of the
+other.
+
+**Every figure on this page predates the 2026-08-11 default flips**
+(`contextSources`, `review.citations`, `changeImpact`, `intentFulfilment`,
+`reporting.reviewComments`), so none of them describes the configuration a
+default `review` runs today.
+
 ---
 
 ## Current headline
@@ -103,63 +118,85 @@ below stands exactly as written.
 
 ## Security headline
 
-Measured **2026-08-07** on the **security-advisory corpus as it stood at 50 cases**:
-51 expected findings, 33 upstream projects, all seven languages.
+Measured **2026-08-07** on the **security-advisory corpus as it stood at 70 cases**:
+72 expected findings, 44 upstream projects, all seven languages, all ten mechanisms.
+Model `openai/gpt-5.3-codex`, engine pinned `359161b`, **ten seeds**, 0 dirty files
+in each. The figure is the control arm of the sub-file partitioning A/B, so it cost
+nothing extra to obtain.
 
-> **The corpus has since grown to 51 cases / 52 expectations** — one case was
-> re-curated once `open-redirect` entered the mechanism vocabulary. Every figure in
-> this section was measured on the 50-case corpus and **must not be pooled with, or
-> differenced against, a run on the corpus as it stands now.** No figure here has
-> been re-measured, and none is restated as though it had been.
+> **The corpus has since grown to 72 cases / 74 expectations / 46 repositories** —
+> one case re-admitted on review, one added after. Every figure in this section was
+> measured on the 70-case corpus and **must not be pooled with, or differenced
+> against, a run on the corpus as it stands now.** No figure here has been
+> re-measured, and none is restated as though it had been.
 
-Every case is a defect because a reviewed GitHub Security Advisory published after
-the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `49f0c669`,
-three seeds, 0 dirty files in each.
+| Metric | Value |
+| --- | ---: |
+| Recall | **64.0%** (sd 2.22pp over 10 seeds) |
+| Precision, adjusted | **95.0%** |
+| Precision, raw | 72.9% |
+| Genuine false positives | 25 over 886 raw findings |
+| Spend, whole arm | $18.42 |
 
-| Metric | Value | Per run |
-| --- | ---: | --- |
-| Recall | **60.8%** (sd 3.92pp) | 60.8 / 56.9 / 64.7 |
-| Precision (raw to adjusted bracket) | **71.0% to 100%** | 70.5–100 / 69.0–100 / 73.3–100 |
-| Genuine false positives | **0**, all three seeds | 0 / 0 / 0 |
-| Cost per run | $1.88 | $3.19 cold, then $1.24 / $1.22 |
-
-Source: `reports/2026-08-07-security-corpus-baseline.md`.
+Source: `reports/eval-results-ledger.md`, "2026-08-07 — Sub-file partitioning
+REJECTED, and the 70-case baseline"; detail in
+`reports/2026-08-07-subfile-partitioning-result.md`.
 
 **This is not comparable to the in-diff figure above.** Different corpus, different
 question, different answer-key construction. Do not difference them.
 
-**Do not read the sd in the table as the instrument's precision.** Four independent
+**Where the reviewer is weakest, on the ten-seed control arm:**
+
+| | recall |
+| --- | ---: |
+| `xss` | **40.0%** |
+| `ssrf` | 54.0% |
+| `injection` | 55.0% |
+| `authorization` | 63.3% — at the mean |
+| `cross-file` (context depth) | **49.3%** |
+
+`xss` is the lowest substantial mechanism and `cross-file` the worst context depth
+with a real denominator — and it is the largest bucket in the corpus. Cross-file
+retrieval has been on by default since 2026-08-01, so 49.3% is what the reviewer
+achieves *with* the mediated tools.
+
+**Strongest:** `path-traversal` 94.4%, `concurrency-resource` 69.3%. The classes this
+project once recorded at 0% are not at 0% on material chosen for them.
+
+### Superseded: the 50-case security baseline
+
+Kept as a dated record of how the figure above was reached. Engine pinned
+`49f0c669`, **three** seeds, 2026-08-07, 50 cases / 51 expectations / 33 projects.
+Source: `reports/2026-08-07-security-corpus-baseline.md`.
+
+| Metric | Value | Per run |
+| --- | ---: | --- |
+| Recall | 60.8% (sd 3.92pp) | 60.8 / 56.9 / 64.7 |
+| Precision (raw to adjusted bracket) | 71.0% to 100% | 70.5–100 / 69.0–100 / 73.3–100 |
+| Genuine false positives | 0, all three seeds | 0 / 0 / 0 |
+| Cost per run | $1.88 | $3.19 cold, then $1.24 / $1.22 |
+
+**60.8% and 64.0% are not a change** — the ledger supersedes the first outright, and
+the two measure different corpora at different seed counts. The earlier 57.7% on 25
+cases is superseded on the same grounds.
+
+**Do not read the sd in that table as the instrument's precision.** Four independent
 three-seed estimates of no-intervention recall on this corpus span 2.22–8.38pp;
 pooled over 8 degrees of freedom it is **5.71pp**, and three seeds resolve about
-**11 percentage points**. Twelve no-intervention runs span 53.85%–69.23%, so the
-quotable level is about **61%** and this setup cannot currently measure an
-improvement smaller than ~11pp. The earlier
-57.7% on 25 cases is superseded, and the two figures are **not a change** — they
-measure different corpora.
+**11 percentage points**. Twelve no-intervention runs span 53.85%–69.23%, so this
+setup cannot currently measure an improvement smaller than ~11pp on three seeds —
+which is why the current headline is taken at ten.
 
-**Where the reviewer is weakest, on denominators large enough to act on:**
+**Its per-mechanism diagnosis was REVERSED by the ten-seed run, and it had already
+been acted on.** The 50-case arm read `authorization` at 7/18 = 39% and named it the
+worst substantial mechanism; at ten seeds on 70 cases it reads 63.3%, at the mean,
+and `xss` at 40.0% takes its place. A pre-registered authorization-scope prompt
+clause was built against the 39% figure and came back null (7 gained / 8 lost,
+p = 1.0; `reports/2026-08-07-authorization-scope-result.md`). A bad row on a small
+denominator is an artifact in exactly the way a perfect one is.
 
-| | pooled over 3 seeds | |
-| --- | --- | --- |
-| `authorization` | 7/18 | **39%** |
-| `xss` | 10/21 | 48% |
-| `injection` | 10/21 | 48% |
-| `cross-file` (context depth) | 20/42 | **48%** |
-
-`authorization` is the one that got *worse* with better data — 2/6 on the small
-corpus, dismissible as noise; 7/18 here, the worst substantial mechanism. It is also
-the class carrying the majority of real security findings.
-
-`cross-file` reads 48% against the small corpus's 38% — a better measurement of the
-same thing, not an improvement — and cross-file retrieval has been on by default
-since 2026-08-01, so that is what the reviewer achieves *with* the mediated tools.
-
-**Strongest:** path-traversal 22/24, cryptography 12/15. The classes this project
-once recorded at 0% are not at 0% on material chosen for them.
-
-**A worked example of why per-mechanism rows are directions.** On the 25-case corpus
-`cross-function` read 9/9 — a perfect 100%. On 24 observations it is 15/24 (62%). A
-perfect row on a small denominator is an artifact.
+**A worked example of the same thing in the other direction.** On the 25-case corpus
+`cross-function` read 9/9 — a perfect 100%. On 24 observations it is 15/24 (62%).
 
 **Analyzer ingestion (`security.signals`) stays off, for a measured reason.** On 132
 advisory-confirmed vulnerabilities, a public analyzer flags a line the fix changed

@@ -562,14 +562,63 @@ them:
   oversize split and a rate-limit retry have different causes and different
   meanings, and one counter for both would hide which was happening.
 
-### Standing Caveat On Every Figure Below
+### The Published Rate Has One Owner, And It Is Not This Page
 
-**The current headline for this stage is recall 43.7% at adjusted precision 95.0%
-for $2.31 per run**, measured on 2026-08-01 on the 37-case real-repository corpus
-with a pinned engine at the shipped defaults (`reports/eval-results-ledger.md`).
-That figure supersedes every earlier one on this page for quoting purposes.
+**No figure on this page — above this line or below it — is the published rate for
+this stage.** The published rate is owned in exactly one place: the newest entry in
+`reports/eval-results-ledger.md` that measures the population being quoted on the
+corpus being quoted. That entry is transcribed once into the single reader-facing
+copy both report surfaces import (`measuredReliability`, contract requirement in
+`03-contracts/finding-evidence-report.md` under *Markdown Report*), and mirrored for
+human readers in `docs/05-quality/current-results.md`. Every other site cites the
+owner; no other site restates a number of its own.
 
-Two caveats apply to everything else quoted here, and neither may be glossed:
+**The rule exists because this page carried its opposite.** A clause here named a
+2026-08-01 figure as the current headline that "supersedes every earlier one on this
+page for quoting purposes" — a superseding rule with no mechanism to supersede
+itself. Two later measurements landed in this same file (the `refutationRetrieval`
+control arm below, and the re-baseline quoted under *Reviewer Instructions*), the
+ledger superseded the 2026-08-01 figure twice over, and the instruction aged into
+pointing a reader at the oldest number in the file.
+
+**A rate is a property of a model, a corpus, a scored population and a
+configuration — and the figures that were being ranked against each other are not
+all the same quantity.** This is the part a "supersedes" clause cannot express:
+
+- **43.7%** (2026-08-01, 37-case real-repository corpus, shipped defaults) is a
+  **blended** figure over all 87 expectations. It pools the 60 in-diff expectations
+  with 27 out-of-diff expectations measured at a hard 0 in every run ever taken, so
+  it moves when the fixture mix moves.
+- **61.1%** (2026-08-02), **68.3%** (2026-08-05) and **66.1%** (2026-08-06 control
+  arm) are **in-diff** figures over the 60-expectation population only.
+
+The two are roughly twenty points apart on one and the same run — the 2026-08-05
+re-baseline reports blended 47.1% beside in-diff 68.3% — so a later in-diff figure
+does not supersede an earlier blended one. It answers a different question. Spec 17
+requires the two populations to be reported separately and never blended for exactly
+this reason; a quoting rule that ranks them by date defeats it.
+
+Two further constraints bind any figure quoted from this record:
+
+- **Every rate this project has published was measured on `openai/gpt-5.3-codex`**,
+  and is evidence about no other model.
+- **Every one of them predates the 2026-08-11 default flips** (`contextSources`,
+  `review.citations`, `changeImpact`, `intentFulfilment`, `reporting.reviewComments`).
+  No published rate describes the configuration a default `review` runs today, and a
+  published rate must therefore carry the configuration it was measured under rather
+  than be read as a description of the shipped product.
+
+**What a citing site MUST carry with the number**: the model, the corpus and its
+case/expectation count, which population was scored (in-diff, out-of-diff, or
+blended), the pinned engine, the number of runs, and the ledger entry it was
+transcribed from. A rate quoted without those is not traceable to a measurement and
+must not be published.
+
+The figures on this page are retained as **dated audit trail** — each records the
+outcome of a decision taken on the evidence available at the time — and none of them
+may be quoted as current accuracy.
+
+Two caveats apply to everything quoted here, and neither may be glossed:
 
 - **Every figure dated before 2026-07-27 predates the harness-wide suppression of
   conversation history** (see *Conversation History* under *Harness Runtime*
@@ -583,10 +632,6 @@ Two caveats apply to everything else quoted here, and neither may be glossed:
   mid-measurement. Nothing in any scored artifact from that period records which
   engine produced it, so those runs are unknown-engine rather than agreeing, and
   small deltas from them are correspondingly weaker.
-
-The figures are retained because each records the outcome of a decision that was
-taken on the evidence available at the time — they are the audit trail for a
-withdrawal or an adoption, not a description of today's accuracy.
 
 ### Measured Outcome Of The Withdrawn Second Pass
 
@@ -1949,30 +1994,65 @@ finding rests on.
 - **A failed, malformed, or absent citation MUST leave the candidate exactly as
   it would have been without the lane.** No candidate may be dropped, downgraded,
   rejected, or re-ordered because its citation did not verify. Absence is the
-  only failure mode this lane is permitted to have — which is what makes it
-  incapable of costing recall, by construction rather than by measurement.
-  Rejecting unverified candidates is a separate and riskier lever; it is NOT part
-  of this lane and MUST NOT be added to it without its own pre-registration.
+  only failure mode the VERIFIER is permitted to have — so the verification half
+  cannot cost recall by construction. **That argument covers the verifier and not
+  the asking**: the lane also changes what discovery is instructed to output, and
+  a changed instruction changes a model's answer, which is why this lane was
+  promoted on measurement rather than on construction. The two halves were once
+  stated as one claim on this page, and they contradicted each other a paragraph
+  apart. Rejecting unverified candidates is a separate and riskier lever; it is
+  NOT part of this lane and MUST NOT be added to it without its own
+  pre-registration.
 - With the lane disabled, the discovery packet MUST be byte-for-byte what it was
   before the lane existed, and candidates MUST carry no evidence ids.
 
-**Off by default, and the kill rule is inherited rather than invented.** This
-changes what discovery is ASKED to output, so it is promoted on measurement. The
-nearest prior attempt at this stage — the withdrawn refutation retrieval, above —
-made adjusted precision fall and false positives rise; that record's rule applies
-here verbatim: remove on ANY adjusted-precision drop or false-positive rise
-against the control arm.
+**Shipped off by default, and the kill rule is inherited rather than invented.**
+This changes what discovery is ASKED to output, so any ACCURACY claim for it is
+made on measurement. The nearest prior attempt at this stage — the withdrawn
+refutation retrieval, above — made adjusted precision fall and false positives
+rise; that record's rule applies here verbatim: remove on ANY adjusted-precision
+drop or false-positive rise against the control arm.
 
-**Promoted to ON by default, 2026-08-11, on readability and explicitly not on
-quality.** The A/B was null both ways — recall 63.1% → 62.2%, paired sign test 3
-gained / 7 lost p = 0.3438, adjusted precision 98.6% → 99.3%
-(`reports/2026-08-10-citations-result.md`) — so nothing claims the reviewer got
-better. What changed is what a finding SHOWS: the mechanism engaged on 90% of
-findings, so a comment's "Based on:" line names the source line the claim stands
-on instead of the refuter's prose about it. Cost is +5.6% input tokens per
-discovery call, and `enabled: false` returns it to zero with a byte-identical
-packet.
+**Two decisions, taken two days apart on different grounds. They are recorded
+separately because pooling them would read as an accuracy result, and there is
+none.**
+
+**Decision 1 — the accuracy pre-registration, 2026-08-10: KEEP, DISABLED.** All
+four cells of the decision table were enumerated before the run
+(`reports/2026-08-10-citations-prereg.md`), with in-diff recall as the primary
+endpoint:
+
+| recall vs control | significant | decision |
+| --- | --- | --- |
+| improves | yes | PROMOTE to enabled by default |
+| improves | no | KEEP, DISABLED |
+| flat or worse | no | **KEEP, DISABLED** ← where the result landed |
+| flat or worse | yes | REMOVE |
+
+The measurement: recall **63.1% → 62.2%**, paired sign test **3 gained / 7 lost**,
+p = 0.3438; adjusted precision 98.6% → 99.3%; reviews posting nothing 27% → 30%
+(`reports/2026-08-10-citations-result.md`). Third cell, no interpretation needed
+after the fact. **This lane did not pass its accuracy pre-registration, and no
+document may say or imply that it did.** The mechanism did engage — evidence
+records rose from 1 on every finding to 2–6 on 90% of them — which makes the null
+a stronger null, not a partial pass.
+
+**Decision 2 — the default flip, 2026-08-11: a product decision on readability,
+taken outside that table.** Readability appears nowhere in the pre-registration,
+not even among its decision-free secondary observations, so this is not the table
+being applied; it is a product owner choosing to ship a null-for-accuracy change
+for what it shows a reader. What it shows: a comment's "Based on:" line names the
+source line the claim rests on instead of the refuter's prose about it. Cost is
++5.6% input tokens per discovery call, and `enabled: false` returns it to zero
+with a byte-identical packet. Recording it in this shape is deliberate — a metric
+chosen after seeing the results is how a null becomes a "win", and this project
+has corrected that error three times.
 
 The kill rule above still binds as a STANDING rule, not a one-time gate: a future
 measurement showing adjusted precision falling removes the key whatever its
-readability value.
+readability value. **Note what that rule does and does not watch.** It watches
+adjusted precision, which rose. The pre-registration's primary endpoint was
+recall, which is the metric that moved — slightly, and downward — so a later
+recall regression attributable to this lane fires no standing trigger and would
+have to be caught by a re-baseline. That asymmetry is stated so it is not mistaken
+for coverage.
