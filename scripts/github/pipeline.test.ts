@@ -601,3 +601,58 @@ describe('runPipeline: failure modes', () => {
     expect(result.commentBody).toContain('no title or description')
   })
 })
+
+// The digest now THROWS on a report shape it cannot read, rather than returning
+// `undefined` and letting the section render as nothing — which is how the Impact
+// section stayed empty from 434473a until 2026-08-11. This pins what the reader
+// gets when the engine and this digest disagree, because the failure mode being
+// prevented is silence, and a silent failure is exactly what an untested error
+// path decays back into.
+describe('runPipeline: the engine and the digest disagree', () => {
+  const unreadable = (artifactPath: string) => async (path: string) =>
+    path === `${ARTIFACT_DIR}/${artifactPath}`
+      ? JSON.stringify({ schemaVersion: '3.0', wrong: 'shape' })
+      : path === `${ARTIFACT_DIR}/report.json`
+        ? JSON.stringify(reviewReportFixture)
+        : path === `${ARTIFACT_DIR}/review-comments.github.json`
+          ? JSON.stringify(renderedGithubCommentsFixture)
+          : undefined
+
+  // The findings are the reason the comment exists. An advisory lane whose report
+  // cannot be read must cost the reader that lane, never the review.
+  it('keeps the findings and says which section is missing', async () => {
+    const { api, calls } = createFakeApi()
+    const { dependencies } = createDependencies({
+      api,
+      readArtifact: unreadable('impact-report.json')
+    })
+
+    const result = await runPipeline(dependencies)
+    const body = calls.created.at(-1) ?? calls.updated.at(-1)?.body ?? ''
+
+    expect(body).toContain('### Findings')
+    expect(body).toContain('impact report')
+    expect(body).toContain('could not be read')
+    // Exit 2, not 0: a red check is the only part of this an operator sees
+    // without opening the pull request. The review still posted.
+    expect(result.exitCode).toBe(2)
+  })
+
+  // The review report is different in kind. Without it the headline read "no
+  // threshold crossed, this search reported nothing" — a clearance issued over a
+  // run that may have found plenty.
+  it('refuses to headline a clearance it cannot support', async () => {
+    const { api, calls } = createFakeApi()
+    const { dependencies } = createDependencies({
+      api,
+      readArtifact: unreadable('report.json')
+    })
+
+    const result = await runPipeline(dependencies)
+    const body = calls.created.at(-1) ?? calls.updated.at(-1)?.body ?? ''
+
+    expect(body).toContain('could not complete')
+    expect(body).not.toContain('this search reported nothing')
+    expect(result.exitCode).toBe(2)
+  })
+})

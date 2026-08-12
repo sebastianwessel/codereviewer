@@ -230,11 +230,23 @@ codereviewer impact check --base-ref origin/main --head-ref HEAD
 
 ```json
 {
-  "schemaVersion": "1.1",
+  "schemaVersion": "3.0",
   "status": "disabled",
+  "adjudicationStatus": "disabled",
+  "generatedAt": "2026-08-12T03:44:14.769Z",
+  "scope": { "baseRef": "origin/main", "headRef": "HEAD", "changedFileCount": 0, "deletedFileCount": 0 },
+  "summary": { "changedSymbolCount": 0, "referenceCount": 0, "impactFindingCount": 0, "adjudicationCallCount": 0 },
+  "impactFindings": [],
+  "changedSymbols": [],
+  "impactedFiles": [],
+  "impactedTestFiles": [],
   "warnings": ["Change-impact review is disabled. Set changeImpact.enabled to true to run it."]
 }
 ```
+
+`summary` is abbreviated above; a real report carries the full counter set. The
+lists are present and empty rather than absent, because a disabled run is still
+a report — the [CLI reference](../06-reference/cli.md) has the whole shape.
 
 Full contracts: [CLI reference](../06-reference/cli.md).
 

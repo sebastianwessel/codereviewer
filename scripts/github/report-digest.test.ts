@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   digestImpactReport,
   digestIntentReport,
-  digestReviewReport
+  digestReviewReport,
+  ReportShapeError
 } from './report-digest.js'
 import {
   impactReportFixture,
@@ -12,6 +13,17 @@ import {
 } from './fixtures.js'
 
 const json = (value: unknown): string => JSON.stringify(value)
+
+/** The message a digest refusal carries, for asserting on what a human is told. */
+const refusalMessage = (digest: () => unknown): string => {
+  try {
+    digest()
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+
+  throw new Error('the digest accepted a shape it was expected to refuse')
+}
 
 describe('digestReviewReport', () => {
   it('reduces a report to what the comment renders', () => {
@@ -67,9 +79,64 @@ describe('digestReviewReport', () => {
     expect(digest?.qualityGateEvaluated).toBe(false)
   })
 
-  it('returns undefined for something that is not a review report', () => {
-    expect(digestReviewReport('not json')).toBeUndefined()
-    expect(digestReviewReport('{"run":{}}')).toBeUndefined()
+  it('refuses something that is not a review report', () => {
+    expect(() => digestReviewReport('not json')).toThrow(ReportShapeError)
+    expect(() => digestReviewReport('{"run":{}}')).toThrow(ReportShapeError)
+  })
+
+  // THE DEFECT EVERY REFUSAL BELOW EXISTS FOR. `admittedFindings` moving is the
+  // review report's version of what `symbols` moving did to the Impact section:
+  // a loose schema parses the new shape, finds no findings, and the comment
+  // reports that this search found nothing — a clearance, produced by a run that
+  // found defects. There is no reader-visible difference between that and a clean
+  // change, which is why the digest must refuse rather than render it.
+  it('refuses a report whose findings moved rather than reporting zero findings', () => {
+    const { admittedFindings, ...withoutFindings } = reviewReportFixture
+
+    expect(() =>
+      digestReviewReport(json({ ...withoutFindings, findings: admittedFindings }))
+    ).toThrow(ReportShapeError)
+  })
+
+  // A finding is required to carry all of these by the engine's own contract
+  // (`AdmittedFindingSchema`), so an absent one is not an older report — it is a
+  // broken one, and a default in its place is a guess rendered as a fact.
+  it('refuses a finding missing a field the engine always writes', () => {
+    for (const field of [
+      'description',
+      'baselineStatus',
+      'reporterEligibility',
+      'fingerprints'
+    ]) {
+      const { [field]: _removed, ...finding } = reviewReportFixture
+        .admittedFindings[0] as Record<string, unknown>
+
+      expect(() =>
+        digestReviewReport(
+          json({ ...reviewReportFixture, admittedFindings: [finding] })
+        )
+      ).toThrow(ReportShapeError)
+    }
+  })
+
+  // A schema bump is the producer declaring that a consumer must be re-read. The
+  // pin turns that declaration into a red test in the commit that makes it, which
+  // is the cheapest place this whole defect class can be caught.
+  it('refuses a report written against a schema version it was not built for', () => {
+    expect(() =>
+      digestReviewReport(json({ ...reviewReportFixture, schemaVersion: '2.0' }))
+    ).toThrow(ReportShapeError)
+  })
+
+  // What a refusal has to tell whoever reads the pull request: which report, what
+  // is missing from the comment because of it, and where the disagreement lives.
+  // The engine and this digest ship in one commit, so it is never a stale artifact.
+  it('says which report failed, what is missing, and where to fix it', () => {
+    const message = refusalMessage(() => digestReviewReport('{"run":{}}'))
+
+    expect(message).toContain('review report')
+    expect(message).toContain('no findings from it are shown')
+    expect(message).toContain('scripts/github/report-digest.ts')
   })
 
   // A1: `reporterEligibility` used to be parsed by the schema and then dropped
@@ -82,21 +149,6 @@ describe('digestReviewReport', () => {
     expect(byId.get('find_high1')?.reporterEligibility).toBe('inline')
     expect(byId.get('find_medium1')?.reporterEligibility).toBe('summary-only')
     expect(byId.get('find_unresolved1')?.reporterEligibility).toBe('artifact-only')
-  })
-
-  it('defaults a missing reporterEligibility to "unknown" rather than guessing', () => {
-    const { reporterEligibility: _ignored, ...findingWithoutEligibility } =
-      reviewReportFixture.admittedFindings[0] as Record<string, unknown> & {
-        reporterEligibility: string
-      }
-    const digest = digestReviewReport(
-      json({
-        ...reviewReportFixture,
-        admittedFindings: [findingWithoutEligibility]
-      })
-    )
-
-    expect(digest?.findings[0]?.reporterEligibility).toBe('unknown')
   })
 
   // Severity counts describe what a reader must act on, so an artifact-only
@@ -198,12 +250,41 @@ describe('digestIntentReport', () => {
 
     expect(digest?.status).toBe('no-intent')
   })
+
+  // The same defect as the review report's, one section over: without the counters
+  // or the obligations, the Intent section renders "no obligation is left
+  // unevidenced by this change" over a report the digest could not read. That is
+  // the one error spec 23 calls expensive — a false "this is done" makes a
+  // reviewer stop looking — manufactured by tolerance rather than by judgement.
+  it('refuses an intent report whose summary or obligations moved', () => {
+    const { summary: _summary, ...withoutSummary } = intentReportFixture
+    const { obligations, ...withoutObligations } = intentReportFixture
+
+    expect(() => digestIntentReport(json(withoutSummary))).toThrow(
+      ReportShapeError
+    )
+    expect(() =>
+      digestIntentReport(json({ ...withoutObligations, items: obligations }))
+    ).toThrow(ReportShapeError)
+  })
+
+  it('refuses an intent report written against another schema version', () => {
+    expect(() =>
+      digestIntentReport(json({ ...intentReportFixture, schemaVersion: '2.0' }))
+    ).toThrow(ReportShapeError)
+  })
+
+  it('says which report failed and what is missing', () => {
+    const message = refusalMessage(() => digestIntentReport('{}'))
+
+    expect(message).toContain('intent report')
+    expect(message).toContain('Intent section is missing')
+  })
 })
 
 describe('digestImpactReport', () => {
-  // The <= 1.1 shape, where each changed symbol carried its own references. Kept
-  // because this digest must also work against an installed engine older than the
-  // workflow it runs from.
+  // The shape the engine emits since schema 2.0: the changed symbols and the files
+  // they reach are two normalized lists, joined on the name/path/line triple.
   it('keeps only symbols that actually have dependents', () => {
     const digest = digestImpactReport(json(impactReportFixture))
 
@@ -216,76 +297,51 @@ describe('digestImpactReport', () => {
     })
   })
 
-  // The shape the engine ACTUALLY emits since schema 2.0: the changed symbols and
-  // the files they reach are two normalized lists, joined on the name/path/line
-  // triple. Nothing read `changedSymbols`, so between 2.0 and this test the Impact
-  // section silently vanished from every pull-request comment while the fixture
-  // above kept the unit suite green. `src/cli/review-e2e.test.ts` is what caught
-  // it; this is the same fact pinned where it is cheap to check.
-  it('joins the normalized >= 2.0 lists into per-symbol reference counts', () => {
-    const digest = digestImpactReport(
-      json({
-        schemaVersion: '3.0',
-        status: 'completed',
-        summary: {
-          changedSymbolCount: 2,
-          referenceCount: 2,
-          testReferenceCount: 1
-        },
-        changedSymbols: [
-          {
-            name: 'requireSession',
-            definitionPath: 'src/auth/session.ts',
-            definitionLine: 10,
-            changeKind: 'modified'
-          },
-          {
-            name: 'unusedHelper',
-            definitionPath: 'src/auth/session.ts',
-            definitionLine: 30,
-            changeKind: 'new'
-          }
-        ],
-        impactedFiles: [
-          {
-            path: 'src/routes/admin.ts',
-            symbols: [
-              {
-                name: 'requireSession',
-                definitionPath: 'src/auth/session.ts',
-                definitionLine: 10,
-                sites: [
-                  { line: 40, text: 'requireSession(request)' },
-                  { line: 41, text: 'requireSession(other)' }
-                ]
-              }
-            ]
-          }
-        ],
-        impactedTestFiles: [
-          {
-            path: 'src/auth/session.test.ts',
-            symbols: [
-              {
-                name: 'requireSession',
-                definitionPath: 'src/auth/session.ts',
-                definitionLine: 10,
-                sites: [{ line: 4, text: 'requireSession' }]
-              }
-            ]
-          }
-        ],
-        warnings: []
-      })
-    )
+  // THE DEFECT THIS WHOLE FILE WAS REWRITTEN FOR, pinned as a refusal.
+  //
+  // Schema 2.0 replaced `symbols` — one list of changed symbols each carrying its
+  // own references — with the normalized pair above. This digest read only
+  // `symbols`, so from 434473a onward it parsed every report successfully, joined
+  // nothing, and rendered no Impact section at all, in every pull-request comment,
+  // for months. Nothing failed anywhere, because a tolerant reader has no failure:
+  // the missing section was indistinguishable from a change that affects nothing.
+  //
+  // The old spelling must now be refused rather than read. Not because reading it
+  // would be wrong, but because there is no producer left that can write it — see
+  // the head of `report-digest.ts` — so a report shaped like this is a disagreement
+  // with the engine, and the only useful thing to do with it is say so.
+  it('refuses the pre-2.0 shape instead of rendering an empty section', () => {
+    const legacy = {
+      schemaVersion: '1.1',
+      status: 'completed',
+      summary: { changedSymbolCount: 1, referenceCount: 2, testReferenceCount: 1 },
+      symbols: [
+        {
+          name: 'requireSession',
+          definitionPath: 'src/auth/session.ts',
+          definitionLine: 10,
+          changeKind: 'modified',
+          references: [{ path: 'src/routes/admin.ts', line: 40, text: 'requireSession()' }],
+          testReferences: [{ path: 'src/auth/session.test.ts', line: 4, text: 'requireSession' }]
+        }
+      ],
+      warnings: []
+    }
 
-    expect(digest?.symbols.map((symbol) => symbol.name)).toEqual([
-      'requireSession'
-    ])
-    expect(digest?.symbols[0]).toMatchObject({
-      referenceCount: 2,
-      testReferenceCount: 1
-    })
+    expect(() => digestImpactReport(json(legacy))).toThrow(ReportShapeError)
+  })
+
+  it('refuses an impact report written against another schema version', () => {
+    expect(() =>
+      digestImpactReport(json({ ...impactReportFixture, schemaVersion: '4.0' }))
+    ).toThrow(ReportShapeError)
+  })
+
+  it('says which report failed and what is missing', () => {
+    const message = refusalMessage(() => digestImpactReport('{}'))
+
+    expect(message).toContain('impact report')
+    expect(message).toContain('Impact section is missing')
   })
 
   // Same name, same file, different declarations: the join key is the full triple
@@ -296,10 +352,24 @@ describe('digestImpactReport', () => {
       json({
         schemaVersion: '3.0',
         status: 'completed',
-        summary: { changedSymbolCount: 2, referenceCount: 1 },
+        summary: {
+          changedSymbolCount: 2,
+          referenceCount: 1,
+          testReferenceCount: 0
+        },
         changedSymbols: [
-          { name: 'parse', definitionPath: 'src/a.ts', definitionLine: 1 },
-          { name: 'parse', definitionPath: 'src/a.ts', definitionLine: 9 }
+          {
+            name: 'parse',
+            definitionPath: 'src/a.ts',
+            definitionLine: 1,
+            changeKind: 'modified'
+          },
+          {
+            name: 'parse',
+            definitionPath: 'src/a.ts',
+            definitionLine: 9,
+            changeKind: 'modified'
+          }
         ],
         impactedFiles: [
           {

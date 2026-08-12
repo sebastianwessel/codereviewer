@@ -28,6 +28,7 @@ import {
   digestImpactReport,
   digestIntentReport,
   digestReviewReport,
+  ReportShapeError,
   type ImpactDigest,
   type IntentDigest,
   type ReviewDigest
@@ -116,6 +117,47 @@ export type PipelineResult = {
 }
 
 const CONFIGURATION_EXIT_CODE = 2
+
+/**
+ * Reads one artifact of this run and digests it, or records why it could not.
+ *
+ * THREE OUTCOMES, AND THEY MUST STAY THREE. An absent file is the ordinary case —
+ * a lane that was switched off writes nothing — and renders no section, silently
+ * and correctly. A file that IS there and cannot be read is a defect in this
+ * integration, and it returns the same `undefined` as far as rendering goes but
+ * leaves a note behind. Collapsing the second into the first is what kept the
+ * Impact section missing from every comment for months.
+ *
+ * The digest's own message is the note, verbatim: it is written for the reader of
+ * the pull request, and rewording it here would put the sentence a human sees two
+ * files away from the check that produces it.
+ */
+const digestArtifact = async <T>(
+  input: {
+    readonly readArtifact: (path: string) => Promise<string | undefined>
+    readonly path: string
+    readonly digest: (raw: string) => T
+  },
+  notes: string[]
+): Promise<T | undefined> => {
+  const raw = await input.readArtifact(input.path)
+
+  if (raw === undefined) {
+    return undefined
+  }
+
+  try {
+    return input.digest(raw)
+  } catch (error) {
+    if (!(error instanceof ReportShapeError)) {
+      throw error
+    }
+
+    notes.push(error.message)
+
+    return undefined
+  }
+}
 
 const stageArguments = (
   command: readonly string[],
@@ -322,7 +364,6 @@ export const runPipeline = async (
     stageArguments(reviewStageDefinition.command, context, options)
   )
   const reviewOutcome = classifyStageOutcome(reviewStageDefinition, reviewResult)
-  const outcomes: readonly StageOutcome[] = [reviewOutcome]
   dependencies.log(`stage ${reviewOutcome.id}: ${reviewOutcome.status}`)
 
   // Present on a successful run (stdout) and on a run that failed after writing
@@ -335,11 +376,25 @@ export const runPipeline = async (
   let impact: ImpactDigest | undefined
   let renderedComments = ''
 
+  // Notes left by an artifact this run wrote that this build could not read. Kept
+  // apart from `notes` while the artifacts are read so the review report's own
+  // failure can be recognised below; both end up in the same list.
+  const unreadableArtifactNotes: string[] = []
+  // The review report is the one artifact whose failure changes more than its own
+  // section, so it is recorded as it happens rather than recovered from the notes
+  // afterwards. It is read first, which is what makes the check below exact.
+  let reviewReportUnreadable = false
+
   if (artifactDirectory !== undefined) {
-    const reportJson = await dependencies.readArtifact(
-      `${artifactDirectory}/report.json`
+    review = await digestArtifact(
+      {
+        readArtifact: dependencies.readArtifact,
+        path: `${artifactDirectory}/report.json`,
+        digest: digestReviewReport
+      },
+      unreadableArtifactNotes
     )
-    review = reportJson === undefined ? undefined : digestReviewReport(reportJson)
+    reviewReportUnreadable = unreadableArtifactNotes.length > 0
     renderedComments =
       (await dependencies.readArtifact(
         `${artifactDirectory}/review-comments.github.json`
@@ -349,18 +404,50 @@ export const runPipeline = async (
     // guarded off after throwing. Either way `src/cli/advisory-lanes.ts` writes
     // no file, and the throwing case instead leaves a warning on
     // `review.warnings` (rendered from `report.json`, read above). Both cases
-    // digest to `undefined` here and render no section below, exactly like a
-    // stage that produced nothing.
-    const impactJson = await dependencies.readArtifact(
-      `${artifactDirectory}/${IMPACT_JSON_ARTIFACT_NAME}`
+    // render no section below, exactly like a stage that produced nothing — and
+    // both are distinct from a file that IS there and does not parse, which is
+    // reported rather than rendered as absence.
+    impact = await digestArtifact(
+      {
+        readArtifact: dependencies.readArtifact,
+        path: `${artifactDirectory}/${IMPACT_JSON_ARTIFACT_NAME}`,
+        digest: digestImpactReport
+      },
+      unreadableArtifactNotes
     )
-    impact = impactJson === undefined ? undefined : digestImpactReport(impactJson)
 
-    const intentJson = await dependencies.readArtifact(
-      `${artifactDirectory}/${INTENT_JSON_ARTIFACT_NAME}`
+    intent = await digestArtifact(
+      {
+        readArtifact: dependencies.readArtifact,
+        path: `${artifactDirectory}/${INTENT_JSON_ARTIFACT_NAME}`,
+        digest: digestIntentReport
+      },
+      unreadableArtifactNotes
     )
-    intent = intentJson === undefined ? undefined : digestIntentReport(intentJson)
   }
+
+  notes.push(...unreadableArtifactNotes)
+
+  // A review whose own report cannot be read did not deliver a review, whatever
+  // its exit code said, and the headline is where that has to be told: left as a
+  // passing stage, the one line every reader is guaranteed to see would say "this
+  // search reported nothing" over a run that may have found several defects. The
+  // stage is therefore reported as one that could not complete, and the reason
+  // travels with it into the stage table.
+  //
+  // Only the review report does this. An unreadable impact or intent report costs
+  // its own section and nothing else: those lanes are advisory, and downgrading
+  // the blocking stage on their account would misreport what the review did.
+  const outcomes: readonly StageOutcome[] = [
+    reviewReportUnreadable
+      ? {
+          ...reviewOutcome,
+          status: 'failed',
+          message:
+            'The review ran, but the report it wrote could not be read by this workflow.'
+        }
+      : reviewOutcome
+  ]
 
   // Inline comments are best-effort by construction. GitHub rejects a whole
   // review when any one comment does not land on a diff line it recognises, and
@@ -472,8 +559,28 @@ export const runPipeline = async (
     })
   }
 
+  // An artifact this run wrote that this run cannot read fails the job, and the
+  // comment is posted anyway — the same shape as the missing-provider exit above,
+  // and for the same reason: the review is not what went wrong, the integration
+  // is, and a red check is the only part of this that an operator sees without
+  // opening a pull request. It is reported as a configuration error rather than
+  // as a gate failure because that is what it is; the gate's own result is in the
+  // comment either way.
+  //
+  // This does not make the advisory lanes blocking. Spec 22 and spec 23 forbid
+  // them failing a pipeline ON WHAT THEY FIND, and spec 23 draws the line
+  // explicitly: refusing input it cannot fully see "is not failing a pipeline on
+  // FULFILMENT grounds; it is the same class as the configuration and repository
+  // errors this command already exits on". Nothing here is a judgement about the
+  // change. `exitCodeFor` still zeroes it for a review-conversation run, which
+  // spec 30 requires be non-blocking through every path.
+  const exitCode =
+    unreadableArtifactNotes.length > 0
+      ? CONFIGURATION_EXIT_CODE
+      : jobExitCode(outcomes)
+
   return {
-    exitCode: exitCodeFor(jobExitCode(outcomes)),
+    exitCode: exitCodeFor(exitCode),
     commentBody: body,
     outcomes,
     notes,
