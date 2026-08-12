@@ -96,7 +96,7 @@ codereviewer review [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
 | `--config` | path | no | Config file path override. |
 | `--base-ref` | git ref | no | Overrides `review.baseRef` for this run only (not written into config). |
 | `--head-ref` | git ref | no | Overrides `review.headRef` for this run only. |
-| `--file` | repository-relative path | yes | Adds one explicit file. Explicit-file runs bypass git diffing entirely (no `mergeBaseRef` in the run summary). |
+| `--file` | repository-relative path | yes | Adds one explicit file. Explicit-file runs bypass git diffing entirely (no `mergeBaseRef` in the run summary), so the change-impact and intent-fulfilment stages produce no report on such a run — each is defined over a base/head diff and says so in a run warning. Use `impact check` / `intent check` over refs instead. |
 | `--files` | comma-separated paths | no (first wins) | Same as repeating `--file`; entries are trimmed and empties dropped. Combines with `--file`. |
 | `--debug` | — | no | Sets `observability.logging.level` to `debug`. Takes precedence over `--log-level` when both are present. |
 | `--log-level` | `trace`\|`debug`\|`info`\|`warn`\|`error`\|`fatal`\|`silent` | no | Sets `observability.logging.level` at CLI precedence (highest). |

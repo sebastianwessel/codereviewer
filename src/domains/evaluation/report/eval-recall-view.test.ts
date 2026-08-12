@@ -70,6 +70,31 @@ describe('the recall view', () => {
     ).toThrow()
   })
 
+  // The producer-shape change of 2026-08-11 was not the only one this view has to
+  // span. Per-expectation `diffScope` was added on 2026-07-31 -- its own
+  // metrics-version entry says so: "An older report carries no classification" --
+  // and requiring it here refused 200 archived reports on disk, 14 of them under
+  // `.codereviewer/eval/archive/`, for a field the recall report never renders.
+  // The tolerance is bounded by what recall is COMPUTED FROM, and diff scope is
+  // not one of those fields.
+  test('opens an archive written before per-expectation diff scope existed', () => {
+    const { diffScope: _dropped, ...withoutDiffScope } =
+      legacyCaseResultReport.caseResults[0]!.expectedFindings[0]!
+    const view = parseEvalRecallView({
+      ...legacyCaseResultReport,
+      caseResults: [
+        {
+          ...legacyCaseResultReport.caseResults[0]!,
+          expectedFindings: [withoutDiffScope]
+        }
+      ]
+    })
+
+    expect(view.caseResults[0]?.expectedFindings[0]?.semanticSummary).toContain(
+      'admin route'
+    )
+  })
+
   // Tolerance is for shape drift, not for a different artifact entirely.
   test('refuses something that is not an eval report', () => {
     expect(() => parseEvalRecallView({ hello: 'world' })).toThrow()

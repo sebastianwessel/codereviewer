@@ -22,7 +22,8 @@ import {
 } from './report-digest.js'
 import {
   classifyStageOutcome,
-  reviewStageDefinition
+  reviewStageDefinition,
+  skippedStage
 } from './stage-outcomes.js'
 import {
   impactReportFixture,
@@ -129,8 +130,18 @@ describe('renderSummaryComment', () => {
   // move — a rate still names the provider and model it was measured on, and the
   // assertion below is written against the collapsed block so that "moved" can
   // never quietly become "dropped".
+  //
+  // It renders a REVIEW REPORT rather than `baseInput()` alone. It used to pass
+  // no report at all, so what it actually pinned was that the rates are printed
+  // for a run that produced nothing — the fork-pull-request defect one test down,
+  // asserted as the intended behaviour. The rates belong to a search, so the
+  // fixture that proves they reach the reader has to be a search.
   it('states the measured error rates where the reader is', () => {
-    const body = renderSummaryComment(baseInput())
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+      })
+    )
     const collapsed = body.slice(body.indexOf('<details>'))
 
     expect(collapsed).toContain(`**${inDiffRecallInTen} in 10**`)
@@ -166,6 +177,45 @@ describe('renderSummaryComment', () => {
     expect(body).toContain('Code review: no model search ran')
     expect(body).not.toContain(`**${inDiffRecallInTen} in 10**`)
     expect(body).not.toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+  })
+
+  // THE LARGER CASE, and the one `modelSearch: 'not-performed'` does not cover.
+  // A fork pull request and a run with no provider credentials both reach
+  // `renderSummaryComment` with NO review report at all (`pipeline.ts`), so the
+  // predicate keyed on the report's own field is false and the comment published
+  // the measured recall and precision of a diff-scoped model search under a
+  // headline saying the review did not run. Nothing searched, and the reader was
+  // handed the accuracy of a search.
+  //
+  // The rates are withheld and NOT replaced by `NO_MODEL_SEARCH`: that sentence
+  // names `aiReview.enabled: false` as the cause, which is false here. The reason
+  // this comment carries no rates is already in the comment, in the note the
+  // pipeline attached.
+  it('quotes no measured rate when no review report exists at all', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        outcomes: [skippedStage(reviewStageDefinition, 'fork pull request')],
+        notes: [
+          'This pull request comes from a fork. GitHub withholds repository secrets and write access from fork pull requests, so the review cannot run and no comment can be posted.'
+        ]
+      })
+    )
+
+    expect(body).not.toContain(`**${inDiffRecallInTen} in 10**`)
+    expect(body).not.toContain(`**${adjustedPrecisionInTwenty} in 20**`)
+    expect(body).not.toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+    // No heading standing over silence either: the block exists to characterise a
+    // search, and there was none to characterise.
+    expect(body).not.toContain('**How reliable this is**')
+    // Nor the caveat about a search: it describes an automated review that misses
+    // defects and points at the rates, and both halves are about a run that did
+    // not happen.
+    expect(body).not.toContain('read each finding as something to check')
+    // The cause is still on the comment — withholding a false claim must not
+    // withhold the true one.
+    expect(body).toContain('comes from a fork')
+    // And `aiReview.enabled: false` is NOT named, because it is not what happened.
+    expect(body).not.toContain(NO_MODEL_SEARCH)
   })
 
   // The numbers moved down; the caveat did not. A reader who expands nothing must
@@ -477,7 +527,12 @@ describe('renderSummaryComment', () => {
         })
       )
 
-      expect(body).not.toContain('Resolved since baseline')
+      // Asserted on the text the line ACTUALLY renders. It read
+      // `not.toContain('Resolved since baseline')` — a heading this comment has
+      // never carried — so it passed over a renderer that printed an uncomputed
+      // count as 0, which is the one thing it exists to catch.
+      expect(body).not.toContain('No longer reported: ')
+      expect(body).not.toContain('previously-flagged finding')
     })
   })
 

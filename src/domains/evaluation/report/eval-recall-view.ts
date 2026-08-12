@@ -30,10 +30,11 @@
 
 import { z } from 'zod'
 
-// Mirrors the producer's required set exactly, minus its strictness. `path` and
-// `lineRange` are optional THERE — a `semantic-only` expectation has neither — so
-// requiring them here would reject valid reports of every vintage, not just old
-// ones.
+// Required exactly where recall analysis reads the field, and optional
+// everywhere else. `path` and `lineRange` are optional in the producer too — a
+// `semantic-only` expectation has neither — so requiring them here would reject
+// valid reports of every vintage, not just old ones. `diffScope` is required in
+// today's producer and optional here for the reason stated at the field.
 const RecallViewExpectedFindingSchema = z.looseObject({
   expectedIndex: z.int().min(0),
   category: z.string().min(1),
@@ -41,7 +42,18 @@ const RecallViewExpectedFindingSchema = z.looseObject({
   path: z.string().min(1).optional(),
   lineRange: z.tuple([z.int().min(1), z.int().min(1)]).optional(),
   matchMode: z.enum(['path-line', 'path-semantic', 'semantic-only']),
-  diffScope: z.string().min(1),
+  // OPTIONAL, and this is the second field where mirroring the producer's
+  // required set was the wrong rule. Per-expectation `diffScope` was added on
+  // 2026-07-31; its own metrics-version entry
+  // (`2026-07-31.diff-scope-recall`) states that "an older report carries no
+  // classification", so every report written before it lacks the key. Requiring
+  // it here refused 200 archived reports on disk -- 14 of them under
+  // `.codereviewer/eval/archive/` -- which is the same failure this view was
+  // written to end, one producer change earlier. Recall is not computed from
+  // diff scope and the recall report does not render it, so its absence cannot
+  // make a recall figure wrong; the bound stays on the fields recall IS computed
+  // from, which are all still required above.
+  diffScope: z.string().min(1).optional(),
   semanticSummary: z.string().min(1)
 })
 

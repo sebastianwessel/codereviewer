@@ -178,7 +178,12 @@ describe('published reliability figures', () => {
     )
 
     const report = renderMarkdownReport(createReportFixture())
-    const comment = summaryComment()
+    // Both surfaces are rendered over a run that PERFORMED a search, because
+    // these are the rates of a search. The comment used to be rendered with no
+    // review report at all, which is a run that produced nothing — so what this
+    // half of the assertion pinned was that the rates are published for a run
+    // that never happened.
+    const comment = summaryComment({ review: emptyReviewDigest() })
 
     for (const surface of [report, comment]) {
       expect(surface).toContain(`**${recallInTen} in 10**`)

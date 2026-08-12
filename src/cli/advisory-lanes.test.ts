@@ -13,7 +13,8 @@ const silentLogger = {
 
 const inputFor = (
   configOverrides: Record<string, unknown>,
-  runGit: (args: readonly string[]) => Promise<string>
+  runGit: (args: readonly string[]) => Promise<string>,
+  explicitFiles?: readonly string[]
 ) => ({
   options: { cwd: '/repo' } as never,
   runContext: createRunContext({
@@ -25,6 +26,7 @@ const inputFor = (
   environment: {},
   baseRef: 'main',
   headRef: 'HEAD',
+  explicitFiles,
   logger: silentLogger
 })
 
@@ -156,6 +158,60 @@ describe('runAdvisoryStagesForReview', () => {
     expect(results.warnings).toHaveLength(1)
     expect(results.warnings[0]).toContain('could not complete')
     expect(results.warnings[0]).not.toContain('no change set to compare')
+  })
+
+  // `review --file`/`--files` bypasses git entirely and reviews exactly the paths
+  // it names. Neither advisory stage can be scoped that way — both are defined
+  // over a base/head diff — so running them on such a run answers a question
+  // about a DIFFERENT change set than the one under review, in the same run
+  // directory, and the intent stage pays a provider to do it.
+  //
+  // Latent while both stages were off by default; live from the moment they were
+  // flipped on.
+  test('an explicit-file run answers neither advisory question, and says so', async () => {
+    let gitCalls = 0
+    const results = await runAdvisoryStagesForReview(
+      inputFor(
+        { changeImpact: { enabled: true }, intentFulfilment: { enabled: true } },
+        async (args) => {
+          gitCalls += 1
+
+          return args.includes('merge-base') ? 'a'.repeat(40) : 'src/other.ts'
+        },
+        ['src/reviewed.ts']
+      )
+    )
+
+    expect(results.impact).toBeUndefined()
+    expect(results.intent).toBeUndefined()
+    // Not silence: a reader who expected the two reports is owed the reason
+    // there is none, and the reason is not "nothing depends on your change".
+    expect(results.warnings).toHaveLength(2)
+    expect(results.warnings[0]).toContain('change-impact')
+    expect(results.warnings[1]).toContain('intent-fulfilment')
+
+    for (const warning of results.warnings) {
+      expect(warning).toContain('explicit file list')
+      expect(warning).not.toContain('could not complete')
+    }
+
+    // The whole point: no diff was taken, so no provider call could follow one.
+    expect(gitCalls).toBe(0)
+  })
+
+  // A stage the operator switched off stays silent on an explicit-file run too:
+  // it was never going to answer, so there is nothing to explain the absence of.
+  test('a disabled stage adds no explicit-file note', async () => {
+    const results = await runAdvisoryStagesForReview(
+      inputFor(
+        { changeImpact: { enabled: true }, intentFulfilment: { enabled: false } },
+        async () => '',
+        ['src/reviewed.ts']
+      )
+    )
+
+    expect(results.warnings).toHaveLength(1)
+    expect(results.warnings[0]).toContain('change-impact')
   })
 
   // One failing stage must not take the other down with it.

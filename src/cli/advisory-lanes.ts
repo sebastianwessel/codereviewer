@@ -39,6 +39,12 @@ export type AdvisoryLaneInput = {
   readonly environment: Readonly<Record<string, string | undefined>>
   readonly baseRef: string | undefined
   readonly headRef: string | undefined
+  // The `--file`/`--files` list, when the run was given one. REQUIRED as a key
+  // even though the value may be `undefined`, so a caller has to state whether
+  // this run was scoped to explicit paths rather than inherit an answer — the
+  // property that has to be stated is exactly the one a future call site would
+  // otherwise forget, and forgetting it is how this went unnoticed.
+  readonly explicitFiles: readonly string[] | undefined
   readonly logger: Logger
 }
 
@@ -71,6 +77,40 @@ const ordinaryEmptyChangeSetReasons: Readonly<Record<string, string>> = {
     'git could not resolve a merge base for the base and head refs, which is ordinary in a shallow clone or a checkout without their shared history',
   no_reviewable_change: 'the base and head refs differ by no files'
 }
+
+// NEITHER STAGE CAN ANSWER AN EXPLICIT-FILE RUN, and the reason is structural
+// rather than a missing feature. `review --file`/`--files` bypasses git entirely
+// and reviews exactly the paths it names (the run summary carries no
+// `mergeBaseRef` for precisely this reason); both stages are defined over a
+// base/head DIFF and take no path list. Run anyway, they resolve the ambient
+// refs and answer a question about a different change set than the one under
+// review — `impact-report.json` naming symbols in files the run never opened,
+// and the intent stage paying a provider per obligation to hold the change to
+// obligations it was not asked about — with the two artifacts sitting in one run
+// directory disagreeing about what "this change" is.
+//
+// Latent while both stages were off by default. Live from 2026-08-11, when they
+// were flipped on and every explicit-file run started doing this.
+//
+// SPECS 22 AND 23 DO NOT COVER THIS CASE. Both say the lane runs in-process
+// "when `<flag>.enabled` is true" and neither mentions an explicit-file run, so
+// this narrowing is ahead of the specs rather than derived from them. It is
+// recorded here rather than written into `specs/`, which is the human's to
+// change: the sentence each spec is owed is that a stage defined over a diff does
+// not answer a run that has none.
+//
+// Skipped WITH A WARNING, never silently, for the reason the whole file is built
+// around: absence must not read as an answer. "No impact report" and "nothing
+// depends on your change" are the same shape on disk, and only one of them is
+// true here. The remedy is named because there is one — the stages' own commands
+// still take refs. Each stage names ITS OWN command, because both warnings appear
+// together on a default run and a reader following one of them must not be sent
+// to the other's answer.
+const explicitFileSkipWarning = (input: {
+  readonly name: string
+  readonly command: string
+}): string =>
+  `The ${input.name} stage produced no report because this run was scoped to an explicit file list (\`--file\`/\`--files\`), which bypasses the diff this stage reads. Run \`codereviewer ${input.command} check --base-ref <ref> --head-ref <ref>\` over the refs you want covered.`
 
 // The stage did not produce a report, and the reader is told which one and why —
 // an advisory stage that vanishes without a word is indistinguishable from one
@@ -132,6 +172,18 @@ const runImpactStage = async (
     return { report: undefined, warnings: [] }
   }
 
+  // Checked after `enabled`, so a stage the operator switched off stays silent
+  // here too: it was never going to answer, and there is nothing to explain the
+  // absence of.
+  if (input.explicitFiles !== undefined) {
+    return {
+      report: undefined,
+      warnings: [
+        explicitFileSkipWarning({ name: 'change-impact', command: 'impact' })
+      ]
+    }
+  }
+
   return await guardAdvisoryStage({
     name: 'change-impact',
     logger: input.logger,
@@ -178,6 +230,15 @@ const runIntentStage = async (
 }> => {
   if (!input.runContext.config.intentFulfilment.enabled) {
     return { report: undefined, warnings: [] }
+  }
+
+  if (input.explicitFiles !== undefined) {
+    return {
+      report: undefined,
+      warnings: [
+        explicitFileSkipWarning({ name: 'intent-fulfilment', command: 'intent' })
+      ]
+    }
   }
 
   return await guardAdvisoryStage({

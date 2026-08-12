@@ -120,6 +120,28 @@ const actionableFindings = (review: ReviewDigest): readonly FindingDigest[] =>
 const performedNoModelSearch = (input: SummaryCommentInput): boolean =>
   input.review?.modelSearch === 'not-performed'
 
+// NO REVIEW REPORT AT ALL, which is a larger case than the field above and was
+// not covered by it. A fork pull request and a run whose provider credentials are
+// missing both reach this renderer with `review: undefined` (`pipeline.ts`), so
+// the predicate keyed on the report's own field is false — and the comment
+// published the measured recall and precision of a diff-scoped model search
+// under the headline "Code review did not run". The reader was handed the
+// accuracy of a search that did not happen, which is the exact claim
+// `modelSearch` was added to refuse.
+//
+// The rates are WITHHELD rather than replaced. `NO_MODEL_SEARCH` names
+// `aiReview.enabled: false` as the cause, which is true for the field above and
+// false here, and this renderer may not invent a third sentence for a cause it
+// does not know: `pipeline.ts` already attached the note that says what happened
+// (a fork, a missing secret), and that note is on this comment. Withholding a
+// false claim must not withhold the true one, and it does not.
+//
+// The reliability HEADING goes with the rates for the reason stated where it is
+// rendered: a reader who expands only that block must not find a heading standing
+// over silence.
+const hasNoSearchToDescribe = (input: SummaryCommentInput): boolean =>
+  input.review === undefined
+
 const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
   review.findings.filter(isUnresolvedFinding)
 
@@ -653,10 +675,16 @@ const detailsSection = (input: SummaryCommentInput): string => {
     // each one replaces a different claim (there, that a search found nothing;
     // here, how often that search finds a defect), and a reader who expands only
     // this block must not find the reliability heading standing over silence.
-    '**How reliable this is**',
-    '',
-    performedNoModelSearch(input) ? NO_MODEL_SEARCH : MEASURED_RELIABILITY,
-    '',
+    // Both lines go together when there is no report at all: the block exists to
+    // characterise a search, and there was none to characterise.
+    ...(hasNoSearchToDescribe(input)
+      ? []
+      : [
+          '**How reliable this is**',
+          '',
+          performedNoModelSearch(input) ? NO_MODEL_SEARCH : MEASURED_RELIABILITY,
+          ''
+        ]),
     ...(input.review === undefined ? [] : refutationSection(input.review)),
     '**Pipeline**',
     '',
@@ -761,10 +789,16 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
     // statement that replaces it. `CONFIDENCE_NOTE` describes an automated review
     // that misses defects and points at the rates below; both halves of that
     // sentence are about a search this run did not perform.
-    {
-      text: performedNoModelSearch(input) ? NO_MODEL_SEARCH : CONFIDENCE_NOTE,
-      keepRank: 1
-    },
+    // Omitted outright when there is no report: `CONFIDENCE_NOTE` describes an
+    // automated review that misses defects and points at the rates below, and
+    // both halves are about a search this run did not perform. The pipeline's own
+    // note, two entries down, is what says why.
+    hasNoSearchToDescribe(input)
+      ? undefined
+      : {
+          text: performedNoModelSearch(input) ? NO_MODEL_SEARCH : CONFIDENCE_NOTE,
+          keepRank: 1
+        },
     section(stageProblemNote(input), 1),
     notes.length === 0
       ? undefined

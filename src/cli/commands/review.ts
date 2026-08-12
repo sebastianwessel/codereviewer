@@ -146,6 +146,10 @@ export const runReview = async (
       environment: loadedConfig.environment,
       baseRef,
       headRef,
+      // Passed rather than dropped: an explicit-file run has no diff for either
+      // stage to read, and both of them refuse it out loud instead of answering
+      // over the ambient refs.
+      explicitFiles,
       logger
     })
     const extraRunWarnings = [
