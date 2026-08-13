@@ -35,7 +35,19 @@ export const runConfigValidate = async (
       stdout: '',
       stderr: JSON.stringify(
         cliError({
-          code: 'config_error',
+          // The error's OWN code, not a hardcoded `config_error`. The exit code
+          // on the line above already comes from `normalized`, so hardcoding this
+          // one let the two disagree -- and they do: a
+          // `redaction_secret_env_unset` or a `provider_adapter_missing` printed
+          // as `config_error` while exiting on its own code, sending a reader to
+          // look for a malformed configuration document when the actual fault was
+          // an unset environment variable.
+          //
+          // This command is the one whose entire job is telling an operator what
+          // is wrong with their configuration, and it was the only command not
+          // reporting `normalized.code` -- every other route goes through
+          // `mapErrorResult`, which always has.
+          code: normalized.code,
           message: normalized.message
         })
       )

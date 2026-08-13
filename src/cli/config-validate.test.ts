@@ -89,3 +89,34 @@ describe('config validate CLI', () => {
     expect(result.stderr).toContain('usage_error')
   })
 })
+
+// `config validate` took its EXIT CODE from the real error and hardcoded the
+// `code` it printed, so the two could disagree — in the one command whose whole
+// job is telling an operator what is wrong with their configuration. A
+// `redaction_secret_env_unset` (added 2026-08-11) printed as `config_error` while
+// exiting on its own code, sending the reader to look for a malformed config
+// document when a named environment variable was simply unset.
+//
+// Every other command reports `normalized.code` through `mapErrorResult`; this
+// one was the exception, and being the exception is what made it wrong.
+describe('the reported code is the real one', () => {
+  test('reports a structured error under its own code, not config_error', async () => {
+    const root = await createTempDir()
+    await mkdir(join(root, '.codereviewer'), { recursive: true })
+    await writeFile(
+      join(root, '.codereviewer', 'config.json'),
+      JSON.stringify({
+        security: { redaction: { secretEnvVars: ['NOT_SET_ANYWHERE_XYZ'] } }
+      }),
+      'utf8'
+    )
+
+    const result = await runCli(['config', 'validate'], {
+      cwd: root,
+      environment: {}
+    })
+
+    expect(result.stderr).toContain('redaction_secret_env_unset')
+    expect(result.stderr).not.toContain('config_error')
+  })
+})
