@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
+import { BaselineWriteStdoutEnvelopeSchema } from '../shared/contracts/index.js'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -47,6 +48,11 @@ describe('baseline write CLI', () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
+    // The whole stdout document against its contract, so a renamed or dropped
+    // field fails here rather than only where this test reads a key by name.
+    expect(
+      BaselineWriteStdoutEnvelopeSchema.parse(JSON.parse(result.stdout)).baselinePath
+    ).toBe('.codereviewer/baseline.json')
 
     const written = JSON.parse(
       await readFile(join(root, '.codereviewer/baseline.json'), 'utf8')

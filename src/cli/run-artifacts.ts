@@ -29,6 +29,7 @@ import {
   type NoContentRunEvent
 } from '../domains/observability/index.js'
 import type { CodeReviewerConfig } from '../shared/contracts/index.js'
+import { runErrorArtifact } from './cli-envelopes.js'
 
 /** Pretty-print a value as a trailing-newline JSON document for CLI output. */
 export const jsonResult = (value: unknown): string =>
@@ -323,11 +324,13 @@ export const writePartialReviewArtifacts = async (
     input.repositoryRoot,
     input.artifactRoot,
     'error.json',
-    jsonResult({
-      code: input.partialState.error.code,
-      message: input.partialState.error.message,
-      category: input.partialState.error.category,
-      recoverable: input.partialState.error.recoverable
-    })
+    jsonResult(
+      runErrorArtifact({
+        code: input.partialState.error.code,
+        message: input.partialState.error.message,
+        category: input.partialState.error.category,
+        recoverable: input.partialState.error.recoverable
+      })
+    )
   )
 }

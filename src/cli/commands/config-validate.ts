@@ -6,6 +6,7 @@ import { createRedactedConfigSummary } from '../../domains/configuration/index.j
 import { normalizeError } from '../../shared/errors/error-normalizer.js'
 import { unknownCliOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
+import { cliError } from '../cli-envelopes.js'
 import { usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 
@@ -32,10 +33,12 @@ export const runConfigValidate = async (
     return {
       exitCode: normalized.exitCode,
       stdout: '',
-      stderr: JSON.stringify({
-        code: 'config_error',
-        message: normalized.message
-      })
+      stderr: JSON.stringify(
+        cliError({
+          code: 'config_error',
+          message: normalized.message
+        })
+      )
     }
   }
 }

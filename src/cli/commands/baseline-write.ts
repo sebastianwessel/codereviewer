@@ -9,6 +9,7 @@ import {
 import { parseOptionValue, unknownCliOption } from '../args.js'
 import { resolveBaselineSourceReport } from '../baseline-source.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
+import { baselineWriteStdout } from '../cli-envelopes.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import {
@@ -45,11 +46,13 @@ export const runBaselineWrite = async (
 
     return {
       exitCode: 0,
-      stdout: jsonResult({
-        baselinePath: loadedConfig.config.baseline.path,
-        sourceReportPath: source.reportPath,
-        entryCount: entries.length
-      }),
+      stdout: jsonResult(
+        baselineWriteStdout({
+          baselinePath: loadedConfig.config.baseline.path,
+          sourceReportPath: source.reportPath,
+          entryCount: entries.length
+        })
+      ),
       stderr: ''
     }
   } catch (error) {

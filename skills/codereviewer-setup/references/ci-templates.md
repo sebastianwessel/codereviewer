@@ -283,7 +283,7 @@ Branch on the exit code, never on parsing stdout.
 
 On success stdout is a single JSON object:
 
-```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
+```json review-stdout
 { "runId": "…", "qualityGatePassed": true, "artifactDir": ".codereviewer/runs/<runId>" }
 ```
 

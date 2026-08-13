@@ -11,12 +11,13 @@ import {
   type ErrorSource
 } from '../shared/errors/error-normalizer.js'
 import type { CliResult } from './cli-contract.js'
+import { cliError } from './cli-envelopes.js'
 import { jsonResult } from './run-artifacts.js'
 
 export const usageError = (message: string): CliResult => ({
   exitCode: 2,
   stdout: '',
-  stderr: JSON.stringify({ code: 'usage_error', message })
+  stderr: JSON.stringify(cliError({ code: 'usage_error', message }))
 })
 
 // Classify errors that reach a command boundary so they map to the documented
@@ -50,9 +51,11 @@ export const mapErrorResult = (
   return {
     exitCode: normalized.exitCode,
     stdout: '',
-    stderr: jsonResult({
-      code: normalized.code,
-      message: normalized.message
-    })
+    stderr: jsonResult(
+      cliError({
+        code: normalized.code,
+        message: normalized.message
+      })
+    )
   }
 }

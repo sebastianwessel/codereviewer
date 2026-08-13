@@ -8,6 +8,7 @@ import type {
   ObjectRequest,
   ObjectResponse
 } from '@purista/harness'
+import { ReviewStdoutEnvelopeSchema } from '../shared/contracts/index.js'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -100,6 +101,12 @@ describe('review CLI', () => {
       expect(result.stderr).toBe('')
       expect(result.stdout).toContain('"qualityGatePassed": true')
       expect(result.stdout).not.toContain('test-run')
+      // Against the CONTRACT, not just against the two keys this test happens to
+      // read: `scripts/github/pipeline.ts` and every documented CI recipe parse
+      // this document, and a renamed or dropped field used to fail nothing here.
+      expect(
+        ReviewStdoutEnvelopeSchema.parse(JSON.parse(result.stdout)).qualityGatePassed
+      ).toBe(true)
 
       const artifactDir = JSON.parse(result.stdout).artifactDir as string
       await expect(stat(join(root, artifactDir, 'report.json'))).resolves.toBeDefined()

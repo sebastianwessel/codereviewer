@@ -116,8 +116,18 @@ describe('documented artifact examples', () => {
   test('the docs really do carry artifact examples, in the numbers they contain', async () => {
     const result = await checkArtifactExamples({ repositoryRoot })
 
-    expect(result.checkedExampleCount).toBeGreaterThanOrEqual(8)
-    expect(result.exemptedBlockCount).toBeGreaterThanOrEqual(5)
+    expect(result.checkedExampleCount).toBeGreaterThanOrEqual(20)
+    // NOTHING in this repository is exempt any more. The nine exemptions this
+    // floor used to guard were all the same gap — the CLI's own stdout, stderr
+    // and `error.json` envelopes were inline object literals with no exported
+    // contract to check them against — and they were closed by giving those
+    // envelopes contracts, not by loosening the check.
+    //
+    // An exact zero rather than a floor, because the next exemption should be
+    // an argued decision: adding one means editing this line and saying in the
+    // commit why no contract can describe the block. That is the bar the escape
+    // hatch was always meant to have.
+    expect(result.exemptedBlockCount).toBe(0)
   })
 
   // ANTI-VACUITY, guard 4. The walk must reach INSIDE the examples this

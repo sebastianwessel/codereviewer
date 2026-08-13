@@ -17,6 +17,12 @@ import {
 import { EvalReportSchema } from '../evaluation/report/eval-report-contracts.js'
 import { IntentFulfilmentReportSchema } from '../intent-fulfilment/intent-fulfilment-report.js'
 import { RunIndexSchema } from '../reporting/run-index.js'
+import {
+  BaselineWriteStdoutEnvelopeSchema,
+  CliErrorEnvelopeSchema,
+  ReviewStdoutEnvelopeSchema,
+  RunErrorArtifactSchema
+} from '../../shared/contracts/cli/cli-output.schema.js'
 import { ReviewCommentDraftSchema } from '../../shared/contracts/report/review-comment.schema.js'
 import {
   ReviewReportSchema,
@@ -215,6 +221,26 @@ export const artifactContracts: Readonly<Record<string, ArtifactContract>> = {
   baseline: {
     schema: BaselineFileSchema,
     producedBy: '`baseline write`'
+  },
+  // The CLI's own output. These four were the whole of this checker's exemption
+  // list — nine examples across `README.md`, `docs/` and `skills/` that nothing
+  // validated, though `scripts/github/` parses two of them — until the envelopes
+  // gained exported contracts in `shared/contracts/cli/`.
+  'review-stdout': {
+    schema: ReviewStdoutEnvelopeSchema,
+    producedBy: '`review` on stdout'
+  },
+  'baseline-write-stdout': {
+    schema: BaselineWriteStdoutEnvelopeSchema,
+    producedBy: '`baseline write` on stdout'
+  },
+  'cli-error': {
+    schema: CliErrorEnvelopeSchema,
+    producedBy: 'any failing command, on stderr'
+  },
+  'run-error': {
+    schema: RunErrorArtifactSchema,
+    producedBy: 'a failed run, at `<artifactDir>/error.json`'
   },
   'impact-report': {
     schema: ChangeImpactReferenceReportSchema,
@@ -640,7 +666,7 @@ const parseJson = (
   }
 }
 
-// The tag list is deliberately NOT in this message. It is the same eighteen
+// The tag list is deliberately NOT in this message. It is the same twenty-two
 // names on every undeclared block, and an author who guesses gets the list from
 // `unknown-contract`, which is where a guess lands.
 const undeclaredMessage = `Block declares no contract, and its content is not a configuration example, so nothing checks it. Tag the opening fence with the artifact it shows (\`\`\`json <contract-tag>) or, if no contract describes it, with \`\`\`json ${exemptionTag} <reason>. See docs/09-contributing/running-tests-and-checks.md.`

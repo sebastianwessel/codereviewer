@@ -16,6 +16,7 @@ import {
   unknownCliOption
 } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
+import { cliError, reviewStdout } from '../cli-envelopes.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import { createRunContext } from '../../domains/run-context/index.js'
@@ -265,11 +266,13 @@ export const runReview = async (
 
     return {
       exitCode: qualityGate.passed ? 0 : 1,
-      stdout: jsonResult({
-        runId: report.run.runId,
-        qualityGatePassed: qualityGate.passed,
-        artifactDir: runArtifactRoot
-      }),
+      stdout: jsonResult(
+        reviewStdout({
+          runId: report.run.runId,
+          qualityGatePassed: qualityGate.passed,
+          artifactDir: runArtifactRoot
+        })
+      ),
       stderr: ''
     }
   } catch (error) {
@@ -292,11 +295,13 @@ export const runReview = async (
       return {
         exitCode: error.structuredError.exitCode,
         stdout: '',
-        stderr: jsonResult({
-          code: error.structuredError.code,
-          message: error.structuredError.message,
-          artifactDir: error.partialState.artifactRoot
-        })
+        stderr: jsonResult(
+          cliError({
+            code: error.structuredError.code,
+            message: error.structuredError.message,
+            artifactDir: error.partialState.artifactRoot
+          })
+        )
       }
     }
 
