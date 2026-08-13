@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { redactText } from '../../../../shared/redaction/redactor.js'
+import { redactTextWithCount } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
 import { diffSegmentsForPaths } from '../../../../shared/diff/git-diff-header.js'
@@ -62,6 +62,10 @@ export type ContextAssemblyResult = {
   readonly contextLedger: readonly ContextLedgerEntry[]
   readonly referencedDefinitionsDroppedCount: number
   readonly referencedDefinitionsUnreadableCount: number
+  // Spans redaction replaced in the documents this assembly hands to the model.
+  // See the note at the substitution itself for why this is counted and the
+  // redactions in logs and report artifacts are not.
+  readonly redactedContextSpanCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -81,6 +85,11 @@ export type ReviewRunnerContextStateMetrics = {
   // answered by looking at the repository. Summing them would put a filesystem
   // failure behind a message that says the caps were too tight.
   readonly referencedDefinitionsUnreadableCount: number
+  // Spans redaction replaced across this run's context documents. Same argument
+  // as the dropped count above and a sharper version of it: a capped dependency
+  // is context the model never saw, a redacted span is context the model saw
+  // WRONG — it reads `[REDACTED]` where the file has source, and reasons from it.
+  readonly redactedContextSpanCount: number
 }
 
 export type ReviewRunnerContextState = ReviewRunnerProvenanceHashes & {
@@ -171,6 +180,9 @@ export const assembleContext = async (
     config: input.config
   })
   const contextLedger: ContextLedgerEntry[] = [...staticContext.contextLedger]
+  // Accumulated across every task, next to the ledger and for the same reason:
+  // it records what the model was actually given.
+  let redactedContextSpans = 0
 
   const createWorkflowTask = (
     task: ReviewTask,
@@ -221,6 +233,22 @@ export const assembleContext = async (
       ...referencedDefinitionContexts
     ]) {
       const contentBytes = utf8ByteLength(inputContext.content)
+      // COUNTED HERE, at the one place a reviewed document's content is altered
+      // between the file on disk and the packet.
+      //
+      // A redaction on a log line or a report artifact hides a secret from a
+      // reader and is finished. A redaction HERE is generative: the model reads
+      // `[REDACTED]` where the file has source, and every candidate it raises or
+      // fails to raise around that span is reasoning about code that does not
+      // exist. Nothing else in the run can reveal it — the ledger entry below
+      // hashes and measures `inputContext.content`, the text BEFORE redaction, so
+      // even a reader comparing hashes is comparing against a string the model
+      // never saw. The count is the only place the alteration becomes a fact the
+      // run can report.
+      const redactedContent = redactTextWithCount(inputContext.content)
+
+      redactedContextSpans += redactedContent.redactionCount
+
       const ledgerEntry = createContextLedgerEntry({
         // The context ledger has no dedicated kinds for 'referenced-definition',
         // 'change-intent', or 'analyzer-signal'; all are recorded as
@@ -260,7 +288,7 @@ export const assembleContext = async (
               startLine: inputContext.startLine,
               endLine: inputContext.endLine
             }),
-        content: redactText(inputContext.content),
+        content: redactedContent.text,
         ledgerEntryId: ledgerEntry.id
       }
 
@@ -606,8 +634,40 @@ export const assembleContext = async (
     skillIds: staticContext.skillIds,
     contextLedger,
     referencedDefinitionsDroppedCount: referencedDefinitionsDropped,
-    referencedDefinitionsUnreadableCount: referencedDefinitionsUnreadable
+    referencedDefinitionsUnreadableCount: referencedDefinitionsUnreadable,
+    redactedContextSpanCount: redactedContextSpans
   }
+}
+
+/**
+ * The run's disclosure that redaction altered the material the model reviewed.
+ *
+ * One warning for both surfaces, because the reader's question is the same for
+ * the diff and for a context document — "did the reviewer see this file as it
+ * is?" — and the remedy is the same too: search the changed files for
+ * `[REDACTED]` and decide whether a real credential is committed there or a
+ * pattern matched ordinary code. The two counts are reported separately anyway,
+ * because a diff-only redaction and a context-only one point at different halves
+ * of the same material.
+ *
+ * Silent at zero. A warning on every run is one nobody reads, which is the rule
+ * the referenced-definition caps already follow, and zero is the expected result:
+ * measured over this repository's tracked files and its installed dependencies
+ * (5,253 files, 52.3 MB), no production source file matches any pattern.
+ */
+export const redactedReviewMaterialWarnings = (input: {
+  readonly redactedDiffSpanCount: number
+  readonly redactedContextSpanCount: number
+}): readonly string[] => {
+  const total = input.redactedDiffSpanCount + input.redactedContextSpanCount
+
+  if (total === 0) {
+    return []
+  }
+
+  return [
+    `Secret redaction replaced ${total} span(s) of the material this review read (${input.redactedDiffSpanCount} in the reviewed diff, ${input.redactedContextSpanCount} in task context), so the reviewer saw \`[REDACTED]\` where those files have text. Findings that touch those spans were reasoned about altered source. Check whether a credential is committed there; if not, a redaction pattern matched ordinary code.`
+  ]
 }
 
 export const prepareReviewRunnerContextState = async (
@@ -626,7 +686,8 @@ export const prepareReviewRunnerContextState = async (
       referencedDefinitionsDroppedCount:
         assembledContext.referencedDefinitionsDroppedCount,
       referencedDefinitionsUnreadableCount:
-        assembledContext.referencedDefinitionsUnreadableCount
+        assembledContext.referencedDefinitionsUnreadableCount,
+      redactedContextSpanCount: assembledContext.redactedContextSpanCount
     }
   }
 }

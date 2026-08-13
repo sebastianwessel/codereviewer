@@ -53,7 +53,9 @@ export const prepareReviewRunnerSourceState = async (
   intakeStep.end(repositoryIntake.intakeMetrics)
   options.logger.debug('Repository intake completed.', {
     changed_file_count: repositoryIntake.intakeMetrics.changedFileCount,
-    skipped_file_count: repositoryIntake.intakeMetrics.skippedFileCount
+    skipped_file_count: repositoryIntake.intakeMetrics.skippedFileCount,
+    redacted_diff_span_count:
+      repositoryIntake.intakeMetrics.redactedDiffSpanCount
   })
 
   const sourceReadStep = options.observability.startStep('source_read', {

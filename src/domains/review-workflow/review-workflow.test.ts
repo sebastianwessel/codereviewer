@@ -3513,6 +3513,81 @@ describe('review workflow', () => {
     }
   })
 
+  // Redaction of packet-bound source is the one context alteration this engine
+  // performed silently. Every other one — a skipped file, a capped dependency, a
+  // context provider that contributed nothing — reaches the report, because a
+  // review of material the reader cannot reconstruct is a review the reader
+  // cannot check. A redaction is the sharpest case of the family: the model did
+  // not merely miss the text, it read `[REDACTED]` in its place and reasoned on.
+  test('runner reports that redaction altered the source it reviewed', async () => {
+    const root = join(tmpdir(), `codereviewer-redaction-disclosure-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'a.ts'),
+        'export const key = "sk-proj-abcdefghijklmnopqrstuvwxyz012345"\n'
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: { depth: 'fast', maxConcurrentTasks: 1 },
+        // Deterministic-only: the disclosure is a property of context assembly,
+        // not of any model call, and a provider here would only add noise.
+        aiReview: { enabled: false },
+        contextSources: { enabled: false },
+        drift: { enabled: false }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/a.ts'],
+        runId: 'run-redaction-disclosure',
+        now: () => new Date('2026-06-20T00:00:00.000Z')
+      })
+
+      expect(result.report.run.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('Secret redaction replaced 1 span(s)')
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a clean run says nothing about redaction', async () => {
+    const root = join(tmpdir(), `codereviewer-redaction-silent-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1\n')
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: { depth: 'fast', maxConcurrentTasks: 1 },
+        aiReview: { enabled: false },
+        contextSources: { enabled: false },
+        drift: { enabled: false }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/a.ts'],
+        runId: 'run-redaction-silent',
+        now: () => new Date('2026-06-20T00:00:00.000Z')
+      })
+
+      expect(
+        result.report.run.warnings.filter((warning) =>
+          warning.includes('Secret redaction')
+        )
+      ).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('support-signal-only runner records task events from the queue', async () => {
     const root = join(tmpdir(), `codereviewer-support-signal-queue-${crypto.randomUUID()}`)
 

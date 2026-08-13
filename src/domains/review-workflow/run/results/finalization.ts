@@ -22,6 +22,12 @@ export const prepareReviewRunFinalization = (
     readonly driftFindings: readonly DriftFinding[]
     readonly admissionWarnings: readonly string[]
     readonly contextIngestionWarnings?: readonly string[] | undefined
+    // Kept apart from the ingestion warnings above rather than folded into them:
+    // both describe context the reviewer did not read as written, but one points
+    // at an external provider's configuration and the other at a secret pattern
+    // matching this repository's own source. Merging them would put a redaction
+    // behind a message about provider caps.
+    readonly contextRedactionWarnings?: readonly string[] | undefined
     readonly admittedFindings: readonly AdmittedFinding[]
     readonly baselineFingerprints?: readonly BaselineFingerprintRecord[] | undefined
     readonly providerUsage?: RunTokenUsage | undefined
@@ -69,6 +75,7 @@ export const prepareReviewRunFinalization = (
     ...driftWarningsFor(input.driftFindings),
     ...input.admissionWarnings,
     ...(input.contextIngestionWarnings ?? []),
+    ...(input.contextRedactionWarnings ?? []),
     ...runCost.warnings
   ]
 

@@ -17,7 +17,10 @@ import {
 } from '../../repository-intake/index.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
 import { aiReviewBudgetFor } from './support/budgets.js'
-import { reviewedLineRangesForSourceFiles } from './context/context.js'
+import {
+  redactedReviewMaterialWarnings,
+  reviewedLineRangesForSourceFiles
+} from './context/context.js'
 import { createWorkflowInput } from './workflow-input.js'
 import {
   createReviewRunSignal,
@@ -133,8 +136,13 @@ export const runReview = async (
         : { explicitFiles: options.explicitFiles }),
       ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
     })
-    const { intake, effectiveDiffRanges, effectiveRawDiff, sourceFiles } =
-      sourceState
+    const {
+      intake,
+      effectiveDiffRanges,
+      effectiveRawDiff,
+      sourceFiles,
+      intakeMetrics
+    } = sourceState
     const planningState = prepareReviewRunnerPlanningState({
       config: options.config,
       files: intake.changedFiles,
@@ -267,6 +275,14 @@ export const runReview = async (
         ...changeIntent.warnings,
         ...analyzerSignals.warnings
       ],
+      // Both halves of the reviewed material are counted where they are redacted
+      // — the diff at intake, the task documents at assembly — and disclosed
+      // together, because a reader asking "did the reviewer see this file as it
+      // is?" does not care which of the two paths altered it.
+      contextRedactionWarnings: redactedReviewMaterialWarnings({
+        redactedDiffSpanCount: intakeMetrics.redactedDiffSpanCount,
+        redactedContextSpanCount: contextState.metrics.redactedContextSpanCount
+      }),
       providerWorkflow,
       providerTaskEventsObservedLive,
       reviewedPaths,

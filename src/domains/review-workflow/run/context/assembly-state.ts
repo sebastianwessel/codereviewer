@@ -39,7 +39,8 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     referencedDefinitionsDroppedCount:
       contextState.metrics.referencedDefinitionsDroppedCount,
     referencedDefinitionsUnreadableCount:
-      contextState.metrics.referencedDefinitionsUnreadableCount
+      contextState.metrics.referencedDefinitionsUnreadableCount,
+    redactedContextSpanCount: contextState.metrics.redactedContextSpanCount
   })
   input.logger.debug('Context assembly completed.', {
     ledger_entry_count: contextState.metrics.ledgerEntryCount,
@@ -49,7 +50,12 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     referenced_definitions_dropped_count:
       contextState.metrics.referencedDefinitionsDroppedCount,
     referenced_definitions_unreadable_count:
-      contextState.metrics.referencedDefinitionsUnreadableCount
+      contextState.metrics.referencedDefinitionsUnreadableCount,
+    // The run REPORTS this one (`redactedReviewMaterialWarnings`), which is why
+    // there is no `logger.warn` for it below: the warning there would carry only
+    // the context half of a number the report states whole, diff included.
+    redacted_context_span_count:
+      contextState.metrics.redactedContextSpanCount
   })
 
   // Warned rather than left to a debug line, because it changes what the

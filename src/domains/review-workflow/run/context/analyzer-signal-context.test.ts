@@ -71,7 +71,8 @@ const assembledContextWith = (
   skillIds: [],
   contextLedger: [],
   referencedDefinitionsDroppedCount: 0,
-  referencedDefinitionsUnreadableCount: 0
+  referencedDefinitionsUnreadableCount: 0,
+      redactedContextSpanCount: 0
 })
 
 const changedRanges = [

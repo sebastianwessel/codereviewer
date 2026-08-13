@@ -12,6 +12,7 @@ import {
   assembleContext,
   prepareReviewRunnerContextState,
   readChangedSourceFiles,
+  redactedReviewMaterialWarnings,
   reviewedDiffRangesForDiffMaps,
   reviewedLineRangesForSourceFiles
 } from './context.js'
@@ -139,6 +140,81 @@ describe('review runner context assembly', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  // A redaction inside packet-bound source is not the same event as a redaction
+  // in a log. The model reviews text the file does not contain, and every finding
+  // downstream of that span is derived from it — with nothing on the report to
+  // explain why the review said something the file cannot support. The ledger
+  // cannot answer it either: its `contentHash` and byte counts are taken from the
+  // content BEFORE redaction, so they describe a string the model never saw.
+  describe('redaction of packet-bound source', () => {
+    test('is counted so the run can disclose it', async () => {
+      const root = await createTempDir()
+
+      try {
+        const result = await prepareReviewRunnerContextState({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({}),
+          sourceFiles: [
+            {
+              path: 'src/a.ts',
+              content:
+                'const key = "sk-proj-abcdefghijklmnopqrstuvwxyz012345"\nexport const a = 1\n'
+            }
+          ],
+          analysis: { facts: [], evidence: [] },
+          reviewedDiffText: '',
+          tasks: [taskFor('src/a.ts')]
+        })
+
+        expect(result.metrics.redactedContextSpanCount).toBe(1)
+        expect(result.assembledContext.reviewContext[0]?.content).toContain(
+          '[REDACTED]'
+        )
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    test('counts nothing when nothing was replaced', async () => {
+      const root = await createTempDir()
+
+      try {
+        const result = await prepareReviewRunnerContextState({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({}),
+          sourceFiles: [{ path: 'src/a.ts', content: 'export const a = 1\n' }],
+          analysis: { facts: [], evidence: [] },
+          reviewedDiffText: '',
+          tasks: [taskFor('src/a.ts')]
+        })
+
+        expect(result.metrics.redactedContextSpanCount).toBe(0)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // Silent on a clean run, because a warning that fires every time is one
+    // nobody reads — the same rule the referenced-definition caps follow.
+    test('warns only when a span was actually replaced', () => {
+      expect(
+        redactedReviewMaterialWarnings({
+          redactedDiffSpanCount: 0,
+          redactedContextSpanCount: 0
+        })
+      ).toEqual([])
+
+      const warnings = redactedReviewMaterialWarnings({
+        redactedDiffSpanCount: 2,
+        redactedContextSpanCount: 3
+      })
+
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0]).toContain('5')
+      expect(warnings[0]).toContain('[REDACTED]')
+    })
   })
 
   test('assembles instructions, source chunks, support-signal context, and ledger entries', async () => {
@@ -339,7 +415,10 @@ describe('review runner context assembly', () => {
         referencedDefinitionsDroppedCount: 0,
         // Same reasoning for the read-failure count, which the dropped count used
         // to absorb whenever the byte budget also bound.
-        referencedDefinitionsUnreadableCount: 0
+        referencedDefinitionsUnreadableCount: 0,
+        // And again for redaction: an ordinary run replaces nothing, and a zero
+        // that is stated is what makes a non-zero one mean something.
+        redactedContextSpanCount: 0
       })
       const instructionHash = result.assembledContext.contextLedger.find(
         (entry) => entry.kind === 'instruction'

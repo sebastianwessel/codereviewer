@@ -60,6 +60,8 @@ export const prepareReviewRunnerCompletionState = (
       readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
     readonly contextIngestionUsage?: RunTokenUsage | undefined
     readonly contextIngestionWarnings?: readonly string[] | undefined
+    // What redaction replaced in the diff and the task context this run reviewed.
+    readonly contextRedactionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -135,6 +137,9 @@ export const prepareReviewRunnerCompletionState = (
       ...(input.contextIngestionWarnings === undefined
         ? {}
         : { contextIngestionWarnings: input.contextIngestionWarnings }),
+      ...(input.contextRedactionWarnings === undefined
+        ? {}
+        : { contextRedactionWarnings: input.contextRedactionWarnings }),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),

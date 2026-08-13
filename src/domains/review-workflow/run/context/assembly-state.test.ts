@@ -101,7 +101,8 @@ describe('review runner context assembly state', () => {
         skillIds: [],
         contextLedger: [],
         referencedDefinitionsDroppedCount: 0,
-        referencedDefinitionsUnreadableCount: 0
+        referencedDefinitionsUnreadableCount: 0,
+      redactedContextSpanCount: 0
       },
       instructionHashes: ['instruction-hash'],
       skillHashes: ['skill-hash'],
@@ -111,7 +112,8 @@ describe('review runner context assembly state', () => {
         instructionCount: 1,
         skillCount: 1,
         referencedDefinitionsDroppedCount: 0,
-        referencedDefinitionsUnreadableCount: 0
+        referencedDefinitionsUnreadableCount: 0,
+      redactedContextSpanCount: 0
       }
     }
     let receivedInput:
@@ -165,7 +167,10 @@ describe('review runner context assembly state', () => {
           // Zero, and recorded as zero: a run that dropped dependency digests
           // must be distinguishable from one that had none to drop.
           referencedDefinitionsDroppedCount: 0,
-          referencedDefinitionsUnreadableCount: 0
+          referencedDefinitionsUnreadableCount: 0,
+          // Same rule for redaction: zero is the expected result and has to be
+          // stated, or a run that reviewed altered source reads like every other.
+          redactedContextSpanCount: 0
         }
       }
     ])
@@ -179,7 +184,8 @@ describe('review runner context assembly state', () => {
           instruction_count: 1,
           skill_count: 1,
           referenced_definitions_dropped_count: 0,
-          referenced_definitions_unreadable_count: 0
+          referenced_definitions_unreadable_count: 0,
+          redacted_context_span_count: 0
         }
       }
     ])
@@ -201,7 +207,8 @@ describe('review runner context assembly state', () => {
         skillIds: [],
         contextLedger: [],
         referencedDefinitionsDroppedCount: 0,
-        referencedDefinitionsUnreadableCount: 2
+        referencedDefinitionsUnreadableCount: 2,
+        redactedContextSpanCount: 0
       },
       instructionHashes: [],
       skillHashes: [],
@@ -211,7 +218,8 @@ describe('review runner context assembly state', () => {
         instructionCount: 0,
         skillCount: 0,
         referencedDefinitionsDroppedCount: 0,
-        referencedDefinitionsUnreadableCount: 2
+        referencedDefinitionsUnreadableCount: 2,
+        redactedContextSpanCount: 0
       }
     }
 

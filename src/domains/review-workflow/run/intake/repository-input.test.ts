@@ -64,7 +64,8 @@ describe('review runner repository input', () => {
       ])
       expect(result.intakeMetrics).toEqual({
         changedFileCount: 1,
-        skippedFileCount: 0
+        skippedFileCount: 0,
+        redactedDiffSpanCount: 0
       })
       expect(result.sourceReadMetrics).toEqual({ fileCount: 1 })
     } finally {
@@ -106,6 +107,11 @@ describe('the reviewed diff is redacted before it can reach a model', () => {
       // The rest of the hunk must survive: redaction removes the secret, not the
       // change the reviewer is there to read.
       expect(state.effectiveRawDiff).toContain('diff --git a/src/app.ts')
+      // Counted, because this substitution changed the diff the model reviews.
+      // A redaction here is not the same event as one in a log: the reviewer
+      // reasons about a hunk that does not match the file on disk, and until the
+      // run reports the count nothing anywhere says the two differ.
+      expect(state.intakeMetrics.redactedDiffSpanCount).toBe(1)
     } finally {
       await rm(repositoryRoot, { recursive: true, force: true })
     }

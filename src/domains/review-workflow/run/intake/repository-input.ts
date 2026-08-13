@@ -5,7 +5,7 @@ import type {
   RepositoryIntake
 } from '../../../repository-intake/index.js'
 import { collectRepositoryIntake } from '../../../repository-intake/index.js'
-import { redactText } from '../../../../shared/redaction/redactor.js'
+import { redactTextWithCount } from '../../../../shared/redaction/redactor.js'
 import type { SupportSignalSourceFile } from '../../../deterministic-signals/index.js'
 import type { ReviewedDiffRange } from '../../../admission/index.js'
 import {
@@ -32,6 +32,9 @@ export type ReviewRunnerRepositoryInputOptions = {
 export type ReviewRunnerRepositoryIntakeMetrics = {
   readonly changedFileCount: number
   readonly skippedFileCount: number
+  // Spans redaction replaced in the reviewed diff. Zero on almost every run, and
+  // the run says so when it is not: see the redaction note below.
+  readonly redactedDiffSpanCount: number
 }
 
 export type ReviewRunnerSourceReadMetrics = {
@@ -84,16 +87,27 @@ export const collectReviewRunnerRepositoryIntake = async (
   // Redacting at the source rather than at each consumer is what keeps the
   // context ledger honest too: the ledger measures this same string, so what is
   // accounted for stays what is sent.
-  const effectiveRawDiff = redactText(options.reviewRawDiff ?? intake.rawDiff)
+  //
+  // COUNTED, because this redaction is not like the ones on a log line or a
+  // report artifact. Those hide a secret from a reader and are done. This one
+  // changes the diff the model reviews: where it fires, the reviewer reads
+  // `[REDACTED]` in place of source that exists, and can report or miss a defect
+  // on that basis with nothing anywhere saying the text differed. The count is
+  // what lets the run disclose it, the same way it discloses every other altered
+  // or absent context path.
+  const redactedDiff = redactTextWithCount(
+    options.reviewRawDiff ?? intake.rawDiff
+  )
 
   return {
     intake,
     effectiveDiffMaps,
     effectiveDiffRanges: reviewedDiffRangesForDiffMaps(effectiveDiffMaps),
-    effectiveRawDiff,
+    effectiveRawDiff: redactedDiff.text,
     intakeMetrics: {
       changedFileCount: intake.changedFiles.length,
-      skippedFileCount: intake.skippedFiles.length
+      skippedFileCount: intake.skippedFiles.length,
+      redactedDiffSpanCount: redactedDiff.redactionCount
     }
   }
 }
