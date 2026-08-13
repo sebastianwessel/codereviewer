@@ -382,14 +382,113 @@ This spec had no measurement plan until 2026-08-11, which is why it could carry 
 unverified precision claim for as long as it did. A capability whose spec asserts an
 effect and names no way to test it will stay unverified by default.
 
-**The fix lane can be measured today and has not been.** The eval already runs it
-per case (`eval-case-runner.ts`, gated on `fix.enabled`) and `fixLaneCaseTallies`
-scores it. What is missing is a run: an arm with `fix.enabled` true against a
-corpus whose findings have known real/false-positive ground truth. The endpoints
-already exist as metrics — `fixJudgmentAccuracy`, `fixFalsePositiveDetectionRate`,
-`fixProduceRate`, `fixApplyFailureRate` — and the pre-registration must fix a bar
-for the first of those BEFORE the run, because "the lane's judgement is better
-grounded" is the claim this spec was making.
+**The fix lane's PRODUCTION half can be measured today. Its JUDGEMENT half — the
+claim this spec actually makes — cannot be measured by the instrument that exists,
+and this section says so instead of naming a bar that would be cleared by a lane that
+never forms a judgement.**
+
+An earlier version of this plan (written 2026-08-11, the same day the rest of this
+section landed) asked for *"an arm with `fix.enabled` true against a corpus whose
+findings have known real/false-positive ground truth"*, named
+`fixJudgmentAccuracy`, `fixFalsePositiveDetectionRate`, `fixProduceRate` and
+`fixApplyFailureRate` as the endpoints, and required the pre-registered bar on the
+first of them. **That plan is withdrawn. It is executable and it cannot answer the
+question**, for three reasons, each checkable without spending anything.
+
+**(i) No corpus carries the stated ground truth, and the substitute is a model.** No
+eval corpus labels *the engine's own admitted findings* real or false; the keys label
+*expected defects*. The scorer closes the gap with the plausibility judge —
+*"a matched finding OR an unmatched-but-plausible (unlisted-real) finding is 'real';
+only a genuine false positive is 'false-positive'"*
+(`src/domains/evaluation/scoring/metrics.ts`). That is the right handling of the
+unlisted-real hazard, and it means `fixJudgmentAccuracy` is a metric of **agreement
+between two model calls**, on precisely the population where the fix lane's claim
+lives:
+
+- for a finding that **matched** an expected defect, the label is anchored in the
+  human answer key through the semantic matcher, and agreement with it is meaningful;
+- for a finding that **did not match** — the population where "is this real?" is an
+  open question and the whole reason the lane exists — the label is the plausibility
+  judge's verdict, and nothing else.
+
+The plausibility judge is one bounded call over the finding plus the new-side file
+(`eval-plausibility-judge.ts`, 64 KiB cap, window announced when it binds). It reads
+the file rather than the review packet, so it is not the *same* judgement the review
+made — but it is a **single-shot** judgement, and "better grounded than a single-shot
+judgement" is exactly what this spec's hypothesis asserts. A fix lane that was right
+where the judge was wrong scores as **inaccurate**. `fixJudgmentAccuracy` is
+therefore a **consistency** metric, and it cannot in principle show this lane beating
+a single-shot judgement in the direction the hypothesis predicts.
+
+**(ii) The named endpoint is fixed by a base rate, and the informative one has no
+denominator.** Genuine false positives are rare in every recent run
+(`reports/eval-results-ledger.md`):
+
+| run | genuine FPs | raw findings | share |
+|---|---:|---:|---:|
+| sub-file control, 10 seeds, 70 cases, 2026-08-07 | 25 | 886 | 2.8% |
+| impact-framing control, 10 seeds, 71 cases, 2026-08-08 | 11 | 893 | 1.2% |
+| model comparison, `gpt-5.3-codex`, 3 seeds, 72 cases | 3 | 260 | 1.2% |
+
+A lane that answers *"real"* to everything scores `fixJudgmentAccuracy` at roughly
+97–99% and `fixFalsePositiveDetectionRate` at 0%. **Any bar on the first metric that a
+real lane could plausibly clear is also cleared by a lane that forms no judgement at
+all**, which is the same shape as the `fixJudgmentAccuracy: 0` defect this project
+already fixed once — an absent population producing a confident answer — moved from
+the empty case to the near-degenerate one. The second metric is the one that
+discriminates, and its denominator is **1–3 findings per run**. (The exact base rate
+is not yet known: these rates score *eligible* findings only, at or above
+`fix.minSeverity`, which resolves to `aiReview.actionableSeverityThreshold` — default
+`medium` — so the eligible subset is smaller than the raw counts above. Counting it
+is step 1 below and costs nothing.)
+
+**(iii) The hypothesis is about the review's precision, and no named endpoint is the
+review's precision.** Adjusted precision already runs 95.0–97.9% in recent control
+arms against control spreads of 2.04–3.10pp, so the headroom is smaller than the
+instrument's own noise band. Worse for the plan: this lane is advisory
+**unconditionally** — *A False-Positive Judgement Must Reach The Reader* requires that
+*"the finding MUST remain admitted"*, and `FixConfigSchema` carries only `enabled`
+and `minSeverity`, so no configuration key changes it — so a
+`false-positive` judgement moves no admission and therefore cannot move the review's
+precision in **any** shipped configuration. (Requirement 4 under *Acceptance* says
+*"in the default (advisory) mode"*, which reads as though a stricter mode existed;
+it does not, and the wording should not be taken as licensing one.) An arm in which
+the judgement acted on admission would be a different capability with its own
+containment argument, not a measurement of this one.
+
+**What is measurable today, and what a pre-registration may therefore be written on:**
+
+- **`fixProduceRate`** — of eligible real findings, the share that received a fix
+  passing the deterministic apply-check. Denominator: hundreds per run. Non-circular:
+  "passed the apply-check" is decided by code, not by a judge.
+- **`fixApplyFailureRate`** — of attempted fixes, the share the apply-check rejected
+  (hallucinated or stale edits). Same denominator class, same determinism.
+
+These answer *"does the lane produce apply-ready fixes, and how often does it invent
+one?"* — a real question, worth a pre-registered bar and a cost figure, and **not the
+question this spec's hypothesis asks**. A run reporting them settles nothing about
+grounding, and no report may present a `fixProduceRate` as evidence for the precision
+claim.
+
+**What would make the judgement half measurable**, stated so the gap is a known piece
+of work rather than a silence:
+
+1. **A free precheck first, on data already on disk.** Over the stored ten-seed
+   control runs, count eligible admitted findings and genuine false positives *per
+   case*, and state the resolvable effect size before committing any spend. This
+   project's own record is that the free measurability precheck has changed the design
+   every time it has been run.
+2. **The missing artefact is a corpus of THIS ENGINE'S OWN admitted findings carrying
+   HUMAN real/false-positive labels** — not expected-defect keys, and not judge
+   verdicts. Only a human label breaks the circularity in (i), and only a corpus
+   deliberately enriched with known non-defects gives
+   `fixFalsePositiveDetectionRate` a denominator that a realistic seed count can
+   resolve. Neither the security corpus nor the real-repository corpus is that
+   corpus, and curating one is the cost of asking this question at all.
+3. **Until it exists, no document may state that this lane's judgement is better
+   grounded, and none may state that it is not.** The claim is unmeasured in both
+   directions, which is the state *Purpose* already records, and this plan now agrees
+   with it instead of implying a run would settle it.
 
 **Verification cannot be measured by `eval run` at all, and that is a corpus gap
 rather than a wiring bug.** `runVerificationForReview` is on the `review` command's

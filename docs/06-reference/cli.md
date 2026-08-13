@@ -108,7 +108,7 @@ There are no `--mode`, `--depth`, `--severity`, `--format`, or threshold flags o
 
 Stdout on completion (gate passed or failed):
 
-```json no-contract review command stdout envelope, built inline in src/cli/commands/review.ts with no exported contract
+```json review-stdout
 {
   "runId": "…",
   "qualityGatePassed": true,
@@ -135,7 +135,7 @@ codereviewer baseline write [--config <path>] [--report <path>]
 Writes to `baseline.path` (default `.codereviewer/baseline.json`), creating
 parent directories. Stdout:
 
-```json no-contract baseline write stdout envelope, built inline in src/cli/commands/baseline-write.ts with no exported contract
+```json baseline-write-stdout
 { "baselinePath": "…", "sourceReportPath": "…", "entryCount": 0 }
 ```
 

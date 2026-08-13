@@ -54,10 +54,20 @@ moved costs a call — and with no provider available those dependents are count
 as unadjudicated rather than reported as maybes. A run without a provider still
 reports everything it could settle and still exits `0`.
 
-**This layer is unmeasured.** No accuracy figure exists for it. It is designed to
-cut the reference list down to the dependents that are actually exposed; whether
-it does, and how well, has not been measured. Treat every finding as a pointer to
-something worth opening, never as a verdict.
+**This layer was measured twice and not promoted — and the corpus cannot resolve
+its own bar.** It is designed to cut the reference list down to the dependents that
+are actually exposed. It does cut it, hard: 154 predicted files to 15 on
+2026-08-09, raising the precision *lower bound* from 5.2% to 13.3% (and 7.5% to
+22.2% on the smaller 2026-08-06 run). What it also does is discard the
+directly-reachable dependents the lane exists to report — **0 survived, in both
+runs**, on a denominator of three to five files, where one file moves the rate 20–33
+points. That is not enough to call the layer wrong; it is not enough to call it
+right either. It stays off, and the open question needs a corpus with roughly fifty
+proven dependents rather than another run on this one. See
+[spec 22](../../../specs/22-change-impact-review.md), *Adjudication Is Undecided,
+Not Rejected*.
+
+Treat every finding as a pointer to something worth opening, never as a verdict.
 
 ## What it does not have
 

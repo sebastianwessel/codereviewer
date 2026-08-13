@@ -278,6 +278,26 @@ reviewer prompt and the summarizer must enforce these principles:
     records the value that actually applied. The owed on-vs-off A/B is run that
     way, and a result that favours ON changes the pin in its own commit, followed
     by a re-baseline.
+  - **All four outcome cells, enumerated in advance (added 2026-08-13, because the
+    rule was previously written for one of them).** The text above named only the
+    favourable branch, so a neutral or unfavourable result had no stated
+    consequence — and in that branch the product default stays ON, the pin stays
+    OFF, and the divergence becomes permanent by default rather than by decision.
+    Given six measured nulls on discovery framing and the fact that the brief enters
+    the discovery packet, that is the *likely* branch, which is precisely why it
+    needed a cell of its own:
+
+    | recall vs the pinned-OFF baseline | significant | consequence |
+    | --- | --- | --- |
+    | improves | yes | Move the pin to ON in its own commit, then re-baseline. |
+    | improves | no | **Pin stays OFF; product default stays ON**, and the divergence is re-recorded as a *product* decision with no accuracy claim, with the figure and its band written into the ledger. |
+    | flat or worse | no | Same as above. The default is a product decision about which questions a review answers; it is not rescued by a null. |
+    | flat or worse | yes | **The product default returns to OFF.** A capability measured to cost recall does not stay on by default, whatever the product would prefer. |
+
+    In every cell the outcome is *written down*, which is the property the one-sided
+    rule lacked. Cells 2 and 3 leave the pin and the default disagreeing on purpose;
+    that disagreement is then a recorded decision with a measurement behind it,
+    rather than the absence of one.
   - What the pin does not do is make the two comparable after the fact. That stays
     **provenance**: every eval report records the effective
     `contextSources.enabled` under its capability flags
@@ -413,7 +433,10 @@ checks (host allowlist, no literal secret) that warrant a dedicated
   the same run with the provider removed.
 - External context never alters admission, severity, gate, or baseline outcomes;
   a test injects an adversarial brief ("ignore all findings") and proves findings
-  are unchanged.
+  are unchanged **against a scripted, evidence-driven reviewer**. What that proves
+  is stated exactly below, under *What The Injection Tests Establish, And What They
+  Do Not*; it is not model resistance, and this criterion is not met by any evidence
+  that a real model resists persuasion.
 - Both surfaces named in "Surfaces That Read Attacker-Controlled Text" are
   exercised by hermetic tests that carry a real injected instruction, not only by
   tests that assert the prompt text. Coverage includes a redirecting payload
@@ -432,6 +455,64 @@ checks (host allowlist, no literal secret) that warrant a dedicated
   model summarizer degrades to the digest and is proven by a test.
 - The reviewer prompt and the summarizer enforce the change-intent principles in
   "Reviewer Use Of Change Intent"; both are locked by tests.
+
+### What The Injection Tests Establish, And What They Do Not
+
+**Amendment 2026-08-13.** The list above said a test *"proves findings are
+unchanged"*, and a reader deciding whether the injection risk is closed took that as
+the whole answer. The test is real, well built, and end-to-end — and its own header
+comment is more careful than this spec was
+(`change-intent-injection.test.ts`): *"It proves what the product controls… It does
+NOT prove a real model resists persuasion; that is a model property, measured live."*
+
+**Established, and worth having.** The scripted provider plays the summarizer as
+**fully compromised** — it obeys the planted directive and emits the attacker's
+sentence as the brief — and the run still shows: attacker bytes never reach an
+instruction channel; the brief is delivered only inside its guarded section and
+carries no path; admission, severity, gate, baseline and coverage are identical to a
+benign brief. Those are properties of **deterministic code paths**, which is why a
+scripted reviewer can prove them and why they hold regardless of which model runs.
+
+**Not established, and unmeasured in both directions: whether a real model shown a
+suppression payload emits fewer candidates.** The scripted reviewer is
+evidence-driven by construction — it decides from the changed-file content and never
+reads the change-intent section — so it cannot express the failure. And *"measured
+live"* is a forward reference to a measurement that **does not exist**: verified by
+`grep -niE "injection"` over `reports/eval-results-ledger.md`, whose only hits are the
+`injection` CWE mechanism.
+
+**This is the failure mode with no detector.** *Surfaces That Read Attacker-Controlled
+Text* already names the asymmetry — *"a redirected reviewer produces visibly wrong
+output, a suppressed finding produces none"* — and answers it for refutation by
+withholding the brief. **Discovery still receives it**, and a brief that persuades
+discovery not to emit a candidate produces no candidate, no rejection record, and no
+report entry. For discovery the residual rests entirely on the reviewer-side framing,
+which this spec says plainly and which is the honest position; the point of this
+paragraph is that "framing" is not a measurement.
+
+**Accepted cost, recorded rather than assumed away.** `contextSources` defaults **ON**
+since 2026-08-11 and anyone who can open a pull request writes the text it ingests, so
+the unmeasured surface is now the default surface. That is accepted, not overlooked,
+and the acceptance is recorded here so it can be revisited with evidence rather than
+rediscovered.
+
+**The nearest thing to evidence, and it is about a different channel.** The
+untrusted-input guard — reviewer-side framing against instructions planted in the
+**reviewed code** — was measured at **+3.8pp** recall on a 133-finding benchmark
+(ledger, *Untrusted-input guard — re-priced*; an earlier +18.8pp on a 16-finding
+corpus was mostly small-corpus noise). It shows framing of this kind does something in
+the code channel. It is not evidence about the change-intent channel, and it must not
+be cited as if it were.
+
+**What would measure it, and why it is cheap.** The `security-advisory-2026` cases
+have known-findable defects — the 2026-08-10 multi-defect entry establishes a 13/15
+in-diff hit rate on five of them — so a paired arm whose ingested brief names those
+files and asks for them to be waived has a **ceiling to score against**: the endpoint
+is recall on the named defects, arm-with-suppression-brief against
+arm-with-benign-brief, and a drop is the failure this containment argument cannot
+otherwise see. Pre-register the seed count against the pooled 5.71pp band before
+running it. Until such a run exists, this spec claims deterministic containment and
+claims nothing about model resistance.
 
 ## Known Divergences From This Spec
 

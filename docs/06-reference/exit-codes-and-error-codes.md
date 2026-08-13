@@ -5,7 +5,7 @@ This is the single place these are listed.
 
 Errors are printed to **stderr** as one JSON object:
 
-```json no-contract CLI error envelope; StructuredError in src/shared/errors/error-normalizer.ts is a TypeScript type, not a Zod contract
+```json cli-error
 { "code": "provider_auth", "message": "…" }
 ```
 
@@ -165,6 +165,7 @@ raise that cannot work.
 | --- | --- |
 | `sarif_invalid` | Rendered SARIF failed its own validation. |
 | `report_error` | Writing a reporting artifact failed. |
+| `cli_envelope_invalid` | The CLI built a stdout, stderr or `error.json` document that does not satisfy its own contract (`src/shared/contracts/cli/cli-output.schema.ts`). It names a defect in this engine, never in your input, and is the reason the envelopes are validated before they are printed rather than merely typed. |
 | `quality_gate_missing` | A completed run's report carried no quality gate result. Every completed run evaluates its gate, so this is an internal inconsistency; the run fails instead of being reported as passing. The run directory is written and is the evidence for the bug report. |
 | `unknown_error` | Unclassified internal failure. |
 

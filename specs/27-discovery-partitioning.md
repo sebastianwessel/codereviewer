@@ -60,6 +60,54 @@ Two consequences follow, and both matter more than the original claim:
   file per call" and "one function per call" is entirely unmeasured and is where the
   curve points next.
 
+### The Yield Law Does Not Extrapolate, And Two Of The Bullets Above Are Superseded
+
+**Amendment 2026-08-13, placed here rather than 200 lines below because this is where
+the law is read.** Everything above this line is retained as the analysis that was
+made; three of its statements no longer stand on their own, and each is superseded by
+a section of this same document.
+
+| statement above | status |
+|---|---|
+| the per-call/per-file yields in the table, and the ~1.2-per-file ceiling | **Stands as an empirical file-level description** of the arms that were run |
+| `0.46 · files^0.70`, and the `shown^-0.30` decay read as a law that predicts beyond the fitted range | **Does not extrapolate.** See *Sub-File Partitioning — MEASURED AND REJECTED* |
+| *"Recall saturates at 2 files per call… the reason 2 is the default"* | **Unproven.** See *The Sweep Ran On A Broken Engine* |
+
+**Why the law does not extrapolate, in one sentence taken from its own test.**
+Sub-file partitioning was built because this curve pointed at it, and the arms it
+predicted would *rise* — `local` and `implementation`, where the defect sits wholly
+inside the narrowed region — both **fell** (86.7% → 83.3% and 51.1% → 49.4%, ten
+seeds per arm). The measured conclusion is stated below as *"narrowing what a call is
+shown does not buy recall even on defects wholly contained in the narrowed region…
+That is a statement about ranking, not about attention."* So the curve is a fit over
+four whole-file operating points, not a mechanism that continues below file
+granularity. Nothing in it may be used to predict an untested regime, and the
+sentence about where it "points next" has been followed once, at $23.99, to a
+negative result.
+
+**Compounding, and worth knowing before the fit is trusted at all:** the sweep the
+curve was fitted on is the same one *The Sweep Ran On A Broken Engine* shows was run
+with every partitioned arm losing its referenced definitions, at one seed per arm.
+The fit therefore describes handicapped treatment arms against an unhandicapped
+control. Its *shape* survives that (the handicap grows with partition count, which is
+the same direction as the fitted decay, so the exponent is if anything overstated);
+its *values* are not a measurement anyone should re-derive from.
+
+**"Attention" is used for two incompatible things in this document, and neither
+sentence is wrong on its own.** They must not be read as one concept:
+
+- **Attention as capacity** — what a single call can look at, so that spreading files
+  over more calls raises the share of files examined from 11% to 27%. This is the
+  sense in *What binds is attention inside a single call* and in *Why This Does Not
+  Contradict Spec 26* (*"an attention limit that is measured"*), and it survives: the
+  across-file effect was measured.
+- **Attention as allocation** — that showing a call *less* makes it attend *better* to
+  what remains. This is the sense the sub-file result falsified, and it is the sense
+  the closing paragraph means by *"Attention is now closed as a line of work"*.
+
+The measured position is that the first is real and the second is not. Where this
+document says "attention" without qualification, it means the first.
+
 What the data could not settle is whether the ~1.2-per-file ceiling originates in
 discovery or is partly imposed by refutation and admission. Deciding it required the
 per-call `finding_count` the debug line already computed to reach the evaluation

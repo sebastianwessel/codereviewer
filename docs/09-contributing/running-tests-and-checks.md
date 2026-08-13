@@ -246,6 +246,10 @@ The tags, each backed by the exported schema of the producer named beside it:
 | `run-index` | `<artifactDir>/index.json` |
 | `review-comment` | an inline review comment draft |
 | `baseline` | the file `baseline write` writes |
+| `review-stdout` | `review` on stdout |
+| `baseline-write-stdout` | `baseline write` on stdout |
+| `cli-error` | the JSON object a failing command writes to stderr |
+| `run-error` | `<artifactDir>/error.json` for a failed run |
 | `impact-report` | `impact check` |
 | `intent-report` | `intent check` |
 | `eval-report` | `eval run` |

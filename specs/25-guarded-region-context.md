@@ -248,8 +248,23 @@ accumulates.
 ## Relationship To Spec 24
 
 Spec 24 currently has **no positive case on real code** and a firing rate of
-**0.70 per commit against its own ≈0.5 kill criterion** (change-attributed firing
+~~**0.70 per commit against its own ≈0.5 kill criterion**~~ (change-attributed firing
 is 0.0125 and is not the problem; pre-existing divergences are).
+
+**Correction, 2026-08-13.** The 0.70-per-commit figure was **void when this section
+quoted it** and is struck above. Spec 24's own subsection heads the numbers it comes
+from with *"Every number in this subsection is void"* — they were produced by a
+declaration-span defect that hid every multi-line signature — and withdrew the
+"gate is blown" conclusion drawn from them; the stale sentence was nonetheless left
+unmarked at its own location in spec 24, which is where this citation came from.
+Post-fix the same detector reported **0.000 per commit** (ledger, 2026-07-30).
+
+**This changes nothing about the outcome recorded above.** Both arms of this spec
+failed on their own pre-registered rule and were deleted; spec 24's firing rate was
+never an input to that. What the correction changes is what this section may be read
+as saying about spec 24: it is not evidence that spec 24 was noisy, and spec 24's
+withdrawal rests on a separate 2026-08-02 run that is itself unrecorded (see spec
+24's *The Withdrawal Rests On An Unrecorded Measurement*).
 
 | outcome | consequence |
 |---|---|

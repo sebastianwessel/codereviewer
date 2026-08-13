@@ -17,6 +17,7 @@ R1 uses a contract-first clean implementation.
 | Review task and queue contracts | `05-review-workflow-and-runtime.md` review planning/runtime sections | `src/domains/review-planning/task-planner.ts` and `src/domains/review-planning/task-queue.ts` | TypeScript types inferred from Zod | task planner and queue tests. |
 | Shared context snapshot | `05-review-workflow-and-runtime.md` shared context section | `src/domains/shared-context/shared-context.ts` | `shared-context.json` run artifact | CLI artifact and shared-context tests. |
 | Error taxonomy | `05-review-workflow-and-runtime.md` | `src/shared/errors/error-normalizer.ts` | TypeScript discriminated union | error mapping tests. |
+| CLI output envelopes | `03-contracts/cli-output-envelopes.md` | `src/shared/contracts/cli/cli-output.schema.ts` | `review` and `baseline write` stdout, the stderr error envelope, `error.json` | contract tests, the command tests that parse real output, and the artifact-example drift check that walks every documented example of them. |
 | SARIF export | `03-contracts/finding-evidence-report.md` SARIF section | `src/domains/reporting/sarif-reporter.ts` | `report.sarif` | SARIF schema validation and target subset tests. |
 
 JSON Schema emission itself is owned by `src/shared/schema/json-schema.ts` and

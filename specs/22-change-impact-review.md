@@ -161,10 +161,86 @@ claim in user-facing documentation.
   review answers — not as a measurement result. What made it defensible is that
   with `adjudication` off this lane makes **no provider call**: it is deterministic
   reference traversal, and it feeds nothing back into discovery, so it can neither
-  help nor hurt review recall. `changeImpact.adjudication` remains **disabled**,
-  measured and rejected on 2026-08-09 (0/7 against a pre-registered 40% bar).
-  An operator can switch the lane off, and a run with it off is byte-identical to
-  one from before the flip.
+  help nor hurt review recall. `changeImpact.adjudication` remains **disabled** —
+  measured twice and **not promoted**, on a corpus that cannot resolve its own bar
+  (see *Adjudication Is Undecided, Not Rejected* below; this line previously read
+  "measured and rejected on 2026-08-09 (0/7 against a pre-registered 40% bar)" and
+  the denominator was not the one this spec pre-registered). An operator can switch
+  the lane off, and a run with it off is byte-identical to one from before the flip.
+
+## Adjudication Is Undecided, Not Rejected
+
+**Amendment 2026-08-13.** The recorded status was *"measured and rejected"*. The
+outcome — the lane stays disabled — does not change. What changes is what the record
+licenses next, because in this project *"a capability measured and rejected stays off,
+whatever the product would prefer"*
+(`reports/2026-08-11-default-review-experience-plan.md`), and that rule is close to
+permanent.
+
+**The cited figure was computed on a denominator this spec forbids twice.** The bar is
+*"recall ≥ 40% **of the dependents the reference list itself contains**"* on the
+directly-reachable class — bound under *Promote to enabled by default*, and again
+under the five anti-lying bindings: *"The decision rule's denominator is the reference
+list, not the whole answer key… scoring it against files discovery missed would charge
+it for discovery's misses."* The `0/7` is the **answer key** less unmeasurables:
+`reports/2026-08-09-impact-adjudication-result.md` reports 10 directly-reachable
+proven dependents, 3 unmeasured, 7 scored, while the deterministic reference list had
+found **5** of those 10. The 7 charges adjudication for the 5 it was never handed.
+
+**Re-computed on the pre-registered denominator, twice, the verdict survives — a zero
+numerator is 0% on any denominator:**
+
+| run | reference list, directly reachable | survived adjudication |
+|---|---:|---:|
+| 2026-08-06 (10 cases, 11 proven dependents) | 3 of 6 | **0** |
+| 2026-08-09 (16 cases, 17 proven dependents) | 5 of 10 | **0** |
+
+Both adjudication survivors in each run were `whole-repo-search`, the weakest
+reachability class — which is the finding the 2026-08-09 report calls the real one:
+*"adjudication discarding the class of dependent the capability exists to report,
+while keeping two it found by grep."*
+
+**So why is this not a rejection?** Because the corpus cannot carry the verdict, and
+this spec already knows why for the sibling clause:
+
+- **The denominator is 3–5.** One expectation moves the rate 20–33 points, so the
+  40% bar cannot be *missed by a margin* any more than it can be cleared by one. The
+  95% upper bound on 0 of 5 is roughly **52%**, which spans the bar. The ledger says
+  this in its own words for the same corpus (2026-08-08): at 11 proven dependents
+  *"one expectation moves a rate ~20 points, so the bar can be neither reached nor
+  failed"*, with roughly **50** needed — a figure this spec carried nowhere.
+- **Half the corpus never exercised the judge.** 8 of 16 cases spent zero model calls
+  and 28 pairs were never adjudicated at all, so the 0 measures the **lane**, not
+  cleanly the model tier. The 2026-08-09 entry draws that distinction and the status
+  line dropped it.
+- **The other promote clause is undecidable here by construction**, as *The Precision
+  Bar Is Unfalsifiable On This Corpus* establishes — so the recall clause was carrying
+  the whole decision on a denominator of five.
+
+**Correction to the audit that prompted this amendment.** It claimed the 2026-08-06
+run *"cleared the bar"* on the pre-registered denominator at 50.0% (2/4). **That does
+not survive verification.** The 2/4 is *"of the proven dependents the reference list
+itself contains, how many survive adjudication"* **pooled across reachability
+classes** (5 contained, 1 not measurable, 2 survived — both `whole-repo-search`),
+while the promote bar is stated on the directly-reachable class alone, where the same
+run scored zero. There is no run in which the recall clause was cleared on its own
+denominator. The audit's *conclusion* stands and its *evidence* did not.
+
+**Position taken.** Record the status as **measured twice, not promoted, on a corpus
+that cannot resolve the bar** — not as rejected. The consequences differ and both are
+intended: the lane stays disabled and no product argument re-opens it; and a future
+attempt is licensed by **a corpus with enough proven dependents to resolve a 40% bar**
+(~50, per the ledger), not by a re-run on this one. Re-running here cannot change the
+answer, which is why the 2026-08-09 pre-registration committed to a single run.
+
+**What is riding on the distinction.** With `changeImpact` on by default since
+2026-08-11 and adjudication off, the reference list reaches the reader untriaged at a
+measured precision **lower bound of 5.2%** (154 predicted files, 8 proven dependents,
+2026-08-09). Adjudication is the only triage layer that exists, and it does raise
+precision against the deterministic tier — 7.5% → 22.2% and 5.2% → 13.3%, which is
+why it was *"not removable"* — while collapsing recall on the class the lane exists to
+report. Neither half of that trade is settled on this corpus. Recording it as
+"rejected" states that it is.
 
 ## The Precision Bar Is Unfalsifiable On This Corpus
 

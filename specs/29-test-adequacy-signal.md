@@ -48,8 +48,35 @@ So the signal is, and MUST remain:
 
 The economics are the same ones spec 23 sets out for advisory output. If the signal
 says something, a reviewer spends a few seconds; if it says nothing, it has
-asserted nothing false and cost nothing. There is no state in which it misleads —
-provided the disclosure below travels with it.
+asserted nothing false and cost nothing.
+
+**This section used to end *"There is no state in which it misleads — provided the
+disclosure below travels with it."* That claim was measured false on 2026-08-08 and
+is withdrawn.** The repair is precise about *which* part misleads, because the
+imprecise version is also wrong:
+
+- **The list itself is not false.** *"No test file paired with this file in this
+  change"* is literally true of all 113 firings, including the 84.1% where the commit
+  did change a test. Pairing failed; that is what the list reports.
+- **The rendered explanation of WHY it did not pair is false for the dominant case.**
+  The report attributes non-pairing to location — *"a change that keeps its tests in a
+  tree of their own pairs nothing here"* — while the measured cause is a **stem
+  mismatch for a test sitting in the same directory**: both relations require a shared
+  normalised stem, so `intake-service.ts` does not pair with `repository-intake.test.ts`
+  beside it. A reader given a location story concludes *"this team keeps its tests
+  elsewhere, fine"*, an inference unavailable to the 84.1% whose test is right there
+  under another name.
+- **The mandated disclosure names the minority mode.** *"A file listed here may
+  already be covered by an existing test the change did not need to touch"* is the
+  untouched-pre-existing-test case. The measured dominant mode is different: the test
+  moved **in this very change** and was not recognised. Nothing in the disclosure
+  covers it.
+
+So the state in which it misleads is a real and common one, and it is a defect of the
+prose around the fact rather than of the fact. The correct claim is the narrower one:
+**the signal asserts nothing false about any file it names, and the disclosure that
+travels with it MUST name the measured dominant cause first** (see *Requirements*).
+The measured numbers are under *Measured, 2026-08-08*.
 
 ## No Configuration Key
 
@@ -133,6 +160,26 @@ starts with a measurement, not with an extension of this spec.
   the list itself, that **a file it names may already be covered by an existing
   test the change did not need to touch**. A footnote elsewhere does not satisfy
   this.
+- **The disclosure MUST name the measured dominant cause of non-pairing, and MUST
+  name it before the pre-existing-test case.** That cause is a differently-named test
+  *inside this same change* — 84.1% of firings on the only population ever measured
+  (*Measured, 2026-08-08*). Any prose that explains non-pairing by where tests live
+  is asserting a cause that was measured to be the minority one, which is the same
+  error as asserting a cause that was never checked.
+- **When `changedTestFileCount > 0` the rendering MUST qualify the list with that
+  fact**, in the same place as the list: the change did carry tests and they did not
+  pair by name. The contract already carries the field, so this costs a sentence and
+  no new data.
+
+  > **Known divergence, recorded 2026-08-13 and owed as a change.** The renderer does
+  > not satisfy the two requirements above. `src/domains/reporting/markdown-reporter.ts`
+  > prints `changedTestFileCount` and then explains non-pairing as *"a change that
+  > keeps its tests in a tree of their own pairs nothing here"* — the location story,
+  > for every firing, whatever the count is. This is recorded rather than quietly
+  > softened into a requirement the code already meets: the reader-facing defect is
+  > the point of the finding, and a spec that lowered its bar to match the renderer
+  > would be the same manoeuvre this spec refused when it declined to loosen pairing
+  > after seeing a failing number.
 - The rendered report MUST show **nothing at all** when there is nothing to
   observe. An empty section under a heading reads as a clearance, which is the
   error the review report is arranged against throughout.
@@ -178,6 +225,33 @@ deterministically and at zero cost.
 **The signal is NOT promoted to the pull-request summary.** Two of three criteria
 fail. Its placement below — `report.json` and `report.md` only — is now confirmed by
 measurement rather than assumed.
+
+**Two ways the evidence recorded is not the evidence registered, stated because the
+decision is the right one and does not need them hidden.**
+
+- **The usefulness endpoint was substituted after the fact.** The pre-registration
+  fixed it as *"would a reviewer plausibly ask for a test here? Judged by reading the
+  change, by me, recorded case by case"* over a 20-firing sample. What was measured is
+  *"did the same commit change any test file"* — a different quantity, chosen after
+  the run because it is cheaper and more objective. It is a defensible substitution
+  and it moves the result in the **unfavourable** direction, so it did not manufacture
+  a pass; but a bar cleared or missed by a metric chosen after the numbers exist is
+  not the bar that was pre-registered, and this spec says so rather than letting
+  "≤ 16% against ≥ 50%" read as the registered comparison.
+- **Only one of the two registered populations was measured.** The pre-registration
+  named self-repo history *and* the 72-case advisory corpus — the latter as *"the
+  population where firing is most defensible"*, every case adding vulnerable code a
+  reviewer would want a test for. It was never run. The firing rate and the usefulness
+  proxy above therefore describe ordinary repository work only, which is the
+  population the signal looks **worst** on by construction. Nothing here establishes
+  what it does where a test is genuinely owed, and no figure may be quoted as if it
+  did.
+
+Neither gap is a reason to revisit the placement decision: two criteria failed on the
+population that was measured, and the unmeasured population could only move the
+usefulness criterion, not the firing rate. They are recorded because the next person
+to ask "has this been measured?" deserves the answer *"on one of two populations, on
+a proxy endpoint"* rather than *"yes"*.
 
 ### Pairing is by STEM, and that is the dominant firing mode
 

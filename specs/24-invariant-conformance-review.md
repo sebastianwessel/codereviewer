@@ -45,6 +45,82 @@ therefore not attempted further — this spec forbids it ("removed rather than
 tuned"), and there was no true positive anywhere in the measurement for tuning to
 preserve.
 
+### The Withdrawal Rests On An Unrecorded Measurement
+
+**Amendment 2026-08-13. The 2026-08-02 run above is in no measurement record.** The
+withdrawal is not reversed by this — nothing here argues the capability should come
+back — but the claim it rests on is weaker than "killed with evidence", and this spec
+was stating the stronger version.
+
+**Verified, and each check is repeatable.** `grep -niE "spec 24|conformance"` over
+`reports/eval-results-ledger.md` returns **no entry after 2026-07-30**. No file under
+`reports/` carries the 7.0-per-range, the ~300 hand-judged divergences, the
+64,201-declaration diagnostic or the 97.5% rejection rate — the only conformance
+report on disk, `reports/2026-07-30-signal-coverage-and-conformance-yield.md`, is the
+divergence-population census and contains none of them. The measurement exists in
+exactly three places: this section, the tombstone page
+`docs/03-concepts/optional-capabilities/invariant-conformance.md`, and the body of
+the withdrawal commit `26984e1`.
+
+**What the record does carry**, recovered from the commit body and the tombstone and
+stated here so it is not lost again: the firing rate was taken over **five disjoint
+PR-sized ranges**; the ~300 hand-judged divergences are **three independent censuses,
+a 64,201-declaration population diagnostic, and a stratified adjudication sample of
+165**; the model was **`openai/gpt-5.3-codex`** (named on the tombstone page, not
+here); and the two root fixes that preceded it are `c883521` and `76c5b14`.
+
+**What it does not carry, and what every other measurement in this project does:** no
+pinned engine revision for the run itself, no clean-tree flag, no spend, no named
+codebases, no ranges, and no "what invalidates this entry". The two headline rates
+are also **model-dependent** — a 97.5% adjudication rejection rate is a property of
+the adjudicator call, which is exactly what *What The Control Tests Do Not Establish*
+below warns about (*"whether a real model answers this way is a model property and is
+not measured here"*). Under the standing rule that a rate is a property of a model,
+an unattributed 97.5% is not a citable rate.
+
+**The ledger's last word on this capability leaves it open in both directions**, and
+that is the sentence a future engineer following the project's own *search the ledger
+before pre-registering* rule will find (ledger, 2026-07-30, *VOID: every spec 24
+firing-rate measurement predates a span bug*): *"This does not rehabilitate spec 24.
+It says the case against it was never properly made either, and both directions are
+now open."* Three planning documents nevertheless close a lane on this spec's Outcome
+alone — `reports/2026-08-05-pr-review-parity-analysis.md` (row 9),
+`reports/2026-08-08-human-parity-plan.md` (rows 8–9 and the excluded-lanes table), and
+`reports/2026-08-08-test-adequacy-prereg.md` (*Why a budget, and why now*) — none of
+which traces to a measurement record, because there is none to trace to.
+
+**One thing is NOT wrong with it: the run is re-derivable.** The implementation was
+deleted in `26984e1`, but it is intact at `26984e1^`
+(`git ls-tree -d 26984e1^ src/domains/` lists `invariant-conformance` and
+`declaration-analysis`). What is missing is the *population* — the five codebases and
+the five ranges — not the code.
+
+**Position taken, in preference to leaving the question hanging.** The capability
+stays withdrawn. Removing a capability that produced no true positive in the run its
+author performed is a legitimate decision, and re-running a measurement to justify a
+removal already taken would be spending money to confirm a state nobody wants
+changed. What this spec must not do is present that decision as evidence of the kind
+the ledger holds. So: **withdrawn on an unpinned, unpublished measurement, with the
+ledger's last word leaving the question open** — and any document citing this
+withdrawal as measured evidence is citing this paragraph too.
+
+**What would have to be measured to close it properly**, if the question is ever
+reopened:
+
+- Re-run the firing rate at `26984e1^` with the engine pinned and the tree clean,
+  over PR-sized ranges on **named** repositories, and write the entry into
+  `reports/eval-results-ledger.md` with model, spend and invalidation conditions.
+- Record the **population the ~300 divergences were drawn from**. If they came from
+  the same benign ranges the firing-rate criterion used, then "zero true positives"
+  is a restatement of "everything it fired on was noise" rather than independent
+  corroboration of it, and the two numbers must not be presented as two findings.
+- Report the adjudication rejection rate **beside the model that produced it**, and
+  treat a different model as a different measurement rather than as a re-run.
+
+Until such an entry exists, the honest summary is one sentence: *the capability was
+removed by its author after a run that found nothing, and the run was never written
+down.*
+
 **Everything is removed, with no legacy path and no compatibility shim:**
 `src/domains/invariant-conformance/`, the `conformance check` CLI command and its
 tests, the `invariantConformance` configuration block and its generated JSON
@@ -607,9 +683,17 @@ that were majorities only when two positions were pooled stop being reported. On
 the recent window that removed five divergences and added one, and the one it added
 is the intended shape.
 
-**The gate is nonetheless blown, and was blown before this change.** The criterion
-is roughly one report per two benign changes — 0.5 — and the measured rate is 0.70
-combined. This is a fact about the capability, not about positional traits.
+**WITHDRAWN — do not cite the paragraph that follows.** It is retained only because
+this subsection keeps its mistakes visible; the sentence in bold below was withdrawn
+at the head of this subsection (*"The conclusion below that 'the gate is nonetheless
+blown' is withdrawn along with the numbers that produced it"*) and left standing here
+unmarked, where it was read as live fact and propagated: spec 25's *Relationship To
+Spec 24* cited *"a firing rate of 0.70 per commit against its own ≈0.5 kill
+criterion"* from it until 2026-08-13.
+
+> ~~**The gate is nonetheless blown, and was blown before this change.** The criterion
+> is roughly one report per two benign changes — 0.5 — and the measured rate is 0.70
+> combined. This is a fact about the capability, not about positional traits.~~
 
 Three things qualify it, none of which rescues it:
 
