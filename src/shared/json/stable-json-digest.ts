@@ -6,7 +6,9 @@ import { sha256 } from '../hash/hash.js'
 // answer-key digests in `domains/evaluation/report/eval-report-provenance.ts`,
 // the slice manifest's content digest in
 // `domains/evaluation/corpus/eval-slice-manifest.ts`, the stored-vs-manifest
-// expectation check in `cli/impact-eval-runner.ts`, and the effective-config
+// expectation check in
+// `domains/evaluation/change-impact-eval/impact-eval-runner.ts`, and the
+// effective-config
 // hash the `eval run` and `eval impact` commands stamp into their reports. A
 // second, independently-written serializer backing the same question lands as
 // either a spuriously accepted comparison or an unexplained mismatch, so there

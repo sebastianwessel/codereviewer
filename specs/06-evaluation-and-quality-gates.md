@@ -612,10 +612,13 @@ packet, and every archived figure became one flip away from incomparable with
 nothing in the run saying so.
 
 **`eval run` therefore pins its own capability set**, from a committed file
-(`src/cli/eval-capability-pins.ts`), applied AFTER the configuration loader has
-merged file, environment and CLI input — so the pinned value holds whatever a
-repository configuration or `--config` says, and no invocation can lose it by
-omission. Three rules govern the file:
+(`src/domains/evaluation/run/eval-capability-pins.ts`), applied AFTER the
+configuration loader has merged file, environment and CLI input — so the pinned
+value holds whatever a repository configuration or `--config` says, and no
+invocation can lose it by omission. The `--capability` override that leaves a
+pin deliberately is parsed in `src/cli/eval-capability-overrides.ts`: the pin
+table is measurement policy and belongs with the runner, while reading an argv
+option is the CLI's own concern. Three rules govern the file:
 
 - **It pins only what an eval run can reach:** the toggles the review pipeline
   reads plus the fix lane the case runner invokes. A capability no eval-run code

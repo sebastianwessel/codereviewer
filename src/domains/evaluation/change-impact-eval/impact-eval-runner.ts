@@ -3,6 +3,11 @@
 // `eval-case-runner.ts` is: the command handler stays thin, and the per-case
 // failure policy lives in one readable place.
 //
+// It lives beside the corpus schema and the scorer it feeds rather than in
+// `src/cli/`, because what it holds is the corpus's failure policy — the same
+// answer-key freshness and coverage rules the scorer beside it applies — and not
+// anything about parsing a command line.
+//
 // THE FAILURE POLICY IS THE POINT OF THIS FILE. A case that did not hydrate, a
 // checkout that no longer matches the manifest it was built from, and an engine
 // that threw are three different facts, and NONE of them is a score. Each returns
@@ -12,21 +17,24 @@
 
 import path from 'node:path'
 import { readFile } from 'node:fs/promises'
-import { stableJsonDigest } from '../shared/json/stable-json-digest.js'
+import { stableJsonDigest } from '../../../shared/json/stable-json-digest.js'
 import {
   runChangeImpact,
   type ChangeImpactAgents
-} from '../domains/change-impact/index.js'
+} from '../../change-impact/index.js'
+// Sibling modules by path rather than through `evaluation`'s own barrel: a module
+// inside a domain that imports its domain's barrel makes the barrel depend on
+// itself through every other entry on it.
 import {
   type ChangeImpactCaseInput,
-  type ChangeImpactCaseOutcome,
-  type ChangeImpactCorpusCase
-} from '../domains/evaluation/index.js'
-import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
-import { createRunContext } from '../domains/run-context/index.js'
-import { normalizeError } from '../shared/errors/error-normalizer.js'
-import type { Logger } from '../domains/observability/index.js'
-import type { CodeReviewerConfig } from '../shared/contracts/index.js'
+  type ChangeImpactCaseOutcome
+} from './change-impact-scoring.js'
+import { type ChangeImpactCorpusCase } from './change-impact-corpus.schema.js'
+import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
+import { createRunContext } from '../../run-context/index.js'
+import { normalizeError } from '../../../shared/errors/error-normalizer.js'
+import type { Logger } from '../../observability/index.js'
+import type { CodeReviewerConfig } from '../../../shared/contracts/index.js'
 
 export const CHANGE_IMPACT_CASE_ARTIFACT_NAME = 'case.json'
 export const CHANGE_IMPACT_CASE_WORK_TREE = 'repo'

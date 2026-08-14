@@ -18,20 +18,29 @@
 //   2. A disabled stage runs NOTHING. The flags are the operator's statement
 //      about which questions to ask; being invoked from `review` does not turn a
 //      stage on.
-import {
-  createChangeImpactLane,
-  runChangeImpact,
-  type ChangeImpactReferenceReport
-} from '../domains/change-impact/index.js'
-import {
-  createIntentFulfilmentLane,
-  runIntentFulfilment,
-  type IntentFulfilmentReport
-} from '../domains/intent-fulfilment/index.js'
+//
+// WHY THIS FILE IS IN `src/cli/` AND NOT IN A DOMAIN. It imports `change-impact`
+// and `intent-fulfilment`, and spec 01 (enforced structurally by
+// `domains/change-impact/import-boundary.test.ts`) forbids `review-workflow`
+// importing `change-impact` and vice versa, in both directions. That boundary
+// exists for a product reason: a failed impact review must not be able to fail a
+// diff review it shares no code path with. This file COMPOSES two independent
+// advisory domains, and composing domains is what the CLI/application layer is
+// for — so it stays here. Do not "tidy" it into `review-workflow`.
+import type { ChangeImpactReferenceReport } from '../domains/change-impact/index.js'
+import type { IntentFulfilmentReport } from '../domains/intent-fulfilment/index.js'
 import { roundUsd, type LaneUsage } from '../domains/costs/index.js'
 import { normalizeError } from '../shared/errors/error-normalizer.js'
 import type { Logger } from '../domains/observability/index.js'
 import type { RunContext } from '../domains/run-context/index.js'
+import {
+  changeImpactLaneDescriptor,
+  intentFulfilmentLaneDescriptor,
+  runAdvisoryStageReport,
+  type AdvisoryLaneDescriptor,
+  type AdvisoryModelLane,
+  type AdvisoryStageReport
+} from './advisory-lane.js'
 import type { CliRunOptions } from './cli-contract.js'
 
 // The run's model-spend ceiling and what it has spent against it so far.
@@ -277,13 +286,24 @@ const guardAdvisoryStage = async <TReport>(
   }
 }
 
-const runImpactStage = async (
+// One advisory stage inside a `review` run: the switch, the two skip rules, and
+// the failure guard, in the order a reader is owed them.
+//
+// Which stage this is arrives entirely in the descriptor. The two stages used to
+// be two functions differing only by noun substitution, which is how the
+// `explicitFiles` check reached one of them a day before the other.
+const runAdvisoryStage = async <
+  TReport extends AdvisoryStageReport,
+  TLane extends AdvisoryModelLane,
+  TAgents
+>(
+  descriptor: AdvisoryLaneDescriptor<TReport, TLane, TAgents>,
   input: AdvisoryLaneInput
 ): Promise<{
-  readonly report: ChangeImpactReferenceReport | undefined
+  readonly report: TReport | undefined
   readonly warnings: readonly string[]
 }> => {
-  if (!input.runContext.config.changeImpact.enabled) {
+  if (!descriptor.isEnabled(input.runContext.config)) {
     return { report: undefined, warnings: [] }
   }
 
@@ -293,17 +313,15 @@ const runImpactStage = async (
   if (input.explicitFiles !== undefined) {
     return {
       report: undefined,
-      warnings: [
-        explicitFileSkipWarning({ name: 'change-impact', command: 'impact' })
-      ]
+      warnings: [explicitFileSkipWarning(descriptor)]
     }
   }
 
   // After the explicit-file check, because that run would not have spent
   // anything anyway: the reason a reader is owed is the structural one.
   const budgetSkip = advisoryBudgetSkipWarning({
-    name: 'change-impact',
-    command: 'impact',
+    name: descriptor.name,
+    command: descriptor.command,
     budget: input.costBudget
   })
 
@@ -312,111 +330,19 @@ const runImpactStage = async (
   }
 
   return await guardAdvisoryStage({
-    name: 'change-impact',
+    name: descriptor.name,
     logger: input.logger,
-    run: async () => {
-      const lane = await createChangeImpactLane({
-        config: input.runContext.config,
+    run: async () =>
+      await runAdvisoryStageReport({
+        descriptor,
+        runContext: input.runContext,
         environment: input.environment,
-        ...(input.options.providerImport === undefined
-          ? {}
-          : { providerImport: input.options.providerImport }),
+        baseRef: input.baseRef,
+        headRef: input.headRef,
+        generatedAt: input.options.now?.(),
+        providerImport: input.options.providerImport,
         logger: input.logger
       })
-
-      try {
-        return await runChangeImpact({
-          repositoryRoot: input.runContext.repositoryRoot,
-          config: input.runContext.config,
-          ...(input.baseRef === undefined ? {} : { baseRef: input.baseRef }),
-          ...(input.headRef === undefined ? {} : { headRef: input.headRef }),
-          ...(input.options.now === undefined
-            ? {}
-            : { generatedAt: input.options.now() }),
-          ...(lane === undefined
-            ? {}
-            : {
-                agents: { judgeReliance: lane.judgeReliance },
-                usage: lane.usage
-              }),
-          readChangedFile: input.runContext.readChangedFile,
-          runGit: input.runContext.runGit
-        })
-      } finally {
-        await lane?.shutdown()
-      }
-    }
-  })
-}
-
-const runIntentStage = async (
-  input: AdvisoryLaneInput
-): Promise<{
-  readonly report: IntentFulfilmentReport | undefined
-  readonly warnings: readonly string[]
-}> => {
-  if (!input.runContext.config.intentFulfilment.enabled) {
-    return { report: undefined, warnings: [] }
-  }
-
-  if (input.explicitFiles !== undefined) {
-    return {
-      report: undefined,
-      warnings: [
-        explicitFileSkipWarning({ name: 'intent-fulfilment', command: 'intent' })
-      ]
-    }
-  }
-
-  const budgetSkip = advisoryBudgetSkipWarning({
-    name: 'intent-fulfilment',
-    command: 'intent',
-    budget: input.costBudget
-  })
-
-  if (budgetSkip !== undefined) {
-    return { report: undefined, warnings: [budgetSkip] }
-  }
-
-  return await guardAdvisoryStage({
-    name: 'intent-fulfilment',
-    logger: input.logger,
-    run: async () => {
-      const lane = await createIntentFulfilmentLane({
-        config: input.runContext.config,
-        environment: input.environment,
-        ...(input.options.providerImport === undefined
-          ? {}
-          : { providerImport: input.options.providerImport }),
-        logger: input.logger
-      })
-
-      try {
-        return await runIntentFulfilment({
-          repositoryRoot: input.runContext.repositoryRoot,
-          config: input.runContext.config,
-          ...(input.baseRef === undefined ? {} : { baseRef: input.baseRef }),
-          ...(input.headRef === undefined ? {} : { headRef: input.headRef }),
-          ...(input.options.now === undefined
-            ? {}
-            : { generatedAt: input.options.now() }),
-          ...(lane === undefined
-            ? {}
-            : {
-                agents: {
-                  extractObligations: lane.extractObligations,
-                  judge: lane.judge,
-                  explain: lane.explain
-                },
-                usage: lane.usage
-              }),
-          readChangedFile: input.runContext.readChangedFile,
-          runGit: input.runContext.runGit
-        })
-      } finally {
-        await lane?.shutdown()
-      }
-    }
   })
 }
 
@@ -431,12 +357,12 @@ const runIntentStage = async (
 export const runAdvisoryStagesForReview = async (
   input: AdvisoryLaneInput
 ): Promise<AdvisoryLaneResults> => {
-  const impact = await runImpactStage(input)
+  const impact = await runAdvisoryStage(changeImpactLaneDescriptor, input)
   // The second stage is measured against what the first one actually spent.
   // Checking both against the review's spend alone would let the second run on
   // headroom the first had already consumed — the sequential order is what makes
   // a shared ceiling enforceable at all.
-  const intent = await runIntentStage({
+  const intent = await runAdvisoryStage(intentFulfilmentLaneDescriptor, {
     ...input,
     costBudget: advisoryCostBudgetAfterLane(
       input.costBudget,

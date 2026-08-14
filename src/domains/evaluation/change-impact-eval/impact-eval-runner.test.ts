@@ -2,8 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { CodeReviewerConfigSchema } from '../shared/contracts/index.js'
-import { corpusCaseFixture } from '../domains/evaluation/change-impact-eval/change-impact-fixture.js'
+import { CodeReviewerConfigSchema } from '../../../shared/contracts/index.js'
+import { corpusCaseFixture } from './change-impact-fixture.js'
 import {
   changeImpactAdjudicationCallBounds,
   configForCase,

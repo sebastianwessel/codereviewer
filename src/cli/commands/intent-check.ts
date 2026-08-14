@@ -22,121 +22,16 @@
 // lane's dominant measured error is a MISREAD answer rather than a wrong one, and a
 // document that names what the search found is where that is preserved or lost. See
 // `intent-markdown.ts`.
-import { randomUUID } from 'node:crypto'
-import path from 'node:path'
-import {
-  createIntentFulfilmentLane,
-  renderIntentFulfilmentMarkdown,
-  runIntentFulfilment
-} from '../../domains/intent-fulfilment/index.js'
-import {
-  checkOutputFormats,
-  runCheckCommand,
-  type CheckOutputFormat
-} from '../advisory-check-command.js'
-import { parseEnumOption } from '../args.js'
+//
+// It mirrors `impact check` because it IS `impact check`'s body:
+// `runAdvisoryCheckCommand` is the shape both commands share, and everything this
+// one does differently lives in `intentFulfilmentLaneDescriptor`.
+import { runAdvisoryCheckCommand } from '../advisory-check-command.js'
+import { intentFulfilmentLaneDescriptor } from '../advisory-lane.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
-import { mapErrorResult } from '../cli-error-results.js'
-import { createCliLogger } from '../command-logging.js'
-import {
-  INTENT_MARKDOWN_ARTIFACT_NAME,
-  jsonResult,
-  writeIntentFulfilmentArtifacts
-} from '../run-artifacts.js'
 
 export const runIntent = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> => {
-  let format: CheckOutputFormat | undefined
-
-  try {
-    format = parseEnumOption(args, '--format', checkOutputFormats)
-  } catch (error) {
-    return mapErrorResult(error, 'config')
-  }
-
-  return runCheckCommand({
-    name: 'intent',
-    args,
-    options,
-    commandOptions: ['--format'],
-    report: async ({ loadedConfig, baseRef, headRef, runContext }) => {
-      // Change-intent sources are read by spec 11's ingestion, not through the
-      // run context's mediated reader, which owns its own bounds and redaction.
-      const logger = createCliLogger({
-        config: loadedConfig.config,
-        command: 'intent',
-        sink: options.logSink
-      })
-      // Absent unless the capability is enabled AND a provider resolves. Every other
-      // outcome reports `provider-unavailable` with a warning and still exits 0.
-      const lane = await createIntentFulfilmentLane({
-        config: loadedConfig.config,
-        environment: options.environment ?? {},
-        ...(options.providerImport === undefined
-          ? {}
-          : { providerImport: options.providerImport }),
-        logger
-      })
-
-      try {
-        return await runIntentFulfilment({
-          repositoryRoot: options.cwd,
-          config: loadedConfig.config,
-          ...(baseRef === undefined ? {} : { baseRef }),
-          ...(headRef === undefined ? {} : { headRef }),
-          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-          ...(lane === undefined
-            ? {}
-            : {
-                agents: {
-                  extractObligations: lane.extractObligations,
-                  judge: lane.judge,
-                  explain: lane.explain
-                },
-                usage: lane.usage
-              }),
-          readChangedFile: runContext.readChangedFile,
-          runGit: runContext.runGit
-        })
-      } finally {
-        await lane?.shutdown()
-      }
-    },
-    present: async (report, { loadedConfig }) => {
-      const markdown = renderIntentFulfilmentMarkdown(report)
-
-      // The four outcomes that mapped nothing leave nothing behind. Writing a run
-      // directory per invocation for a capability that is off by default would
-      // accumulate empty directories in a repository whose owner never asked for
-      // the stage — and they are not in the run index, so nothing would ever
-      // enumerate them again. `no-intent` is the ordinary case for most changes,
-      // which is exactly why it must not litter. The report still says so on
-      // stdout, and `--format markdown` still renders it.
-      if (report.status !== 'completed') {
-        return format === 'markdown' ? { stdout: markdown } : {}
-      }
-
-      const artifactRoot = path.posix.join(
-        loadedConfig.config.paths.artifactDir,
-        `intent-${randomUUID()}`
-      )
-
-      await writeIntentFulfilmentArtifacts({
-        repositoryRoot: options.cwd,
-        artifactRoot,
-        reportJson: jsonResult(report),
-        reportMarkdown: markdown
-      })
-
-      return {
-        ...(format === 'markdown' ? { stdout: markdown } : {}),
-        // The path goes to stderr rather than into the report on stdout: the report
-        // is a strict schema a consumer parses, and stdout has to stay exactly one
-        // JSON document for the scripted use that already exists.
-        stderr: `Intent-fulfilment report: ${path.posix.join(artifactRoot, INTENT_MARKDOWN_ARTIFACT_NAME)}\n`
-      }
-    }
-  })
-}
+): Promise<CliResult> =>
+  runAdvisoryCheckCommand(intentFulfilmentLaneDescriptor, args, options)

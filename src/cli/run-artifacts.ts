@@ -217,52 +217,29 @@ export const writeReviewArtifacts = async (
 export const IMPACT_MARKDOWN_ARTIFACT_NAME = 'impact-report.md'
 export const IMPACT_JSON_ARTIFACT_NAME = 'impact-report.json'
 
-// `impact check` is advisory and MUST exit 0 whatever it reports (spec 22), so
-// this deliberately reuses the review writer's machinery and adds no failure path
-// of its own: the caller treats a write failure as a note to the reader rather
-// than as a result. The run is NOT recorded in the run index — the index feeds
-// baseline resolution, which expects a review report, and an entry pointing at a
-// reference report would hand `baseline write` a document of the wrong shape.
-export const writeChangeImpactArtifacts = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactRoot: string
-    readonly reportJson: string
-    readonly reportMarkdown: string
-  }
-): Promise<void> => {
-  await ensureDirectory(
-    await resolveArtifactWritePath(input.repositoryRoot, input.artifactRoot)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    IMPACT_JSON_ARTIFACT_NAME,
-    input.reportJson
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    IMPACT_MARKDOWN_ARTIFACT_NAME,
-    input.reportMarkdown
-  )
-}
-
 // Artifact names for one `intent check` run, prefixed for the same reason the
 // impact ones are: a run directory must never present a mapping report under the
 // name every consumer here reads as a REVIEW report.
 export const INTENT_MARKDOWN_ARTIFACT_NAME = 'intent-report.md'
 export const INTENT_JSON_ARTIFACT_NAME = 'intent-report.json'
 
-// `intent check` is advisory and MUST exit 0 whatever it reports (spec 23), so this
-// adds no failure path of its own, exactly as the change-impact writer does. The run
-// is NOT recorded in the run index: the index feeds baseline resolution, which
-// expects a review report, and an entry pointing at a mapping report would hand
-// `baseline write` a document of the wrong shape.
-export const writeIntentFulfilmentArtifacts = async (
+// The advisory `check` commands are advisory and MUST exit 0 whatever they report
+// (specs 22 and 23), so this deliberately reuses the review writer's machinery and
+// adds no failure path of its own: the caller treats a write failure as a note to
+// the reader rather than as a result. The run is NOT recorded in the run index —
+// the index feeds baseline resolution, which expects a review report, and an entry
+// pointing at a reference or mapping report would hand `baseline write` a document
+// of the wrong shape.
+//
+// The names arrive as arguments rather than being chosen here: which pair a stage
+// writes is a property of the stage (see `advisory-lane.ts`), and this module owns
+// only the writing.
+export const writeAdvisoryCheckArtifacts = async (
   input: {
     readonly repositoryRoot: string
     readonly artifactRoot: string
+    readonly jsonArtifactName: string
+    readonly markdownArtifactName: string
     readonly reportJson: string
     readonly reportMarkdown: string
   }
@@ -273,13 +250,13 @@ export const writeIntentFulfilmentArtifacts = async (
   await writeRunArtifact(
     input.repositoryRoot,
     input.artifactRoot,
-    INTENT_JSON_ARTIFACT_NAME,
+    input.jsonArtifactName,
     input.reportJson
   )
   await writeRunArtifact(
     input.repositoryRoot,
     input.artifactRoot,
-    INTENT_MARKDOWN_ARTIFACT_NAME,
+    input.markdownArtifactName,
     input.reportMarkdown
   )
 }

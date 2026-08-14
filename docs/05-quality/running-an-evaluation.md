@@ -420,7 +420,8 @@ provider calls without editing repository config.
 ### The pinned capability set
 
 `eval run` does not take its capability toggles from your configuration. It
-applies a committed pin set (`src/cli/eval-capability-pins.ts`) after everything
+applies a committed pin set
+(`src/domains/evaluation/run/eval-capability-pins.ts`) after everything
 else has merged, so a run measures the same engine whatever the repository config
 or the schema defaults say. Two pins deliberately disagree with the shipped
 defaults — `contextSources.enabled` and `review.citations.enabled` are pinned

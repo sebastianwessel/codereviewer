@@ -1,26 +1,50 @@
 // Runs a single evaluation case through the review pipeline and shapes the
 // result into an EvalCaseOutput, including the transient-provider-error retry
-// (one retry at reduced concurrency) and provider-error shaping. This is eval
-// orchestration extracted from the CLI so the command handler stays thin.
+// (one retry at reduced concurrency) and provider-error shaping.
+//
+// This is eval orchestration, and it lives in `evaluation/run/` beside
+// `eval-runner.ts` for that reason. It was originally extracted out of the
+// `eval run` command handler to keep the handler thin, but landed in `src/cli/`
+// — which kept per-case measurement policy (which lane runs, what a transient
+// provider error is worth retrying, how a crash is scored) in the layer whose
+// only job is parsing a command line. `evaluation` is the cross-cutting
+// measurement domain and already drives review-workflow's siblings, so the
+// policy belongs here and the command handler is left with the argument
+// parsing that is genuinely its own.
+//
+// NOT ON THE DOMAIN BARREL, and the sibling imports below are direct for the
+// same reason. `review-workflow`'s preflight runs the drift gate, and drift's
+// artifact-example checker validates the eval corpus contracts through
+// `evaluation/index.ts`, so anything reachable from that barrel must not import
+// `review-workflow`: `evaluation/index` → here → `review-workflow` → `drift` →
+// `evaluation/index` is a cycle, and at runtime it leaves one side's zod
+// schemas in the temporal dead zone. `src/cli/commands/eval-run.ts` therefore
+// imports this module by path. That is not a domain reaching past a sibling's
+// barrel — the CLI is the composition layer and already imports
+// `drift/drift-checker.js` and `reporting/sarif-validation.js` the same way.
 import { readFile } from 'node:fs/promises'
 import {
   resolveExistingPathInsideRoot,
   resolvePathInsideRoot
-} from '../platform/path-service.js'
+} from '../../../platform/path-service.js'
+import { EVAL_PROVIDER_RETRY_WARNING_PREFIX } from '../eval-warnings.js'
+import { calculateEvalDiffStats } from '../scoring/eval-diff-stats.js'
+import type { EvalCase } from '../corpus/eval-fixture.schema.js'
+import type { EvalCaseOutput } from '../report/eval-report-contracts.js'
+import { runReview as runReviewPipeline } from '../../review-workflow/index.js'
+import { runFixRun } from '../../verification/index.js'
+import type { AdmittedFinding } from '../../../shared/contracts/findings/finding.schema.js'
+import { parseGitDiffMaps } from '../../repository-intake/index.js'
+import { type ProviderImport } from '../../provider-resolution/index.js'
+import { type Logger } from '../../observability/index.js'
 import {
-  EVAL_PROVIDER_RETRY_WARNING_PREFIX,
-  calculateEvalDiffStats,
-  type EvalCase,
-  type EvalCaseOutput
-} from '../domains/evaluation/index.js'
-import { runReview as runReviewPipeline } from '../domains/review-workflow/index.js'
-import { runFixRun } from '../domains/verification/index.js'
-import type { AdmittedFinding } from '../shared/contracts/findings/finding.schema.js'
-import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
-import { type ProviderImport } from '../domains/provider-resolution/index.js'
-import { type Logger } from '../domains/observability/index.js'
-import { normalizeError, type StructuredError } from '../shared/errors/error-normalizer.js'
-import type { CodeReviewerConfig, ReviewReport } from '../shared/contracts/index.js'
+  normalizeError,
+  type StructuredError
+} from '../../../shared/errors/error-normalizer.js'
+import type {
+  CodeReviewerConfig,
+  ReviewReport
+} from '../../../shared/contracts/index.js'
 
 const countChangedLines = async (
   repositoryRoot: string,

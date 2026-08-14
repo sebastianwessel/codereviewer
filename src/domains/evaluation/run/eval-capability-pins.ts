@@ -29,12 +29,22 @@
 // HOW A PIN CHANGES: run the A/B through `--capability`, record it in the
 // ledger, edit the pin here in its own commit, and re-baseline. The pin is the
 // thing that makes "re-baseline owed" a statement someone can act on.
-import type { EvalReportCapabilityFlags } from '../domains/evaluation/index.js'
+//
+// WHY THIS IS IN THE EVALUATION DOMAIN AND THE `--capability` PARSER IS NOT:
+// this file is the answer to "what configuration was a published number
+// measured under", which is measurement policy and belongs beside the runner
+// that produces the number. Reading `--capability <flag>=<bool>` off an argv
+// array is a command-line concern with no bearing on that answer, and it lives
+// in `src/cli/eval-capability-overrides.ts` — where it can use the CLI's own
+// option parser without this domain having to import the CLI, which would
+// invert the layering. The two halves meet at `evalCapabilityPins`: the parser
+// reads the flag NAMES off the table to decide what it will accept, so there is
+// still exactly one list of pinned flags.
 import {
   CodeReviewerConfigSchema,
   type CodeReviewerConfig
-} from '../shared/contracts/index.js'
-import { parseOptionValues } from './args.js'
+} from '../../../shared/contracts/index.js'
+import type { EvalReportCapabilityFlags } from '../report/eval-report-contracts.js'
 
 // One pinned toggle. `read` and `write` are written out per flag rather than
 // derived from the `flag` string, for the reason `eval-capability-flags.ts`
@@ -221,57 +231,6 @@ export const evalCapabilityPins: readonly EvalCapabilityPin[] = [
 // `eval-capability-flags.test.ts` already fails when a capability is added to the
 // configuration schema and not to the provenance contract; the pin set is
 // deliberately a SUBSET of that contract and is not required to grow with it.
-
-const capabilityOverrideOption = '--capability'
-
-const pinnedFlags = new Set<string>(
-  evalCapabilityPins.map((pin) => pin.flag)
-)
-
-/**
- * Reads `--capability <flag>=<true|false>` (repeatable) — the deliberate escape
- * from a pin, spelled out on the command line where it lands in the run log and
- * in the shell history that produced the artifact.
- *
- * A flag outside the pinned set is REFUSED rather than folded into the config:
- * an unpinned capability is already governed by the configuration file, so
- * accepting it here would offer two ways to set one value and quietly make the
- * documented one lose.
- */
-export const parseEvalCapabilityOverrides = (
-  args: readonly string[]
-): ReadonlyMap<string, boolean> => {
-  const overrides = new Map<string, boolean>()
-
-  for (const entry of parseOptionValues(args, capabilityOverrideOption)) {
-    const separatorIndex = entry.indexOf('=')
-
-    if (separatorIndex === -1) {
-      throw new TypeError(
-        `${capabilityOverrideOption} must be <flag>=true or <flag>=false`
-      )
-    }
-
-    const flag = entry.slice(0, separatorIndex)
-    const value = entry.slice(separatorIndex + 1)
-
-    if (!pinnedFlags.has(flag)) {
-      throw new TypeError(
-        `${capabilityOverrideOption} does not pin "${flag}". Pinned flags are ${[...pinnedFlags].join(', ')}.`
-      )
-    }
-
-    if (value !== 'true' && value !== 'false') {
-      throw new TypeError(
-        `${capabilityOverrideOption} ${flag} must be true or false`
-      )
-    }
-
-    overrides.set(flag, value === 'true')
-  }
-
-  return overrides
-}
 
 // The schema's own defaults, parsed once, so a pin can tell "this repository
 // asked for something else" from "this is just the default of the day".

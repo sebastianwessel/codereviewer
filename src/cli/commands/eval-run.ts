@@ -13,6 +13,7 @@ import {
 import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
+  applyEvalCapabilityPins,
   assertBenchmarkSlicesHydrated,
   createModelPlausibilityJudge,
   createModelSemanticJudge,
@@ -22,6 +23,10 @@ import {
   runEvaluation,
   type EvalCaseFileReader
 } from '../../domains/evaluation/index.js'
+// By path rather than through the barrel above, deliberately: `runEvalCase`
+// imports `review-workflow`, and re-exporting it from `evaluation/index.ts`
+// would close an import cycle back through `drift`. Its own header says so.
+import { runEvalCase } from '../../domains/evaluation/run/eval-case-runner.js'
 import { resolveProviderModelAlias } from '../../domains/provider-resolution/index.js'
 import {
   resolveExistingPathInsideRoot,
@@ -47,12 +52,8 @@ import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
-import { runEvalCase } from '../eval-case-runner.js'
 import { evalReportCapabilityFlags } from '../eval-capability-flags.js'
-import {
-  applyEvalCapabilityPins,
-  parseEvalCapabilityOverrides
-} from '../eval-capability-pins.js'
+import { parseEvalCapabilityOverrides } from '../eval-capability-overrides.js'
 import {
   evalGateExitCode,
   resolveEvalRegressionGateThresholds

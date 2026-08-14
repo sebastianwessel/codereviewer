@@ -1,17 +1,16 @@
-// Fixture builders shared by the change-impact scoring, report and rendering
-// suites, and by the two CLI tests that drive `eval impact`. Nothing at runtime
-// imports this; `tsconfig.build.json` excludes it by path.
+// Fixture builders shared by the change-impact scoring, report, rendering and
+// per-case-runner suites, and by the CLI test that drives `eval impact`. Nothing
+// at runtime imports this; `tsconfig.build.json` excludes it by path.
 //
 // WHY IT IS NOT IN `shared/testing/`. That is where a cross-domain test fixture
 // normally goes, and `report-fixture.ts` went there. This one cannot: it is
 // typed in terms of `domains/change-impact`'s `ChangeImpactReferenceReport`, and
 // spec 01 forbids `shared` importing from `domains` outright. Putting it on the
 // `evaluation` barrel instead would be worse — a test-only module on a runtime
-// entrypoint that `src/cli/` and the hydration scripts import. So the two CLI tests
-// (`cli/eval-impact-command.test.ts`, `cli/impact-eval-runner.test.ts`) import
-// this path directly, and that is deliberate: `src/cli/` is the composition
-// root, not a sibling domain, so "no domain imports sibling internals" is not
-// the rule being bent.
+// entrypoint that `src/cli/` and the hydration scripts import. So
+// `cli/eval-impact-command.test.ts` imports this path directly, and that is
+// deliberate: `src/cli/` is the composition root, not a sibling domain, so "no
+// domain imports sibling internals" is not the rule being bent.
 //
 // The builders take the few fields a scoring test actually varies — the answer
 // key, the reference list, the finding list, the adjudication status — and fill

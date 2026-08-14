@@ -2,7 +2,7 @@
 // crashes must be reported as a `stage: 'fix'` provider issue on the scored
 // review report, not scored as an empty result indistinguishable from the lane
 // being disabled or having no eligible finding. See
-// src/cli/eval-case-runner.ts `runFixOutcomesForCase`.
+// src/domains/evaluation/run/eval-case-runner.ts `runFixOutcomesForCase`.
 //
 // `runFixRun` is deliberately resilient at every internal layer (spec 12): a
 // per-claim model error degrades to an "uncertain" verdict, an unresolved
@@ -24,19 +24,19 @@ import {
   CodeReviewerConfigSchema,
   ReviewReportSchema,
   type ReviewReport
-} from '../shared/contracts/index.js'
-import { EvalCaseSchema } from '../domains/evaluation/index.js'
+} from '../../../shared/contracts/index.js'
+import { EvalCaseSchema } from '../corpus/eval-fixture.schema.js'
 
 const mocks = vi.hoisted(() => ({
   runReview: vi.fn(),
   runFixRun: vi.fn()
 }))
 
-vi.mock('../domains/review-workflow/index.js', () => ({
+vi.mock('../../review-workflow/index.js', () => ({
   runReview: mocks.runReview
 }))
 
-vi.mock('../domains/verification/index.js', () => ({
+vi.mock('../../verification/index.js', () => ({
   runFixRun: mocks.runFixRun
 }))
 

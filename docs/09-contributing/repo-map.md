@@ -59,15 +59,16 @@ barrel is not published by being there (spec 01, *Public Surface*).
 | `cli-error-results.ts` | Failure as a `CliResult`: `usageError` (always exit `2`) and the thrown-error-to-exit-code mapping |
 | `command-config.ts` | The one way a command resolves its configuration, `--config` included |
 | `command-logging.ts` | The `--log-file` sink and the logger bound to a command name |
+| `advisory-lane.ts` | The two advisory stages (specs 22, 23) as data — everything `impact` and `intent` differ on, in one value each, read by the check command and by the in-process `review` stage alike |
 | `advisory-check-command.ts` | The skeleton `impact check` and `intent check` share, including the rule that presentation can never fail an advisory stage |
+| `advisory-eval-command.ts` | The skeleton `eval impact` and `eval intent` share: manifest, selection, one lane per run, sequential cases, provenance, artefacts, and the exit code for a run that scored nothing. Shares the procedure, never the corpora |
 | `investigation-lanes.ts` | The two post-review lanes `review` drives (`runVerificationForReview`, `runFixForReview`) |
 | `advisory-lanes.ts` | The two advisory reference stages (specs 22, 23) `review` drives in-process, over its own run context — wraps each so a lane failure becomes a review-report warning, never a non-zero exit |
 | `args.ts` | Pure argument parsers — no IO, no runtime state |
 | `run-artifacts.ts` | Writing run artifacts and maintaining the run index |
 | `baseline-source.ts` | Resolving and validating the report `baseline write` builds from — the source of `baseline_source_unavailable` and `baseline_source_invalid` |
 | `review-completion.ts` | The one rule about what a completed run may tell a machine: an absent quality gate is `quality_gate_missing` (exit `5`), never a reported pass |
-| `eval-case-runner.ts` | Running one evaluation case through the review pipeline |
-| `impact-eval-runner.ts` | Running one change-impact corpus case through the `impact check` engine |
+| `eval-capability-overrides.ts` | Parsing `eval run --capability <flag>=<bool>`, the deliberate escape from a capability pin — the pin table itself is measurement policy and lives in `domains/evaluation/run/` |
 | `eval-regression-gate-policy.ts` | Which thresholds `eval run` is judged against, and what the gate's outcome means as an exit code |
 | `eval-report-files.ts` | Reading an eval report back off disk, against the producer contract or the tolerant comparison view |
 | `eval-run-archive-id.ts` | Naming the per-run archive directory both eval commands write to |
@@ -161,8 +162,9 @@ parsing, hashing or error normalization inside a domain.
 | `report/versions/` | Metrics-version history and the comparability rules that decide whether two runs may be compared at all |
 | `rendering/` | Markdown surfaces for the summary and recall reports, plus the shared label and formatting helpers |
 | `rendering/comparison/` | The `eval compare` renderers, one per section |
-| `run/` | `eval-runner.ts`: the runner that drives a corpus through the review pipeline and assembles the report |
-| `change-impact-eval/` | The spec 22 change-impact corpus and everything that scores, reports and renders it |
+| `run/` | Running the diff-reviewer corpus: `eval-runner.ts` drives it and assembles the report, `eval-case-runner.ts` runs one case through the review pipeline (including the fix lane and the transient-provider-error retry), and `eval-capability-pins.ts` holds the committed capability set every measured run is pinned to |
+| `change-impact-eval/` | The spec 22 change-impact corpus and everything that hydrates, runs (`impact-eval-runner.ts`), scores, reports and renders it |
+| `intent-eval/` | The spec 23 intent-fulfilment corpus and everything that hydrates, runs (`intent-eval-runner.ts`), scores, reports and renders it |
 | `eval-warnings.ts` (root) | Provider-issue warning prefixes, read by `run/`, `scoring/` and the barrel alike |
 
 `change-impact-eval/` is grouped by its corpus rather than by role on purpose.

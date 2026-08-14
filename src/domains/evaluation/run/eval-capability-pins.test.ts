@@ -1,10 +1,12 @@
+// The pin table and its application. The `--capability` parser that can
+// override a pin is a CLI concern and is covered by
+// `src/cli/eval-capability-overrides.test.ts`, together with the two
+// cross-checks against the CLI-owned capability provenance function.
 import { describe, expect, test } from 'vitest'
-import { CodeReviewerConfigSchema } from '../shared/contracts/index.js'
-import { evalReportCapabilityFlags } from './eval-capability-flags.js'
+import { CodeReviewerConfigSchema } from '../../../shared/contracts/index.js'
 import {
   applyEvalCapabilityPins,
-  evalCapabilityPins,
-  parseEvalCapabilityOverrides
+  evalCapabilityPins
 } from './eval-capability-pins.js'
 
 type Config = ReturnType<typeof CodeReviewerConfigSchema.parse>
@@ -33,21 +35,6 @@ describe('eval capability pins', () => {
 
     for (const pin of evalCapabilityPins) {
       expect(pin.read(inverted.config)).toBe(pin.pinned)
-    }
-  })
-
-  // The pin has to be readable in the artifact, not just applied in memory:
-  // `evalReportCapabilityFlags` is what the eval report records, and it is read
-  // off the same config object the pins produced.
-  test('records the pinned values in the capability provenance', () => {
-    const pinned = applyEvalCapabilityPins({
-      config: configFrom({ contextSources: { enabled: true } }),
-      overrides: new Map()
-    })
-    const flags = evalReportCapabilityFlags(pinned.config)
-
-    for (const pin of evalCapabilityPins) {
-      expect(flags[pin.flag]).toBe(pin.pinned)
     }
   })
 
@@ -104,48 +91,7 @@ describe('eval capability pins', () => {
     expect(result.warnings[0]).toContain('not comparable')
   })
 
-  test('parses repeatable overrides in both spellings', () => {
-    expect([
-      ...parseEvalCapabilityOverrides([
-        '--capability',
-        'contextSources.enabled=true',
-        '--capability=fix.enabled=true'
-      ])
-    ]).toEqual([
-      ['contextSources.enabled', true],
-      ['fix.enabled', true]
-    ])
-  })
-
-  test('refuses a flag outside the pinned set', () => {
-    expect(() =>
-      parseEvalCapabilityOverrides(['--capability', 'drift.enabled=false'])
-    ).toThrow(/does not pin "drift.enabled"/u)
-  })
-
-  test('refuses a value that is not a boolean literal', () => {
-    expect(() =>
-      parseEvalCapabilityOverrides(['--capability', 'fix.enabled=yes'])
-    ).toThrow(/must be true or false/u)
-  })
-
-  test('refuses an entry with no value at all', () => {
-    expect(() =>
-      parseEvalCapabilityOverrides(['--capability', 'fix.enabled'])
-    ).toThrow(/<flag>=true or <flag>=false/u)
-  })
-
-  // The pin set is a SUBSET of the provenance contract by design — a capability
-  // no eval-run code path reads cannot move a measured number. What must not
-  // happen is a pin naming a flag the provenance contract does not carry, which
-  // would pin something no report can report.
-  test('pins only flags the capability provenance records', () => {
-    const recorded = new Set(Object.keys(evalReportCapabilityFlags(configFrom())))
-
-    for (const pin of evalCapabilityPins) {
-      expect(recorded).toContain(pin.flag)
-    }
-
+  test('names each pinned flag exactly once', () => {
     expect(new Set(evalCapabilityPins.map((pin) => pin.flag)).size).toBe(
       evalCapabilityPins.length
     )

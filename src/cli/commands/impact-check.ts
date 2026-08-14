@@ -25,118 +25,16 @@
 // looking for is not in the workflow they actually use — spec 22 records exactly
 // that gap. `--format markdown` puts the same document on stdout for someone
 // reading it in a terminal or piping it into a pull-request body.
-import { randomUUID } from 'node:crypto'
-import path from 'node:path'
-import {
-  createChangeImpactLane,
-  renderChangeImpactMarkdown,
-  runChangeImpact
-} from '../../domains/change-impact/index.js'
-import {
-  checkOutputFormats,
-  runCheckCommand,
-  type CheckOutputFormat
-} from '../advisory-check-command.js'
-import { parseEnumOption } from '../args.js'
+//
+// The body of all of that is `runAdvisoryCheckCommand`, shared with `intent
+// check`: the two commands were the same shape written twice, and everything this
+// one does differently now lives in `changeImpactLaneDescriptor`.
+import { runAdvisoryCheckCommand } from '../advisory-check-command.js'
+import { changeImpactLaneDescriptor } from '../advisory-lane.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
-import { mapErrorResult } from '../cli-error-results.js'
-import { createCliLogger } from '../command-logging.js'
-import {
-  IMPACT_MARKDOWN_ARTIFACT_NAME,
-  jsonResult,
-  writeChangeImpactArtifacts
-} from '../run-artifacts.js'
 
 export const runImpact = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> => {
-  let format: CheckOutputFormat | undefined
-
-  try {
-    format = parseEnumOption(args, '--format', checkOutputFormats)
-  } catch (error) {
-    return mapErrorResult(error, 'config')
-  }
-
-  return runCheckCommand({
-    name: 'impact',
-    args,
-    options,
-    commandOptions: ['--format'],
-    report: async ({ loadedConfig, baseRef, headRef, runContext }) => {
-      const logger = createCliLogger({
-        config: loadedConfig.config,
-        command: 'impact',
-        sink: options.logSink
-      })
-      // Absent unless adjudication is enabled AND a provider resolves. Every other
-      // outcome reports `adjudicationStatus: "no-model"`, still emits the findings
-      // that need no model, and still exits 0.
-      const lane = await createChangeImpactLane({
-        config: loadedConfig.config,
-        environment: options.environment ?? {},
-        ...(options.providerImport === undefined
-          ? {}
-          : { providerImport: options.providerImport }),
-        logger
-      })
-
-      try {
-        return await runChangeImpact({
-          repositoryRoot: options.cwd,
-          config: loadedConfig.config,
-          ...(baseRef === undefined ? {} : { baseRef }),
-          ...(headRef === undefined ? {} : { headRef }),
-          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-          ...(lane === undefined
-            ? {}
-            : {
-                agents: { judgeReliance: lane.judgeReliance },
-                usage: lane.usage
-              }),
-          readChangedFile: runContext.readChangedFile,
-          runGit: runContext.runGit
-        })
-      } finally {
-        await lane?.shutdown()
-      }
-    },
-    present: async (report, { loadedConfig }) => {
-      const markdown = renderChangeImpactMarkdown(report)
-
-      // A disabled run analysed nothing, so it leaves nothing behind. Writing a
-      // run directory per invocation for a capability that is off by default
-      // would accumulate empty runs in a repository whose owner never asked for
-      // the stage — and these directories are not in the run index, so nothing
-      // would ever enumerate them again. The report still says `disabled` on
-      // stdout, and `--format markdown` still renders it.
-      if (report.status === 'disabled') {
-        return format === 'markdown' ? { stdout: markdown } : {}
-      }
-
-      // A run of its own, in the same place `review` puts one. The id is prefixed
-      // so a directory listing says which stage produced it; nothing reads the
-      // prefix.
-      const artifactRoot = path.posix.join(
-        loadedConfig.config.paths.artifactDir,
-        `impact-${randomUUID()}`
-      )
-
-      await writeChangeImpactArtifacts({
-        repositoryRoot: options.cwd,
-        artifactRoot,
-        reportJson: jsonResult(report),
-        reportMarkdown: markdown
-      })
-
-      return {
-        ...(format === 'markdown' ? { stdout: markdown } : {}),
-        // The path goes to stderr rather than into the report on stdout: the
-        // report is a strict schema a consumer parses, and stdout has to stay
-        // exactly one JSON document for the scripted use that already exists.
-        stderr: `Change-impact report: ${path.posix.join(artifactRoot, IMPACT_MARKDOWN_ARTIFACT_NAME)}\n`
-      }
-    }
-  })
-}
+): Promise<CliResult> =>
+  runAdvisoryCheckCommand(changeImpactLaneDescriptor, args, options)

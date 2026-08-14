@@ -102,6 +102,14 @@ export {
 export {
   renderChangeImpactEvalSummary
 } from './change-impact-eval/change-impact-eval-rendering.js'
+// The per-case runner `eval impact` drives. Only the two symbols the command
+// needs are here: `configForCase` and `hydratedCaseMatchesManifest` have no
+// consumer outside this domain, and its colocated test reaches them by module
+// path rather than through the barrel.
+export {
+  changeImpactAdjudicationCallBounds,
+  runChangeImpactEvalCase
+} from './change-impact-eval/impact-eval-runner.js'
 // Intent-fulfilment corpus (spec 23 §Evaluation). A third corpus with a third
 // answer key, exported beside the other two and never merged with them.
 export {
@@ -153,6 +161,12 @@ export {
 export {
   renderIntentEvalSummary
 } from './intent-eval/intent-eval-rendering.js'
+// The per-case runner `eval intent` drives. `configForIntentCase` and
+// `hydratedIntentCaseMatchesManifest` stay off the barrel for the reason the
+// change-impact ones do: nothing outside this domain calls them.
+export {
+  runIntentEvalCase
+} from './intent-eval/intent-eval-runner.js'
 export {
   INTENT_METRICS_VERSION
 } from './intent-eval/intent-metrics-versions.js'
@@ -233,6 +247,25 @@ export {
 export {
   runEvaluation
 } from './run/eval-runner.js'
+// `runEvalCase` is DELIBERATELY NOT EXPORTED HERE, and adding it would break the
+// build rather than merely widen the barrel. It imports `review-workflow`, whose
+// preflight imports `drift`, whose artifact-example checker imports this barrel
+// for the eval corpus contracts — so a barrel entry closes an import cycle
+// (`evaluation/index` → `eval-case-runner` → `review-workflow` → `drift` →
+// `evaluation/index`) that `madge --circular` catches and that would put this
+// file's zod schemas in the temporal dead zone for whichever side loads second.
+// Its one consumer is `src/cli/commands/eval-run.ts`, which imports the module
+// directly; the CLI is not a sibling domain, so no domain reaches past a barrel.
+// See the header of `run/eval-case-runner.ts`.
+//
+// The committed evaluation configuration. `eval run` applies the pins to the
+// configuration it loaded, and the `--capability` parser beside that command
+// reads the flag names off the table to decide what it will accept — two
+// cross-boundary needs, one list.
+export {
+  applyEvalCapabilityPins,
+  evalCapabilityPins
+} from './run/eval-capability-pins.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,

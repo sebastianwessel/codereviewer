@@ -264,8 +264,9 @@ reviewer prompt and the summarizer must enforce these principles:
   committed evaluation configuration" while no such configuration existed: the
   claim rested on `contextSources` happening to default OFF, and the 2026-08-11
   flip removed the accident underneath it. The file now exists
-  (`src/cli/eval-capability-pins.ts`), it pins `contextSources.enabled` to
-  `false`, and `eval run` applies it itself, after everything the config loader
+  (`src/domains/evaluation/run/eval-capability-pins.ts`), it pins
+  `contextSources.enabled` to `false`, and `eval run` applies it itself, after
+  everything the config loader
   merged — so the pin holds against the discovered config file, the environment
   and `--config` alike, and cannot be lost by forgetting to pass something.
   - **Pinned OFF because the ledger is the population that matters.** Every figure

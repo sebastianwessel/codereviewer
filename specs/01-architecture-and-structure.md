@@ -73,6 +73,7 @@ src/
         comparison/
       run/
       change-impact-eval/
+      intent-eval/
     costs/
     observability/
     drift/
@@ -106,19 +107,35 @@ in: `corpus/` defines and hydrates the cases, `judging/` holds the model-backed
 judges and their calibration, `scoring/` turns matches into numbers, `report/`
 owns the artifact contracts and provenance (`report/versions/` the
 metrics-version comparability rules), `rendering/` the Markdown surfaces
-(`rendering/comparison/` the `eval compare` ones), and `run/` the runner.
-`eval-warnings.ts` stays at the domain root because `run/`, `scoring/` and
-`index.ts` all read it.
+(`rendering/comparison/` the `eval compare` ones), and `run/` the runner — the
+corpus runner, the per-case runner it drives, and the committed capability pin
+set a measured run is held to. `eval-warnings.ts` stays at the domain root
+because `run/`, `scoring/` and `index.ts` all read it.
 
-`evaluation/change-impact-eval/` is the one group defined by its CORPUS rather
-than by its role, and that is deliberate. Spec 22's change-impact review is
-scored against a different corpus with a different answer key from the diff
-reviewer's, and the two must never be pooled or run with each other's
+`run/eval-case-runner.ts` is the one module in this domain that must NOT appear
+on `evaluation/index.ts`. It imports `review-workflow`, whose preflight imports
+`drift`, whose artifact-example checker imports this barrel for the eval corpus
+contracts — so a barrel entry closes an import cycle. Its only consumer,
+`src/cli/commands/eval-run.ts`, imports it by module path instead; the CLI is
+the composition layer, not a sibling domain, so no domain reaches past a barrel.
+
+`evaluation/change-impact-eval/` and `evaluation/intent-eval/` are the groups
+defined by their CORPUS rather than by their role, and that is deliberate. Spec
+22's change-impact review and spec 23's intent-fulfilment review are each scored
+against a different corpus with a different answer key from the diff reviewer's,
+and none of the three may be pooled or run with another's
 `--slice-root`/`--manifest`. Distributing these modules by technical role would
 file each one next to its diff-reviewer counterpart — corpus schema beside
 corpus schema, scoring beside scoring — which is precisely the adjacency the
 separation exists to prevent. Keep them together. Do not "tidy" them back into
 the role folders.
+
+Each group also owns the per-case runner that drives its lane
+(`impact-eval-runner.ts`, `intent-eval-runner.ts`), moved here from `src/cli/` on
+2026-08-14. They had been extracted out of the command handlers to keep those
+thin, but extracted SIDEWAYS into the CLI rather than into the domain that owns
+the measurement, which left roughly two thousand lines of domain orchestration
+under `src/cli/`.
 
 ## Ownership Rules
 

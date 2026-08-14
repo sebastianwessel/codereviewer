@@ -3,6 +3,11 @@
 // `impact-eval-runner.ts` is: the command handler stays thin, and the per-case
 // outcome policy lives in one readable place.
 //
+// It lives beside the corpus hydration and the scorer it feeds rather than in
+// `src/cli/`, because what it holds is this corpus's outcome policy — which
+// statuses are scores, which are coverage facts — and not anything about parsing
+// a command line.
+//
 // THE OUTCOME POLICY IS THE POINT OF THIS FILE, and it has three destinations where
 // change-impact has two.
 //
@@ -23,26 +28,30 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
-  createIntentFulfilmentLane,
   runIntentFulfilment,
   type IntentFulfilmentAgents
-} from '../domains/intent-fulfilment/index.js'
+} from '../../intent-fulfilment/index.js'
+// Sibling modules by path rather than through `evaluation`'s own barrel: a module
+// inside a domain that imports its domain's barrel makes the barrel depend on
+// itself through every other entry on it.
 import {
   INTENT_CASE_ARTIFACT_NAME,
   INTENT_CASE_CONTEXT_DIRECTORY,
   INTENT_CASE_WORK_TREE,
   intentHydrationSource,
-  type HydratedIntentCase,
+  type HydratedIntentCase
+} from './intent-corpus-hydration.js'
+import {
   type IntentCaseInput,
-  type IntentCaseOutcome,
-  type IntentCorpusCase
-} from '../domains/evaluation/index.js'
-import { createRunContext } from '../domains/run-context/index.js'
-import type { Logger } from '../domains/observability/index.js'
-import { normalizeError } from '../shared/errors/error-normalizer.js'
-import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
-import type { CodeReviewerConfig } from '../shared/contracts/index.js'
-import type { LaneUsage } from '../domains/costs/index.js'
+  type IntentCaseOutcome
+} from './intent-eval-scoring.js'
+import { type IntentCorpusCase } from './intent-corpus.schema.js'
+import { createRunContext } from '../../run-context/index.js'
+import type { Logger } from '../../observability/index.js'
+import { normalizeError } from '../../../shared/errors/error-normalizer.js'
+import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
+import type { CodeReviewerConfig } from '../../../shared/contracts/index.js'
+import type { LaneUsage } from '../../costs/index.js'
 
 /**
  * The per-case configuration a measurement run needs, over the operator's own.
@@ -143,6 +152,12 @@ export type RunIntentEvalCaseInput = {
   readonly caseRoot: string
   readonly corpusCase: IntentCorpusCase
   readonly config: CodeReviewerConfig
+  // The lane the WHOLE RUN shares, handed in per case.
+  //
+  // One lane rather than one per case, for the reason `eval impact` gives: the
+  // usage recorder and the agent lifetime are per run. Both are absent when no
+  // provider resolves, which leaves every case `provider-unavailable` — a
+  // coverage fact, never a zero.
   readonly agents?: IntentFulfilmentAgents
   readonly usage?: () => LaneUsage | undefined
   readonly logger?: Logger
@@ -289,12 +304,3 @@ export const runIntentEvalCase = async (
     })
   }
 }
-
-/**
- * The lane the whole run shares.
- *
- * One lane rather than one per case, for the reason `eval impact` gives: the usage
- * recorder and the agent lifetime are per run. Absent when no provider resolves,
- * which leaves every case `provider-unavailable` — a coverage fact, never a zero.
- */
-export const createIntentEvalLane = createIntentFulfilmentLane
