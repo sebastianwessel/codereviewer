@@ -26,6 +26,8 @@ export const isZodError = (value: unknown): value is ZodLikeError =>
  * The predicate every "is this a missing file / missing module" check should be
  * built from. Six hand-rolled copies of this same four-line shape existed across
  * four domains — each correct, each independently maintainable into being wrong.
+ * They have since been folded in; see `isFileNotFoundError` below for the one
+ * variant that is deliberately still its own.
  */
 export const hasErrorCode = (value: unknown, code: string): boolean =>
   typeof value === 'object' &&
@@ -33,7 +35,23 @@ export const hasErrorCode = (value: unknown, code: string): boolean =>
   'code' in value &&
   (value as { readonly code: unknown }).code === code
 
-/** A file (or directory) that is simply not there. */
+/**
+ * A file (or directory) that is simply not there.
+ *
+ * Every "is this missing" check in the tree is now built from this, and the
+ * copies had already begun to diverge before they were folded in — one returned
+ * `false` where its siblings returned `undefined`, which is a difference in the
+ * caller's control flow, not in the predicate.
+ *
+ * ONE DELIBERATE EXCEPTION, and it is not an oversight: `context-retrieval`'s
+ * `isMissingEntryError` also accepts `ENOTDIR`, which is the same "nothing is
+ * there" statement made about an intermediate path segment. It is NOT widened
+ * into a shared helper here because it has exactly one caller, and a shared
+ * helper with one caller is the speculative generality this module exists to
+ * argue against. Widen it here when a second caller needs it — and note that
+ * ENOTDIR is the wrong answer for most callers, which want a path under a
+ * regular file to be a fault rather than an absence.
+ */
 export const isFileNotFoundError = (value: unknown): boolean =>
   hasErrorCode(value, 'ENOENT')
 

@@ -7,6 +7,7 @@ import {
   type CodeReviewerConfig,
   type DriftCategory
 } from '../../shared/contracts/index.js'
+import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 import {
   collectTextFiles,
   pathExists,
@@ -55,11 +56,47 @@ export const GeneratedArtifactStatusSchema = z.enum([
   'compared'
 ])
 
+/**
+ * How much of the repository the content scan actually read.
+ *
+ * THE SIBLING OF `generatedArtifactStatus` ABOVE, AND IT EXISTS FOR THE SAME
+ * REASON: `passed` cannot carry it. Every content check — links, stale paths,
+ * ambiguity, CLI-command drift — runs over the file list `collectScanCoverage`
+ * gathers from `README.md`, `docs/` and `specs/`, and an absent root contributes
+ * zero files rather than an error. So in a repository holding none of them the
+ * whole documentation half of the gate ran over an empty list, found nothing,
+ * and returned `passed: true, warningCount: 0, errorCount: 0` and exit 0 — a
+ * permanently green gate, indistinguishable from a genuinely clean repository.
+ *
+ * Absence is reported instead of assumed. `absent` is not a failure — nothing
+ * obliges a consumer repository to have `docs/` or `specs/`, and failing here
+ * would break every consumer that does not — but it is a different fact from
+ * `scanned`, and a caller that wants to know whether anything was read can now
+ * find out without inferring it from an empty findings list.
+ */
+export const ScanCoverageStatusSchema = z.enum([
+  /** Drift checking is switched off. Nothing was read, and nothing is claimed. */
+  'not-checked',
+  /** No scan root exists. Every content check ran over an empty file list. */
+  'absent',
+  /** Some scan roots exist and some do not. Only part of the gate had input. */
+  'partial',
+  /** Every scan root exists and was read. */
+  'scanned'
+])
+
 export const DriftCheckResultSchema = z.strictObject({
   passed: z.boolean(),
   warningCount: z.int().min(0),
   errorCount: z.int().min(0),
   generatedArtifactStatus: GeneratedArtifactStatusSchema,
+  scanCoverageStatus: ScanCoverageStatusSchema,
+  // How many files the content checks actually read. Zero alongside
+  // `passed: true` is the shape this field exists to make visible.
+  scannedFileCount: z.int().min(0),
+  // Which roots were not there, so `partial` and `absent` are actionable rather
+  // than merely honest. Ordered as `scanRoots` is, for a stable serialization.
+  absentScanRoots: z.array(z.string().min(1)),
   findings: z.array(DriftFindingSchema)
 })
 
@@ -68,6 +105,7 @@ export type DriftFinding = z.infer<typeof DriftFindingSchema>
 export type GeneratedArtifactStatus = z.infer<
   typeof GeneratedArtifactStatusSchema
 >
+export type ScanCoverageStatus = z.infer<typeof ScanCoverageStatusSchema>
 export type DriftCheckResult = z.infer<typeof DriftCheckResultSchema>
 
 const scanRoots = ['README.md', 'docs', 'specs'] as const
@@ -101,10 +139,49 @@ const createFinding = (
     gate: gateFor(config, input.category)
   })
 
-const collectScanFiles = async (
+type ScanCoverage = {
+  readonly status: ScanCoverageStatus
+  readonly files: readonly TextFile[]
+  readonly absentRoots: readonly string[]
+}
+
+const scanCoverageStatusFor = (absentRootCount: number): ScanCoverageStatus => {
+  if (absentRootCount === 0) {
+    return 'scanned'
+  }
+
+  if (absentRootCount === scanRoots.length) {
+    return 'absent'
+  }
+
+  return 'partial'
+}
+
+const collectScanCoverage = async (
   repositoryRoot: string
-): Promise<readonly TextFile[]> =>
-  (await Promise.all(scanRoots.map((root) => collectTextFiles(repositoryRoot, root)))).flat()
+): Promise<ScanCoverage> => {
+  const perRoot = await Promise.all(
+    scanRoots.map(async (root) => ({
+      root,
+      // Existence is ASKED, not inferred from the file list. `collectTextFiles`
+      // returns `[]` both for a root that is not there and for one that holds no
+      // scannable file, and those are different facts: the first means the gate
+      // had no input, the second means it had input and there was nothing to
+      // read. Collapsing them would reintroduce the silence in a new place.
+      present: await pathExists(repositoryRoot, root),
+      files: await collectTextFiles(repositoryRoot, root)
+    }))
+  )
+  const absentRoots = perRoot
+    .filter((entry) => !entry.present)
+    .map((entry) => entry.root)
+
+  return {
+    status: scanCoverageStatusFor(absentRoots.length),
+    files: perRoot.flatMap((entry) => entry.files),
+    absentRoots
+  }
+}
 
 const checkMarkdownLinks = async (
   repositoryRoot: string,
@@ -310,16 +387,6 @@ type SchemaCopy =
   | { readonly state: 'missing' }
   | { readonly state: 'unreadable'; readonly reason: string }
 
-// A path that does not exist is reported by `realpath` and by `readFile` alike as
-// ENOENT. EVERY OTHER FAILURE IS SOMETHING ELSE — a permission error, a directory
-// where a file was expected, a path escaping the repository root — and must not be
-// read as "the file is legitimately absent".
-const isFileNotFound = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  (error as { readonly code?: unknown }).code === 'ENOENT'
-
 const readSchemaCopy = async (
   repositoryRoot: string,
   relativePath: string
@@ -332,7 +399,11 @@ const readSchemaCopy = async (
 
     return { state: 'present', content: await readFile(resolvedPath, 'utf8') }
   } catch (error) {
-    if (isFileNotFound(error)) {
+    // A path that does not exist is reported by `realpath` and by `readFile` alike
+    // as ENOENT. EVERY OTHER FAILURE IS SOMETHING ELSE — a permission error, a
+    // directory where a file was expected, a path escaping the repository root —
+    // and must not be read as "the file is legitimately absent".
+    if (isFileNotFoundError(error)) {
       return { state: 'missing' }
     }
 
@@ -449,11 +520,15 @@ export const runDriftCheck = async (
       warningCount: 0,
       errorCount: 0,
       generatedArtifactStatus: 'not-checked',
+      scanCoverageStatus: 'not-checked',
+      scannedFileCount: 0,
+      absentScanRoots: [],
       findings: []
     })
   }
 
-  const files = await collectScanFiles(input.repositoryRoot)
+  const scan = await collectScanCoverage(input.repositoryRoot)
+  const files = scan.files
   const generatedArtifact = await checkGeneratedSchemaDrift(
     input.repositoryRoot,
     input.config
@@ -478,11 +553,19 @@ export const runDriftCheck = async (
       left.path.localeCompare(right.path) || left.id.localeCompare(right.id)
   )
 
+  // `passed` stays a statement about findings alone, exactly as it does for
+  // `generatedArtifactStatus`: an absent scan root is not a drift finding, and
+  // failing on it would break every consumer repository that has no `specs/`.
+  // What changes is that "nothing was scanned" is now on the result instead of
+  // hiding behind a zero count.
   return DriftCheckResultSchema.parse({
     passed: errorCount === 0,
     warningCount,
     errorCount,
     generatedArtifactStatus: generatedArtifact.status,
+    scanCoverageStatus: scan.status,
+    scannedFileCount: files.length,
+    absentScanRoots: scan.absentRoots,
     findings: sortedFindings
   })
 }

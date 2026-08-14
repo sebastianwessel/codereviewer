@@ -166,12 +166,34 @@ export const CLAIM_PROVIDER_FAILED_WARNING_PREFIX = 'claim-provider-failed:'
 // unparseable.
 export const CLAIM_PROVIDER_CAPPED_WARNING_PREFIX = 'claim-provider-capped:'
 
-const cappedProviderRunWarning = (suffix: string): string => {
-  const separator = suffix.indexOf(':')
-  const withheld = suffix.slice(0, separator)
-  const providerId = suffix.slice(separator + 1)
+// Prefix for a non-fatal malformed-entry warning. Same suffix shape and same
+// count-first reason as the cap warning above; a separate prefix because the two
+// losses are separately counted and must stay separately reported.
+export const CLAIM_PROVIDER_MALFORMED_WARNING_PREFIX = 'claim-provider-malformed:'
 
-  return `Verification claim provider "${providerId}" reached the per-provider cap of ${MAX_CLAIMS_PER_PROVIDER} claims; ${withheld} further claim(s) were not investigated.`
+// Splits a `<count>:<providerId>` warning suffix. Shared by the two counted
+// provider warnings so they cannot drift on how the suffix is parsed.
+const splitCountedProviderSuffix = (
+  suffix: string
+): { readonly count: string; readonly providerId: string } => {
+  const separator = suffix.indexOf(':')
+
+  return {
+    count: suffix.slice(0, separator),
+    providerId: suffix.slice(separator + 1)
+  }
+}
+
+const cappedProviderRunWarning = (suffix: string): string => {
+  const { count, providerId } = splitCountedProviderSuffix(suffix)
+
+  return `Verification claim provider "${providerId}" reached the per-provider cap of ${MAX_CLAIMS_PER_PROVIDER} claims; ${count} further claim(s) were not investigated.`
+}
+
+const malformedProviderRunWarning = (suffix: string): string => {
+  const { count, providerId } = splitCountedProviderSuffix(suffix)
+
+  return `Verification claim provider "${providerId}" skipped ${count} entry(ies) that are not valid claims; they were not investigated.`
 }
 
 // Maps the verification report's no-content warnings to run-warning strings the
@@ -195,6 +217,15 @@ export const runWarningsForVerificationReport = (
     if (warning.startsWith(CLAIM_PROVIDER_CAPPED_WARNING_PREFIX)) {
       return cappedProviderRunWarning(
         warning.slice(CLAIM_PROVIDER_CAPPED_WARNING_PREFIX.length)
+      )
+    }
+
+    // A malformed entry is the same kind of partial answer as a capped one: the
+    // claims that were read are sound, and the ones that could not be read were
+    // never judged. `claimCount` counts only the former.
+    if (warning.startsWith(CLAIM_PROVIDER_MALFORMED_WARNING_PREFIX)) {
+      return malformedProviderRunWarning(
+        warning.slice(CLAIM_PROVIDER_MALFORMED_WARNING_PREFIX.length)
       )
     }
 

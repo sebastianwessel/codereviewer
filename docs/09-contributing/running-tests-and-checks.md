@@ -190,9 +190,10 @@ clean sweep of nothing.
 A configuration example is something a reader **writes**. An artifact example is
 something the engine **emits** — a report, a manifest, a comment draft — and it
 rots the same way. `docs/02-getting-started/install-and-run.md` printed an
-`impact check` report with `"schemaVersion": "1.1"` and a three-key summary for a
-week after the producer moved to `3.0` with a seventeen-field summary, on the
-page a new user reads first.
+`impact check` report with a three-key summary for a week after the producer had
+moved to a seventeen-field one, on the page a new user reads first. (The version
+literals that incident also involved have since been reset to `"1.0"`
+repository-wide — see spec 06; the shape drift is the part this check exists for.)
 
 `src/domains/drift/artifact-example-checker.ts` walks every artifact example
 under `README.md`, `docs/`, `skills/` and `specs/` against the exported Zod

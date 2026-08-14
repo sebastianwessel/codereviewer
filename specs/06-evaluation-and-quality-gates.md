@@ -1748,6 +1748,29 @@ Security drift blocks by default because mismatches in permissions, provider
 network behavior, path containment, telemetry content capture, or secret
 handling create audit risk.
 
+### Reporting What Was Checked
+
+The drift result MUST report what the check was able to read, separately from
+what it found. `passed` is a statement about findings only, and both halves of
+the check can produce zero findings for a reason that is not cleanliness:
+
+- the content scan reads `README.md`, `docs/` and `specs/`, and an absent root
+  contributes no files rather than an error;
+- the generated-artifact comparison needs two committed copies, and a consumer
+  repository has neither.
+
+In both cases zero findings and `passed: true` would otherwise be
+indistinguishable from a repository that was fully checked and is clean. So the
+result carries `scanCoverageStatus` (`not-checked` / `absent` / `partial` /
+`scanned`) with `scannedFileCount` and `absentScanRoots`, and
+`generatedArtifactStatus` (`not-checked` / `absent` / `incomplete` /
+`unreadable` / `compared`).
+
+Absence is reported, not gated: a missing scan root and a missing pair of
+generated copies are both legitimate in a consumer repository, so neither
+changes `passed` or the exit code. A copy that exists but cannot be read is
+different — the comparison was possible and failed — and remains a finding.
+
 ## Regression Policy
 
 Implementation changes to review logic must include:

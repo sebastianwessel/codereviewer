@@ -9,6 +9,10 @@ export {
 export {
   EvalCaseSchema,
   EvalLineRangeSchema,
+  // Exported for the drift domain's artifact-example checker, which validates
+  // every eval slice example printed in Markdown against this contract. A
+  // cross-domain consumer is what a barrel entry is for.
+  EvalSliceCaseSchema,
   ExpectedFindingSchema,
   ExpectedFindingTierSchema,
   ExpectedNoFindingZoneSchema,

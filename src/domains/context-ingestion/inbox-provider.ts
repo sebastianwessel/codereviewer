@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
+import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 import type { ContextInboxProviderSchema } from '../../shared/contracts/config/config.schema.js'
 import type { z } from 'zod'
 import type { ContextFragment, ContextProvider } from './contracts.js'
@@ -16,18 +17,38 @@ type InboxConfig = z.infer<typeof ContextInboxProviderSchema>
  * product never integrates those systems.
  *
  * The directory and every file resolve under the repository root through
- * path-service. A missing directory yields no fragments rather than an error.
+ * path-service. A missing directory yields no fragments rather than an error;
+ * every other resolution failure propagates and is recorded as a failed provider.
  */
 export const createInboxProvider = (config: InboxConfig): ContextProvider => ({
   id: `inbox:${config.dir}`,
   gather: async (input) => {
-    const directory = await resolveExistingPathInsideRoot(
-      input.repositoryRoot,
-      config.dir
-    ).catch(() => undefined)
+    let directory: string
 
-    if (directory === undefined) {
-      return { fragments: [], matchedCount: 0 }
+    try {
+      directory = await resolveExistingPathInsideRoot(
+        input.repositoryRoot,
+        config.dir
+      )
+    } catch (error) {
+      // ONLY a missing directory is an empty inbox. Every other failure is
+      // re-thrown so `gatherContextFragments` records `failed: true` for this
+      // provider and the run says so.
+      //
+      // This used to be `.catch(() => undefined)`, which turned every failure
+      // into "no fragments, matchedCount 0" — the exact shape of a configured
+      // inbox that happens to be empty. An unreadable directory (EACCES) read as
+      // empty, and so did path-service's containment refusal, which is a security
+      // allow/deny decision on a directory resolving OUTSIDE the repository root
+      // (a symlink escape). Spec 07 requires that decision to produce a stable,
+      // redacted, testable event; instead the run reported the benign
+      // "no written intent" message, which is the one conclusion a blocked escape
+      // does not support.
+      if (isFileNotFoundError(error)) {
+        return { fragments: [], matchedCount: 0 }
+      }
+
+      throw error
     }
 
     const entries = await readdir(directory, { withFileTypes: true })

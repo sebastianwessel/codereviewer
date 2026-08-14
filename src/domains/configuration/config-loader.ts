@@ -4,7 +4,10 @@ import {
   CodeReviewerConfigSchema,
   type CodeReviewerConfig
 } from '../../shared/contracts/index.js'
-import { createStructuredError } from '../../shared/errors/error-normalizer.js'
+import {
+  createStructuredError,
+  isFileNotFoundError
+} from '../../shared/errors/error-normalizer.js'
 import { applyConfiguredSecretRedaction } from './secret-redaction.js'
 
 type JsonPrimitive = string | number | boolean | null
@@ -110,12 +113,7 @@ const readConfigFile = async (
       )
     )
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       if (requestedExplicitly) {
         throw createStructuredError({
           code: 'config_error',
@@ -142,12 +140,7 @@ const readOptionalTextFile = async (
       'utf8'
     )
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       return undefined
     }
 

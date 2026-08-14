@@ -24,7 +24,8 @@ type ClaimsFileConfig = z.infer<typeof VerificationClaimsFileProviderSchema>
  * failure and propagates so the caller can record it as a non-fatal run warning
  * (matching how context-ingestion surfaces provider failure). An individual
  * array entry that fails the `Claim` schema is skipped on its own so one
- * malformed record does not discard the rest of an otherwise-valid file.
+ * malformed record does not discard the rest of an otherwise-valid file, and is
+ * counted in `malformedEntryCount` so the skip is reported rather than silent.
  */
 export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvider => {
   const redactor = createRedactor()
@@ -40,7 +41,7 @@ export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvide
         )
       } catch (error) {
         if (isFileNotFoundError(error)) {
-          return { claims: [], withheldByCap: 0 }
+          return { claims: [], withheldByCap: 0, malformedEntryCount: 0 }
         }
         throw error
       }
@@ -59,10 +60,19 @@ export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvide
         const result = ClaimSchema.safeParse(entry)
         return result.success ? [result.data] : []
       })
+      // Counted, not merely skipped. Keeping the rest of a file when one record is
+      // malformed is the right behaviour; reporting the survivors as if they were
+      // the whole file is not — a claims file every one of whose records has the
+      // wrong shape produced zero claims and no signal at all, which reads exactly
+      // like a pipeline that had nothing to claim. Surfaced as a run warning
+      // alongside the cap loss, and kept separate from it for the reason stated
+      // above.
+      const malformedEntryCount = kept.length - claims.length
 
       return {
         claims: claims.map((claim) => redactClaim(claim, redactor.redact)),
-        withheldByCap
+        withheldByCap,
+        malformedEntryCount
       }
     }
   }

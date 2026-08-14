@@ -205,7 +205,8 @@ describe('prior-findings provider', () => {
 
       expect(await provider.gather(gatherInput(root))).toEqual({
         claims: [],
-        withheldByCap: 0
+        withheldByCap: 0,
+        malformedEntryCount: 0
       })
     } finally {
       await rm(root, { recursive: true, force: true })

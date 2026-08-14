@@ -1,22 +1,26 @@
 import type { ZodType } from 'zod'
 import { z } from 'zod'
-import { BaselineFileSchema } from '../admission/baseline-writer.js'
-import { ChangeImpactReferenceReportSchema } from '../change-impact/impact-report.js'
-import { ChangeImpactCorpusManifestSchema } from '../evaluation/change-impact-eval/change-impact-corpus.schema.js'
+// Every contract below is reached through its owning domain's barrel. This
+// module is the one genuine cross-domain consumer in the repository, and
+// reaching past a barrel into a domain's internal file layout would make that
+// layout this module's problem: a file rename inside `evaluation` would break
+// `drift`. The barrel is the domain's published surface, so an entry here is
+// also the record that the contract is public.
+import { BaselineFileSchema } from '../admission/index.js'
+import { ChangeImpactReferenceReportSchema } from '../change-impact/index.js'
 import {
+  ChangeImpactCorpusManifestSchema,
   EvalCaseSchema,
+  EvalReportSchema,
   EvalSliceCaseSchema,
+  EvalSliceManifestSchema,
   ExpectedFindingSchema,
-  ExpectedNoFindingZoneSchema
-} from '../evaluation/corpus/eval-fixture.schema.js'
-import { EvalSliceManifestSchema } from '../evaluation/corpus/eval-slice-manifest.js'
-import {
+  ExpectedNoFindingZoneSchema,
   RealRepoCorpusManifestSchema,
   RemovedCommentDisclosureReviewSchema
-} from '../evaluation/corpus/real-repo-corpus.schema.js'
-import { EvalReportSchema } from '../evaluation/report/eval-report-contracts.js'
-import { IntentFulfilmentReportSchema } from '../intent-fulfilment/intent-fulfilment-report.js'
-import { RunIndexSchema } from '../reporting/run-index.js'
+} from '../evaluation/index.js'
+import { IntentFulfilmentReportSchema } from '../intent-fulfilment/index.js'
+import { RunIndexSchema } from '../reporting/index.js'
 import {
   BaselineWriteStdoutEnvelopeSchema,
   CliErrorEnvelopeSchema,
@@ -75,8 +79,10 @@ import { collectTextFiles, type TextFile } from './markdown-sources.js'
 //   3. a value in a closed-enum position is one of that enum's members.
 //
 // An excerpt is legitimate. A key the producer cannot emit is not. The stale
-// impact example failed all three at once: `1.1` was not `3.0`, and its summary
-// keys had been renamed.
+// impact example failed on both counts at once: it showed a version the producer
+// did not emit, and its summary keys had been renamed. Check 2 survives the
+// version reset with its job unchanged — every artifact is pinned at `"1.0"`
+// now, so the literal it compares against simply no longer moves.
 
 // Every classification decision this module can reach, so a caller never has to
 // infer one from an empty issue list.

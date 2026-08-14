@@ -31,7 +31,7 @@ const makeClaim = (overrides: Partial<Claim> = {}): Claim =>
 
 const staticProvider = (claims: readonly Claim[], id = 'static'): ClaimProvider => ({
   id,
-  gather: async () => ({ claims, withheldByCap: 0 })
+  gather: async () => ({ claims, withheldByCap: 0, malformedEntryCount: 0 })
 })
 
 // A provider that hit `MAX_CLAIMS_PER_PROVIDER` and says how many claims it left
@@ -42,7 +42,17 @@ const cappedProvider = (
   id = 'capped'
 ): ClaimProvider => ({
   id,
-  gather: async () => ({ claims, withheldByCap })
+  gather: async () => ({ claims, withheldByCap, malformedEntryCount: 0 })
+})
+
+// A provider that read entries it could not turn into claims and says how many.
+const malformedEntryProvider = (
+  claims: readonly Claim[],
+  malformedEntryCount: number,
+  id = 'malformed'
+): ClaimProvider => ({
+  id,
+  gather: async () => ({ claims, withheldByCap: 0, malformedEntryCount })
 })
 
 const failingProvider = (id = 'failing'): ClaimProvider => ({
@@ -378,6 +388,36 @@ describe('runVerificationFlow', () => {
     expect(report.claimCount).toBe(1)
     expect(runWarningsForVerificationReport(report)).toEqual([
       'Verification claim provider "claims-file:.codereviewer/claims.json" reached the per-provider cap of 200 claims; 7 further claim(s) were not investigated.'
+    ])
+  })
+
+  // The sibling of the cap warning. `claimCount` counts what was read, so a
+  // provider that skipped half its entries as malformed reported the same number
+  // as one whose file held exactly that many claims, and a claims file with the
+  // wrong record shape throughout was indistinguishable from an empty one.
+  test('a provider that skipped malformed entries says how many went uninvestigated', async () => {
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: { status: 'confirmed', rationale: 'ok', citedEvidenceIds: [] }
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [
+        malformedEntryProvider(
+          [makeClaim()],
+          3,
+          'claims-file:.codereviewer/claims.json'
+        )
+      ],
+      investigateClaim: verify
+    })
+
+    expect(report.warnings).toContain(
+      'claim-provider-malformed:3:claims-file:.codereviewer/claims.json'
+    )
+    expect(report.claimCount).toBe(1)
+    expect(runWarningsForVerificationReport(report)).toEqual([
+      'Verification claim provider "claims-file:.codereviewer/claims.json" skipped 3 entry(ies) that are not valid claims; they were not investigated.'
     ])
   })
 

@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
+import { isFileNotFoundError } from '../../../shared/errors/error-normalizer.js'
 import {
   EvalSliceCaseSchema,
   parseEvalCasesJson,
@@ -14,12 +15,6 @@ const defaultCaseSetPath = path.posix.join(
   'sample-eval-cases.json'
 )
 const sliceRootPath = path.posix.join('eval', 'fixtures', 'slices')
-
-const isMissingPathError = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ENOENT'
 
 const readSampleCases = async (
   repositoryRoot: string
@@ -48,7 +43,7 @@ export const loadEvalSliceCasesFromRoot = async (
       sliceRoot
     )
   } catch (error) {
-    if (isMissingPathError(error)) {
+    if (isFileNotFoundError(error)) {
       return []
     }
 

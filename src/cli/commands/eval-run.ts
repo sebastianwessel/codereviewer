@@ -89,8 +89,12 @@ export const runEval = async (
   // judge/plausibility scoring `runEvaluation` performs. `metrics.durationMs`
   // only sums each case's own review time and cannot be compared to how long
   // the run actually took, which is exactly the gap this timer closes.
-  const monotonicNow = options.monotonicNow ?? ((): number => performance.now())
-  const evaluationStartedAtMs = monotonicNow()
+  //
+  // `performance.now` directly, not an injectable seam: `Date.now` is not
+  // monotonic and must never be substituted here, and the determinism a saved
+  // report needs is supplied one layer down, where `eval-runner` accepts an
+  // `evaluationElapsedMs` thunk that its own tests pin to a fixed value.
+  const evaluationStartedAtMs = performance.now()
   try {
     const logLevelOverride = parseLogLevelOverride(args)
     const logFileOverride = parseLogFileOverride(logLevelOverride.args)
@@ -425,7 +429,7 @@ export const runEval = async (
       // did anything, so `runEvaluation` measures the WHOLE run (case review
       // execution above, plus its own judge/plausibility scoring) instead of
       // only the time spent inside `runEvaluation` itself.
-      evaluationElapsedMs: () => monotonicNow() - evaluationStartedAtMs,
+      evaluationElapsedMs: () => performance.now() - evaluationStartedAtMs,
       // Provenance the eval domain cannot derive on its own (it does not import
       // the configuration or provider-resolution domains): the effective,
       // fully-merged config this invocation resolved -- file + environment +

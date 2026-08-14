@@ -93,7 +93,9 @@ export const createCurrentFindingsProvider = (
         claims: kept.map((finding) =>
           redactClaim(claimFromAdmittedFinding(finding), redactor.redact)
         ),
-        withheldByCap
+        withheldByCap,
+        // Every eligible finding becomes a claim; nothing here can be malformed.
+        malformedEntryCount: 0
       }
     }
   }

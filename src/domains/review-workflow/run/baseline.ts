@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import type { Logger } from '@purista/harness'
 import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../shared/contracts/index.js'
+import { isFileNotFoundError } from '../../../shared/errors/error-normalizer.js'
 import {
   BaselineFileSchema,
   type BaselineFingerprintRecord
@@ -24,12 +25,7 @@ export const loadBaselineFingerprints = async (
 
     return BaselineFileSchema.parse(JSON.parse(baselineText))
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       return undefined
     }
 

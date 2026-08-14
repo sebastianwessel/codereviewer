@@ -100,7 +100,10 @@ const claimsFromPriorFindingsSource = (
 
     return {
       claims: capped.kept.map((entry) => claimFromBaselineEntry(entry)),
-      withheldByCap: capped.withheldByCap
+      withheldByCap: capped.withheldByCap,
+      // The baseline file is validated as a whole above, so an entry is never
+      // individually skipped: the file either parses or the provider fails.
+      malformedEntryCount: 0
     }
   }
 
@@ -116,7 +119,10 @@ const claimsFromPriorFindingsSource = (
 
   return {
     claims: capped.kept.map((finding) => claimFromAdmittedFinding(finding)),
-    withheldByCap: capped.withheldByCap
+    withheldByCap: capped.withheldByCap,
+    // Same as the baseline branch: the report is validated as a whole, so no
+    // individual finding is skipped here.
+    malformedEntryCount: 0
   }
 }
 
@@ -151,7 +157,7 @@ export const createPriorFindingsProvider = (
         )
       } catch (error) {
         if (isFileNotFoundError(error)) {
-          return { claims: [], withheldByCap: 0 }
+          return { claims: [], withheldByCap: 0, malformedEntryCount: 0 }
         }
         throw error
       }
@@ -160,7 +166,8 @@ export const createPriorFindingsProvider = (
 
       return {
         claims: gathered.claims.map((claim) => redactClaim(claim, redactor.redact)),
-        withheldByCap: gathered.withheldByCap
+        withheldByCap: gathered.withheldByCap,
+        malformedEntryCount: gathered.malformedEntryCount
       }
     }
   }

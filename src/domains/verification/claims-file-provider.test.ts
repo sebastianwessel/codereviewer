@@ -58,7 +58,8 @@ describe('claims-file provider', () => {
 
       expect(await provider.gather(gatherInput(root))).toEqual({
         claims: [],
-        withheldByCap: 0
+        withheldByCap: 0,
+        malformedEntryCount: 0
       })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -84,6 +85,29 @@ describe('claims-file provider', () => {
       // A malformed entry is not a capped one. Folding it into `withheldByCap`
       // would make the run warning claim the cap dropped a claim it never saw.
       expect(result.withheldByCap).toBe(0)
+      // ...and it is not nothing either. The skip was counted but not reported,
+      // so a file whose entries were all malformed produced zero claims and no
+      // signal, which reads exactly like a pipeline that had nothing to claim.
+      expect(result.malformedEntryCount).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a claims file whose every entry is malformed counts them all', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-claims-'))
+
+    try {
+      await writeFile(
+        path.join(root, 'claims.json'),
+        JSON.stringify([{ id: 'nope' }, { kind: 'analyzer' }])
+      )
+
+      const provider = createClaimsFileProvider({ type: 'claims-file', path: 'claims.json' })
+      const result = await provider.gather(gatherInput(root))
+
+      expect(result.claims).toHaveLength(0)
+      expect(result.malformedEntryCount).toBe(2)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -116,6 +140,7 @@ describe('claims-file provider', () => {
 
       expect(result.claims).toHaveLength(MAX_CLAIMS_PER_PROVIDER)
       expect(result.withheldByCap).toBe(10)
+      expect(result.malformedEntryCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

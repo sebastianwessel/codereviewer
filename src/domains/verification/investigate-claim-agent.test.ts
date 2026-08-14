@@ -279,7 +279,8 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
               priorFindingClaim({ id: 'claim_still1', filePath: 'holds.ts' }),
               priorFindingClaim({ id: 'claim_fixed1', filePath: 'fixed.ts' })
             ],
-            withheldByCap: 0
+            withheldByCap: 0,
+            malformedEntryCount: 0
           })
         }
       ],
@@ -330,7 +331,8 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
               priorFindingClaim({ id: 'claim_still2', filePath: 'holds.ts' }),
               priorFindingClaim({ id: 'claim_fixed2', filePath: 'fixed.ts' })
             ],
-            withheldByCap: 0
+            withheldByCap: 0,
+            malformedEntryCount: 0
           })
         }
       ],
@@ -364,7 +366,8 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
                 detail: `Investigate broadly. ${PLAN_LIST_GREP}`
               })
             ],
-            withheldByCap: 0
+            withheldByCap: 0,
+            malformedEntryCount: 0
           })
         }
       ],
@@ -459,7 +462,8 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
                 detail: `Never concludes. ${PLAN_LOOP}`
               })
             ],
-            withheldByCap: 0
+            withheldByCap: 0,
+            malformedEntryCount: 0
           })
         }
       ],
@@ -502,7 +506,8 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
           id: 'prior-findings',
           gather: async () => ({
             claims: [injected, unrelated],
-            withheldByCap: 0
+            withheldByCap: 0,
+            malformedEntryCount: 0
           })
         }
       ],

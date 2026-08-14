@@ -48,6 +48,10 @@ describe('drift checker', () => {
       // A pass is only meaningful if the comparison happened. Without this the
       // assertions above are equally satisfied by a check that read nothing.
       expect(result.generatedArtifactStatus).toBe('compared')
+      // The same guard for the other half of the check: an empty findings list
+      // means "clean" only once the result says files were actually read.
+      expect(result.scanCoverageStatus).toBe('scanned')
+      expect(result.scannedFileCount).toBeGreaterThan(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -323,6 +327,99 @@ describe('drift checker', () => {
 
         expect(result.generatedArtifactStatus).toBe('not-checked')
         expect(generatedArtifactFindings(result)).toEqual([])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+  })
+
+  // The documentation half of the check, and the mirror of the generated-artifact
+  // group above. `passed: true, warningCount: 0, errorCount: 0` used to be the
+  // ONLY thing a caller saw whether the scan had read the whole repository or
+  // nothing at all, so `drift check` run outside a repository with these roots was
+  // permanently green with nothing saying so.
+  describe('scan coverage', () => {
+    test('reports that nothing was scanned when no scan root exists', async () => {
+      const root = await createRoot()
+
+      try {
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        // The regression. A clean pass over zero files must be distinguishable
+        // from a clean pass over the repository: these three fields are what
+        // makes the empty findings list below mean something.
+        expect(result.scanCoverageStatus).toBe('absent')
+        expect(result.scannedFileCount).toBe(0)
+        expect(result.absentScanRoots).toEqual(['README.md', 'docs', 'specs'])
+        expect(result.findings).toEqual([])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    test('reports which roots were missing when only some exist', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Only a readme\n')
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        expect(result.scanCoverageStatus).toBe('partial')
+        expect(result.scannedFileCount).toBe(1)
+        expect(result.absentScanRoots).toEqual(['docs', 'specs'])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // A root that IS there but holds nothing scannable collects zero files too.
+    // Inferring absence from an empty file list would report it as missing, which
+    // is a different — and wrong — statement about the repository.
+    test('does not report an existing but empty root as absent', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Readme\n')
+        await mkdir(join(root, 'docs'), { recursive: true })
+        await mkdir(join(root, 'specs'), { recursive: true })
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        expect(result.scanCoverageStatus).toBe('scanned')
+        expect(result.absentScanRoots).toEqual([])
+        expect(result.scannedFileCount).toBe(1)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // Switched off is not the same as scanned-and-clean either, and it is the one
+    // case where the roots are deliberately not consulted at all.
+    test('reports that nothing was scanned when drift checking is off', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Readme\n')
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({ drift: { enabled: false } })
+        })
+
+        expect(result.scanCoverageStatus).toBe('not-checked')
+        expect(result.scannedFileCount).toBe(0)
+        expect(result.absentScanRoots).toEqual([])
+        expect(result.passed).toBe(true)
       } finally {
         await rm(root, { recursive: true, force: true })
       }

@@ -37,6 +37,7 @@ import { fingerprintsForClaim } from './claim-fingerprints.js'
 import {
   CLAIM_PROVIDER_CAPPED_WARNING_PREFIX,
   CLAIM_PROVIDER_FAILED_WARNING_PREFIX,
+  CLAIM_PROVIDER_MALFORMED_WARNING_PREFIX,
   ModelVerdictSchema,
   VerificationReportSchema,
   type ClaimObservation,
@@ -230,6 +231,23 @@ const gatherClaims = async (
         )
         warnings.push(
           `${CLAIM_PROVIDER_CAPPED_WARNING_PREFIX}${gathered.withheldByCap}:${provider.id}`
+        )
+      }
+
+      // The sibling loss, reported the same way for the same reason: an entry the
+      // provider could not read as a claim is never judged and never fixed either,
+      // and a file whose records all have the wrong shape otherwise reports
+      // identically to one that had nothing to claim.
+      if (gathered.malformedEntryCount > 0) {
+        input.logger?.warn?.(
+          'Claim provider skipped entries that are not valid claims; they were not investigated.',
+          {
+            provider_id: provider.id,
+            malformed_entries: gathered.malformedEntryCount
+          }
+        )
+        warnings.push(
+          `${CLAIM_PROVIDER_MALFORMED_WARNING_PREFIX}${gathered.malformedEntryCount}:${provider.id}`
         )
       }
     } catch {

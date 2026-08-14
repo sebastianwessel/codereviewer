@@ -1,5 +1,9 @@
 import path from 'node:path'
 import { lstat, realpath } from 'node:fs/promises'
+// Platform may depend on shared; shared must never depend on a domain. The
+// errno predicate reaches only `shared/redaction`, which imports nothing, so
+// this does not close a loop back into the platform layer.
+import { isFileNotFoundError } from '../shared/errors/error-normalizer.js'
 
 export type FileSystemFlavor = 'posix' | 'win32'
 
@@ -108,12 +112,7 @@ const realpathExistingAncestor = async (
     try {
       return await realpath(currentPath)
     } catch (error) {
-      if (
-        typeof error !== 'object' ||
-        error === null ||
-        !('code' in error) ||
-        error.code !== 'ENOENT'
-      ) {
+      if (!isFileNotFoundError(error)) {
         throw error
       }
     }
@@ -172,12 +171,7 @@ export const resolveWritePathInsideRoot = async (
       throw new TypeError('Write path target must resolve inside the root.')
     }
   } catch (error) {
-    if (
-      typeof error !== 'object' ||
-      error === null ||
-      !('code' in error) ||
-      error.code !== 'ENOENT'
-    ) {
+    if (!isFileNotFoundError(error)) {
       throw error
     }
   }

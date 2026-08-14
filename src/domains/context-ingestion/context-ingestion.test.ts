@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, symlink, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -11,7 +11,7 @@ import {
 import { createDigestSummarizer } from './digest-summarizer.js'
 import { createInboxProvider } from './inbox-provider.js'
 import { createChangedFilesProvider } from './changed-files-provider.js'
-import { runContextIngestion } from './ingest.js'
+import { gatherContextFragments, runContextIngestion } from './ingest.js'
 import type { ContextFragment } from './contracts.js'
 
 const identity = (value: string): string => value
@@ -255,6 +255,68 @@ describe('inbox provider', () => {
       expect(matchedCount).toBe(4)
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Only ENOENT is an empty inbox. Every failure used to be one: the resolve call
+  // was `.catch(() => undefined)`, so a path-containment refusal — a security
+  // allow/deny decision — returned the same `{ fragments: [], matchedCount: 0 }`
+  // as a directory that was simply never created, and the run went on to report
+  // that the change had no written intent.
+  test('a path-containment refusal propagates instead of reading as an empty inbox', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-inbox-'))
+    const outside = await mkdtemp(path.join(tmpdir(), 'codereviewer-outside-'))
+
+    try {
+      await mkdir(path.join(outside, 'context'), { recursive: true })
+      await writeFile(
+        path.join(outside, 'context', 'ticket.md'),
+        '---\nsource: jira\nid: PROJ-1\n---\nIntent outside the repository.\n'
+      )
+      // An in-repo directory name whose real target is outside the root.
+      await symlink(path.join(outside, 'context'), path.join(root, 'context'))
+
+      const provider = createInboxProvider({
+        type: 'inbox',
+        dir: 'context',
+        maxFiles: 20,
+        maxFileBytes: 64_000
+      })
+
+      await expect(provider.gather(gatherInput(root))).rejects.toThrow(
+        /resolve inside the root/iu
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  // The other half of the same defect: the refusal has to reach the caller's
+  // failure channel, because `failed: false, matchedCount: 0` is what the
+  // change-intent report renders as the benign "no written intent" message.
+  test('a refused inbox path is recorded as a failed provider, not an empty one', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-inbox-'))
+    const outside = await mkdtemp(path.join(tmpdir(), 'codereviewer-outside-'))
+
+    try {
+      await mkdir(path.join(outside, 'context'), { recursive: true })
+      await symlink(path.join(outside, 'context'), path.join(root, 'context'))
+
+      const { providerMetrics } = await gatherContextFragments({
+        providers: [
+          { type: 'inbox', dir: 'context', maxFiles: 10, maxFileBytes: 1000 }
+        ],
+        repositoryRoot: root,
+        changedFiles: [],
+        redact: identity
+      })
+
+      expect(providerMetrics).toHaveLength(1)
+      expect(providerMetrics[0]?.failed).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 

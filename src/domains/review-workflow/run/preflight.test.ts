@@ -12,6 +12,9 @@ const passedDrift = {
   warningCount: 1,
   errorCount: 0,
   generatedArtifactStatus: 'compared',
+  scanCoverageStatus: 'scanned',
+  scannedFileCount: 1,
+  absentScanRoots: [],
   findings: [
     {
       id: 'docs-warning',
@@ -30,6 +33,9 @@ const failedDrift = {
   warningCount: 0,
   errorCount: 1,
   generatedArtifactStatus: 'compared',
+  scanCoverageStatus: 'scanned',
+  scannedFileCount: 1,
+  absentScanRoots: [],
   findings: [
     {
       id: 'security-error',

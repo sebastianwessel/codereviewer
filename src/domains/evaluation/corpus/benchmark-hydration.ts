@@ -8,6 +8,7 @@ import {
   parseGitDiffHunkHeader,
   parseGitDiffNewPath
 } from '../../../shared/diff/git-diff-header.js'
+import { isFileNotFoundError } from '../../../shared/errors/error-normalizer.js'
 
 const defaultSourceSliceRoot = 'eval/benchmarks/code-review-bench-style'
 const defaultOutputSliceRoot =
@@ -203,12 +204,7 @@ const pathExists = async (filePath: string): Promise<boolean> => {
     await readFile(filePath)
     return true
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       return false
     }
 

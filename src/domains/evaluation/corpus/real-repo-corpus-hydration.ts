@@ -6,6 +6,7 @@ import {
   resolveExistingPathInsideRoot,
   resolveWritePathInsideRoot
 } from '../../../platform/path-service.js'
+import { isFileNotFoundError } from '../../../shared/errors/error-normalizer.js'
 import { materializeDiffFiles } from './benchmark-hydration.js'
 import { EvalSliceCaseSchema } from './eval-fixture.schema.js'
 import {
@@ -325,12 +326,7 @@ const readOptionalText = async (
   try {
     return await readFile(filePath, 'utf8')
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       return undefined
     }
 

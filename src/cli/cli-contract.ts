@@ -25,14 +25,4 @@ export type CliRunOptions = {
   // no `generatedAt` is supplied at all, so this stays a thin seam rather than
   // a second source of truth for the clock).
   readonly now?: () => Date
-  // Monotonic clock used to measure `metrics.elapsedMs` on eval reports: the
-  // WHOLE run's wall-clock time (per-case review execution plus judge/
-  // plausibility scoring), as opposed to `metrics.durationMs`, which only sums
-  // each case's own review time. Deliberately a separate seam from `now`
-  // above: `now` stamps a point in time (`generatedAt`), this measures a
-  // monotonic duration, and `Date.now()` is not monotonic (it can jump on a
-  // clock adjustment), so the two must never share one clock. Defaults to
-  // `performance.now` in production; tests inject a deterministic function so
-  // a saved report stays byte-for-byte reproducible.
-  readonly monotonicNow?: () => number
 }

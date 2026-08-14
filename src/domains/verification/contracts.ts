@@ -33,6 +33,17 @@ export type ClaimGatherOutput = {
    * different loss and must not be folded in here.
    */
   readonly withheldByCap: number
+  /**
+   * How many entries the provider read but could not turn into a `Claim` —
+   * records that failed the `Claim` schema and were skipped.
+   *
+   * The counterpart to `withheldByCap`, and required for the same reason. A
+   * skipped entry is never judged and never fixed, and skipping it silently makes
+   * a claims file whose records all have the wrong shape indistinguishable from an
+   * empty one: the run reports zero claims and reads as "nothing to verify". A
+   * provider that cannot drop entries reports 0.
+   */
+  readonly malformedEntryCount: number
 }
 
 export type ClaimProvider = {

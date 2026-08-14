@@ -261,6 +261,31 @@ check`, exit `2`). Stdout is the drift result JSON. Exit `1` when the drift gate
 fails — that is, when findings exist in a category listed in
 [`drift.failOn`](./configuration/quality-gate-and-baseline.md#drift).
 
+Two fields on the result report what the check was able to *read*, separately
+from what it found. They exist because `passed` cannot carry that: a check that
+scanned nothing also reports zero findings, and without these it is
+indistinguishable from a clean repository.
+
+| Field | Value | Meaning |
+| --- | --- | --- |
+| `scanCoverageStatus` | `not-checked` | Drift checking is off (`drift.enabled: false`). |
+| | `absent` | None of `README.md`, `docs/`, `specs/` exist. Nothing was read. |
+| | `partial` | Some of those roots exist. Only part of the check had input. |
+| | `scanned` | All three roots exist and were read. |
+| `scannedFileCount` | integer | Files the content checks actually read. |
+| `absentScanRoots` | array | Which of the three roots were not there. |
+| `generatedArtifactStatus` | `not-checked` | Drift checking, or `drift.includeGenerated`, is off. |
+| | `absent` | Neither copy of the generated config schema exists. |
+| | `incomplete` | Exactly one copy exists. Reported as a finding. |
+| | `unreadable` | A copy exists but could not be read. Reported as a finding. |
+| | `compared` | Both copies were read and compared. |
+
+A missing scan root is **not** a failure and does not affect `passed` or the
+exit code — a repository that consumes this tool is not obliged to have `docs/`
+or `specs/`. But `"scanCoverageStatus": "absent"` alongside `"passed": true`
+means the documentation half of the gate had nothing to check, which is usually
+a sign the command ran from the wrong working directory.
+
 ## `codereviewer impact check`
 
 ```
