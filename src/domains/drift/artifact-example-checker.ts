@@ -41,8 +41,9 @@ import { collectTextFiles, type TextFile } from './markdown-sources.js'
 // and it exists because that checker's scope was the only scope anything had.
 //
 // `docs/02-getting-started/install-and-run.md` printed an `impact check` report
-// with `"schemaVersion": "1.1"` and a three-key summary for a week after the
-// producer moved to `3.0` with a seventeen-field summary. That is the page a new
+// with a three-key summary for a week after the producer had moved to a
+// seventeen-field one (the version literals involved have since been reset to
+// `"1.0"`; the shape drift is the part that mattered). That is the page a new
 // user reads first, and nothing in the suite, the drift check or the schema
 // generator looked at it. A documented artifact shape a consumer cannot receive
 // is worse than no example: it is a contract handed to somebody who trusted the
@@ -92,8 +93,11 @@ export const ArtifactExampleIssueKindSchema = z.enum([
   // A key the contract cannot emit at that position.
   'unknown-key',
   // A `schemaVersion` that is not the literal the producer emits today. Kept
-  // apart from `unknown-enum-value` because it is the version handshake itself,
-  // and it is the one a reader's parser branches on.
+  // apart from `unknown-enum-value` because it is the first line of the example
+  // a reader copies, so a wrong value there discredits the whole block —
+  // NOT because anything branches on it. No code in this repository dispatches
+  // on the value, which is why spec 06 withdrew the bump-on-every-change rule
+  // and pinned every artifact at `"1.0"` while the product is unreleased.
   'stale-schema-version',
   // A value outside a closed enum (or a literal other than a discriminator's).
   'unknown-enum-value',

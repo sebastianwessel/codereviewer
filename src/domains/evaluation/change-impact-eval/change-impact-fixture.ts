@@ -168,7 +168,7 @@ export const impactReportFixture = (input: {
   }
 
   return {
-    schemaVersion: '3.0',
+    schemaVersion: '1.0',
     status: input.status ?? 'completed',
     adjudicationStatus: input.adjudicationStatus ?? 'completed',
     generatedAt: '2026-08-06T00:00:00.000Z',

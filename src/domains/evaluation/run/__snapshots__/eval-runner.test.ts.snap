@@ -1832,7 +1832,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "minRecall": 1,
     },
   },
-  "schemaVersion": "2.0",
+  "schemaVersion": "1.0",
   "scoring": {
     "adjustedPrecisionTrustworthy": true,
     "judgeAgreement": 1,

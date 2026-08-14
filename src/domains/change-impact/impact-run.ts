@@ -217,7 +217,7 @@ const disabledReport = (input: {
   readonly generatedAt: Date
 }): ChangeImpactReferenceReport =>
   ChangeImpactReferenceReportSchema.parse({
-    schemaVersion: '3.0',
+    schemaVersion: '1.0',
     status: 'disabled',
     adjudicationStatus: 'disabled',
     generatedAt: input.generatedAt.toISOString(),
@@ -518,7 +518,7 @@ export const runChangeImpact = async (
   warnings.push(...adjudicated.warnings)
 
   return ChangeImpactReferenceReportSchema.parse({
-    schemaVersion: '3.0',
+    schemaVersion: '1.0',
     status: 'completed',
     adjudicationStatus: adjudicated.status,
     generatedAt: generatedAt.toISOString(),

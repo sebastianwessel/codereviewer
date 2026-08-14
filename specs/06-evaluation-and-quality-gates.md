@@ -449,15 +449,37 @@ written in. It is bumped whenever a change alters what a metric would report for
 identical review output — expectation assignment and the model category taxonomy
 have each done so.
 
-**`schemaVersion` MUST be bumped whenever a field is added, removed or reshaped
-anywhere in the report**, and it is `"2.0"` since 2026-08-11. It was not bumped when
-the case result's four per-classification finding arrays became one
-`producedFindings`, nor when that gained a `description`, so one literal described
-three incompatible payloads. A version that does not move when the payload does is
-worse than no version: it asserts a compatibility that does not hold. The cost here
-was concrete — roughly a hundred engine-pinned archives, the evidence base this
-ledger is written from, declared the version the reader expected and were then
-rejected on unknown keys.
+**`schemaVersion` is `"1.0"` for every artifact this repository writes, and stays
+there while the product is unreleased (amendment 2026-08-14).** The rule it
+replaces required a bump on every field added, removed or reshaped, and it was
+withdrawn because the bump was never doing the work it was credited with.
+
+The evidence is the incident that motivated the old rule. When the case result's
+four per-classification finding arrays became one `producedFindings`, roughly a
+hundred engine-pinned archives stopped opening — and the record of that failure
+says they "were then rejected on unknown keys". The STRICT SHAPE check caught the
+change. The version literal, which still matched, caught nothing. Bumping it
+afterwards did not restore a single archive, because no code anywhere dispatches
+on the value: there is no migration, no version branch, no reader that behaves
+differently at `"2.0"` than at `"1.0"`. What made those archives readable again
+was a reader that asks only for the fields it consumes.
+
+So the number recorded a history with no consumer able to act on it. Pre-release,
+with no installed base, an incrementing literal is the ceremony of versioning
+without its function — and it costs something real: three of these artifacts had
+drifted to `"1.1"`, `"2.0"` and `"3.0"` independently, inviting the reader to infer
+a compatibility relationship between them that has never existed.
+
+The contrast with `metricsVersion`, immediately below, is the point. That version
+has machinery — an ordered history, a declared `affects` set per entry, and
+comparability derived from it — so its value changes what the code does. This one
+had none. A field that no branch reads is documentation, and documentation should
+state what is true now: one schema generation, version one.
+
+Artifacts written by earlier builds remain on disk as measurement data. They are
+read through views that request only the fields an analysis consumes, which is a
+property of reading an experiment archive rather than a compatibility layer, and
+is bounded at `eval-recall-view.ts`.
 
 A version is not a bare string. `eval-metrics-versions.ts` holds an ORDERED
 history in which every entry declares its id, a note, and the metrics that entry

@@ -230,7 +230,7 @@ codereviewer impact check --base-ref origin/main --head-ref HEAD
 
 ```json impact-report
 {
-  "schemaVersion": "3.0",
+  "schemaVersion": "1.0",
   "status": "disabled",
   "adjudicationStatus": "disabled",
   "generatedAt": "2026-08-12T03:44:14.769Z",

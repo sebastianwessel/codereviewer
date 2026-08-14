@@ -611,7 +611,7 @@ describe('runPipeline: failure modes', () => {
 describe('runPipeline: the engine and the digest disagree', () => {
   const unreadable = (artifactPath: string) => async (path: string) =>
     path === `${ARTIFACT_DIR}/${artifactPath}`
-      ? JSON.stringify({ schemaVersion: '3.0', wrong: 'shape' })
+      ? JSON.stringify({ schemaVersion: '1.0', wrong: 'shape' })
       : path === `${ARTIFACT_DIR}/report.json`
         ? JSON.stringify(reviewReportFixture)
         : path === `${ARTIFACT_DIR}/review-comments.github.json`

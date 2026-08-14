@@ -493,7 +493,7 @@ export const EvalReportSchema = z.strictObject({
   // here or in anything it contains. `metricsVersion` is a different question and
   // answers it separately — that one says how the numbers were COMPUTED, this one
   // says what shape they arrive in.
-  schemaVersion: z.literal('2.0'),
+  schemaVersion: z.literal('1.0'),
   // This is the PRODUCER contract, and it carries no tolerance for an artifact an
   // older build wrote: a report that does not satisfy it was not written by a
   // compatible build and cannot be rendered field-for-field. Reading across

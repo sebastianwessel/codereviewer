@@ -350,7 +350,7 @@ describe('digestImpactReport', () => {
   it('does not give one symbol the callers of a same-named symbol', () => {
     const digest = digestImpactReport(
       json({
-        schemaVersion: '3.0',
+        schemaVersion: '1.0',
         status: 'completed',
         summary: {
           changedSymbolCount: 2,

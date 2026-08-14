@@ -519,7 +519,7 @@ const ImpactedFileSchema = z.object({
 })
 
 const ImpactReportSchema = z.object({
-  schemaVersion: z.literal('3.0'),
+  schemaVersion: z.literal('1.0'),
   // Pinned to the closed vocabulary, unlike the intent report's status, because
   // here an unrecognised value is SILENT: `impactSection` renders nothing for any
   // status but `completed`, so a sixth value would remove the section without

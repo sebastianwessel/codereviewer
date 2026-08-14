@@ -90,7 +90,7 @@ const report = (input: {
     input.adjudicationCallCount ?? modelRelianceCount + modelNoImpactPairCount
 
   return ChangeImpactReferenceReportSchema.parse({
-    schemaVersion: '3.0',
+    schemaVersion: '1.0',
     status: input.status ?? 'completed',
     adjudicationStatus:
       input.adjudicationStatus ??

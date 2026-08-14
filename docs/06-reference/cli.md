@@ -397,7 +397,7 @@ altered about each symbol, and how far the search could see.
 
 ```json impact-report
 {
-  "schemaVersion": "3.0",
+  "schemaVersion": "1.0",
   "status": "completed",
   "adjudicationStatus": "completed",
   "generatedAt": "2026-07-28T00:00:00.000Z",

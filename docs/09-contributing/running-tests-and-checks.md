@@ -222,7 +222,7 @@ info string**, in the same slot `json config` already uses:
 
 ````markdown
 ```json impact-report
-{ "schemaVersion": "3.0", "status": "completed" }
+{ "schemaVersion": "1.0", "status": "completed" }
 ```
 ````
 

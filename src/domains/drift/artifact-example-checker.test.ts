@@ -43,9 +43,12 @@ describe('documented artifact examples', () => {
 
   // THE DEFECT THIS EXISTS FOR, reproduced from the page it shipped on.
   // `docs/02-getting-started/install-and-run.md` printed this `impact check`
-  // output for a week after 434473a moved the contract to `3.0`, while the
-  // GitHub digest downstream of the same contract rendered an empty section.
-  // Nothing looked at the block; this is what looking at it says.
+  // output for a week after 434473a reshaped the contract, while the GitHub
+  // digest downstream of the same contract rendered an empty section. Nothing
+  // looked at the block; this is what looking at it says. The literals have
+  // since been reset to `"1.0"` repository-wide (spec 06, 2026-08-14), so the
+  // stale value here is now stale against `"1.0"` — the drift is the point,
+  // not the particular numbers.
   test('the stale impact-report example this check was built for is reported', () => {
     const result = checkArtifactExamplesInFile(
       markdown('docs/02-getting-started/install-and-run.md', [
@@ -63,7 +66,7 @@ describe('documented artifact examples', () => {
     expect(result.issues).toHaveLength(1)
     expect(result.issues[0]?.kind).toBe('stale-schema-version')
     expect(result.issues[0]?.line).toBe(1)
-    expect(result.issues[0]?.message).toContain('"3.0"')
+    expect(result.issues[0]?.message).toContain('"1.0"')
   })
 
   // ANTI-VACUITY, guard 1. Every assertion above is satisfied by an extractor

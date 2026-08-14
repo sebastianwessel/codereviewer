@@ -371,7 +371,7 @@ export const intentReportFixture = asProducedByThisEngine(
 export const impactReportFixture = asProducedByThisEngine(
   ChangeImpactReferenceReportSchema,
   {
-    schemaVersion: '3.0',
+    schemaVersion: '1.0',
     status: 'completed',
     // Adjudication is off by default, so a report whose reference list was never
     // triaged is the ordinary shape — and `disabled` is the vocabulary the producer
