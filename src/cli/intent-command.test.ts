@@ -142,7 +142,14 @@ let repositoryTemplate: string | undefined
 
 beforeAll(async () => {
   repositoryTemplate = await buildRepositoryTemplate()
-})
+  // Explicit, because `describe`'s `timeout` option DOES NOT COVER HOOKS. The
+  // suite below raises the per-test timeout and that raise never reached this
+  // hook, which is where the file's expensive work actually happens -- seven
+  // `git` spawns from a vitest worker. Under parallel load it exceeded the
+  // default and the file failed at `beforeAll`, reporting nothing about the code
+  // under test. `review-e2e.test.ts` hit the same trap and carries the same
+  // explicit bound.
+}, 60_000)
 
 // The template is absent only when the build above failed, which vitest already
 // reports; cleaning up unconditionally would bury that failure under a second
