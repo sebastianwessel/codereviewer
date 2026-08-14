@@ -989,6 +989,30 @@ each change's own commit message and is a control, reported separately and never
 pooled. No case is synthetic, and `mismatchOrigin` is in the data so one cannot be
 added silently.
 
+**What the post-hoc arm controls for, said plainly (2026-08-14), and what it cannot
+register.** A commit message is written after the work, so obligations read out of one
+are addressed by construction — and the corpus is exactly that shape: verified against
+`eval/corpora/intent-fulfilment/manifest.json`, **all 7 post-hoc cases carry zero
+`outstandingExpectations`**, and all 67 rows sit in the 21 pre-written cases, 6 of
+which also carry zero, so 15 cases hold the whole answer key. An arm with an empty
+answer key cannot produce a false-satisfied claim and cannot produce an
+outstanding-recall figure; it is therefore **not** a control on the endpoint this
+spec ranks first. What it does control is the *shape of the intent*: it asserts that
+obligations extracted from a commit message come back near-fully evidenced, so the
+figures to read in that arm are `obligationCount`, `notEvidencedCount` and coverage —
+not the rates, and not the claim count.
+
+**Requirement: a count over an empty expectation set says so beside the number.**
+*A degenerate result is called out in both directions* is already stated for
+`not-contradicted`; it applies with more force to `falseSatisfied.claimCount`, which
+is a plain integer on the metric the decision rule is stated on, and which renders a
+bold `0` in the arm that has an empty key by construction. That is the silent-optimism
+shape — an empty denominator producing a confident answer — on the deciding number.
+The scorer emits an arm warning when `expectationCount` is zero, returning it *early*
+so it is not accompanied by an empty-join warning that would misdiagnose it
+(`intent-eval-scoring.ts`); the rule is recorded here so the behaviour is required
+rather than incidental.
+
 **The answer key is the fixed human enumeration and nothing else.** Each row is an
 obligation a human read in the excerpt and found genuinely not done at head, in the
 human's own words, including items no extraction ever proposed. It is never
@@ -1084,8 +1108,10 @@ already owes across 2026-08-06 is owed on this instrument.
 
 ## How The Lane Is Invoked
 
-The lane runs in **one of two places**, and the guarantees above hold identically
-in both.
+The lane runs in **one of two places**. The guarantees above hold in both, but
+**not identically** — the word was struck on 2026-08-14, because the difference is
+exactly where this spec's own worst failure direction lives, and the 2026-08-11
+default flip moved essentially all traffic onto the weaker side of it.
 
 `review` runs it in-process after the review when `intentFulfilment.enabled` is true,
 over the same run context — so one push issues one set of git subprocesses and
@@ -1102,3 +1128,53 @@ in `src/cli/advisory-lanes.ts`: a throw from this lane becomes a warning on the
 review report and an absent stage report, never a non-zero exit and never a lost
 review. A disabled lane still runs nothing at all — being invoked from `review`
 does not turn a stage on.
+
+### The Two Shapes Of A Binding Limit
+
+*Limits Refuse; They Never Truncate* spends thirty lines establishing that a bound
+which binds MUST refuse, with a named code and **exit 4**, because *"bounding the
+obligation list under-reports what is left, which is the single direction this
+capability must not err in."* Under `intent check` that is what happens. Under
+`review` the same refusal is caught by the wrapper above and becomes a warning line.
+
+**The safety half survives identically: nothing is truncated on either path.** The
+**visibility** half does not. A hard exit 4 with a named code stops a human; a
+warning line beside a list of findings does not, and a pull request whose intent
+yields more than `maxObligations` obligations produces a review report with no intent
+section — which a reader most naturally takes as "there was nothing to report". The
+hazard the section names is *under-reporting what is left*, and on the default path
+it is realised as total silence. This is not a margin case: `pw09-spec15-measure` is
+recorded above as refusing in one round and scoring in the next, purely on extraction
+non-determinism.
+
+So the shapes are stated rather than equated:
+
+| | `intent check` | in-process under `review` |
+| --- | --- | --- |
+| a limit binds | exit **4**, named code, value that bound | no exit-code change; warning naming the same code and value |
+| the lane throws | the command's error path | warning; review keeps its exit code and gate |
+| no headroom under `review.maxCostUsd` | not applicable — its own budget | stage does not start; warning naming spend, cap and the standalone command |
+| the lane is disabled | reports itself disabled, exit `0` | runs nothing at all |
+
+**Requirement.** When the intent section is absent from a review report and the lane
+was expected to answer, the report MUST say why — a limit bound, the stage failed, or
+the stage was stopped for budget are three different facts and the reader's next
+action differs for each. Collapsing them into an absent section is the under-reporting
+this capability must not do. A **disabled** lane is exempt and MUST stay silent: the
+operator stated that this question is not asked, so there is no absence to explain.
+
+**Known divergence, recorded rather than assumed closed (2026-08-14).** The three
+non-disabled cases do each produce a warning, and the budget case names its own cause
+in full. A limit-bound refusal and an ordinary stage failure currently share one
+warning shape carrying the normalised error MESSAGE, while the error CODE reaches the
+structured log and not the reader-facing warning
+(`src/cli/advisory-lanes.ts`). Since *Limits Refuse; They Never Truncate* requires
+every refusal to name its code, the requirement above is stated at the level the
+refusal rule already sets and the renderer does not yet meet it. The requirement is
+not lowered to match.
+
+**Left open deliberately, because it is the product owner's call:** whether a warning
+is sufficient visibility for a hazard this spec calls *"the single direction this
+capability must not err in"*. The alternative — letting a binding limit reach the
+exit code from inside `review` — would break the advisory rule below, so it is not a
+change this spec can make on its own reasoning.

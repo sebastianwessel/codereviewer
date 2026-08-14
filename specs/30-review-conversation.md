@@ -90,9 +90,12 @@ in which the reply reaches the model is a different, rejected design.
 2. Re-adjudication MUST run the existing refutation against the finding's recorded
    evidence and the current head. It MUST NOT be given a distinct prompt, a softer
    threshold, or any knowledge that a human objected.
-3. The outcome MUST be reported as its own statement — the finding held, the finding
-   was withdrawn, or the refuter could not decide — and MUST NOT silently edit the
-   original comment. A reader must be able to see that a second look happened.
+3. The outcome MUST be reported as its own statement — the finding **held**, the
+   finding was **not reported again**, or the refuter could not decide
+   (**undecided**) — and MUST NOT silently edit the original comment. A reader must
+   be able to see that a second look happened. **The vocabulary MUST NOT say
+   "withdrawn", "resolved" or "fixed"** for the middle status: see *The Middle Status
+   Cannot Be "Withdrawn"* below.
 4. A finding that is re-adjudicated and holds MUST say so plainly. "Re-checked
    against the same evidence; it still holds" is the useful answer and the honest
    one.
@@ -104,6 +107,49 @@ in which the reply reaches the model is a different, rejected design.
 7. Nothing about the reply — its author, its text, its existence — may be stored
    beyond the run. The standing no-interaction-telemetry decision is not revisited
    here.
+
+## The Middle Status Cannot Be "Withdrawn"
+
+**Amendment 2026-08-14.** Requirement 3 originally offered *"the finding was
+withdrawn"* as the middle outcome, and the implementation refuses to emit it —
+*"This status is deliberately never 'withdrawn': this comparison cannot tell a
+genuine withdrawal from a finding this run simply did not reproduce"*
+(`scripts/github/review-conversation.ts`). The code is right and the requirement was
+wrong, so the requirement moved rather than the code.
+
+The reason is the mis-scoping recorded at the top of this spec. Re-adjudication is
+not a targeted re-refutation of one finding; it is **a full stateless re-review**,
+which re-discovers from scratch and is stochastic. Curated defects with proven
+findability reproduce **13 of 15 case-runs** when they are the diff (ledger,
+2026-08-10 multi-defect entry). So a finding's absence from the second run has two
+causes — it was genuinely refuted, or this run did not find it — and the comparison
+sees only the absence. Naming that "withdrawn" would report the engine's own sampling
+noise as a verdict, in the direction that pleases whoever asked.
+
+### The Boundary Holds In Transport, And The Effect Is Still Worth Stating
+
+*It is not a negotiation* is true where it is checked: `ReviewCommentReplyEventSchema`
+declares only `action` and `comment.in_reply_to_id`, so `body` and `user` are never
+parsed and no reply text can reach any packet. Requirement 2 really is satisfied by
+construction.
+
+What that does **not** establish is that the verdict is a function of the evidence.
+Given the reproduction rate above, each reply buys another sample of a stochastic
+process, and a finding that fails to reappear is reported as `no-longer-reported`. At
+roughly 87% per-reply reproduction — measured on the *easiest* class of defect, one
+with proven findability — the chance of at least one non-reproduction is about 34% at
+three replies and about 50% at five. That is demotion by reply volume with no
+persuasive word written, and it is a reason for a bound (requirement 5) rather than
+evidence of a transport leak. **Nothing here reopens the design: a reply reaching the
+model remains the one defect this lane cannot carry.**
+
+**Unmeasured, and named so it is not assumed.** The fingerprint requirement 1 relies
+on, `v3-category-path-anchor`, has never had its own cross-run stability measured.
+The 2026-08-08 study measured `(category, path, title)` — 22 of 23 cases varied
+across ten identical runs — and fixed it by removing the model-written `title`, which
+was the churning field. The stability of the surviving tuple was computable from data
+already on disk and was not computed. Any figure above that depends on a finding
+being recognisable across runs inherits that gap.
 
 ## Configuration
 
@@ -119,6 +165,45 @@ object is strict: setting anything other than `enabled` is a configuration error
 not a silent no-op, and the schema test asserts that both `{blocking: true}` and
 `{maxReplies: 10}` are rejected.
 
+### Requirement 5 Is Currently Unsatisfied, And The Reasoning Above Is Why
+
+**Amendment 2026-08-14.** Requirement 5 demands a bound on re-adjudication per pull
+request *and* disclosure when it is reached. This section names no value and rejects
+`maxReplies` by name, so the implementer had nowhere to put one. That is a spec
+demanding a thing and forbidding its only stated home, and the two paragraphs were
+written without reference to each other.
+
+**The justification for the ban does not cover this case.** It argues from
+requirement 2 (no softer threshold) and requirement 6 (no blocking). Neither concerns
+a **call budget**: a cap on how many times the question is re-asked gives the re-run
+no knowledge that a human objected, and it cannot fail a gate. The keys the ban was
+written for are the ones that change the *answer*; `maxReplies` changes only how many
+times it is *computed*. The ban stands for `blocking` and for anything prompt- or
+threshold-shaped; it was over-broad for a budget.
+
+**What shipped is not the bound.** The workflow's `concurrency` group
+(`.github/workflows/code-review.yml`) carries a comment claiming it *is* requirement
+5's flood bound. It is not: `cancel-in-progress` bounds the runs **in flight** per
+pull request, not the runs **total**. Replies paced apart each start a full review,
+indefinitely. It also discloses nothing, which requirement 5 separately demands.
+
+**And the cost premise is stale in the direction that matters.** When requirement 5
+was written, re-adjudication meant one refutation pass. After the mis-scoping
+correction recorded at the top of this spec, the unit of spend is **an entire review
+run** — discovery, merge, refutation and both advisory lanes. Requirement 5 was never
+revisited against that. Enabling this lane on a public repository therefore lets
+anyone with comment access — weaker than commit access, as *The Threat Model* itself
+notes — drive one full paid review per reply.
+
+**Position, and what is left to the product owner.** Requirement 5 is recorded as
+**unsatisfied**, not relaxed: the lane's promotion gate below asks that *"the bound in
+requirement 5 holds under a flood"*, and that cannot currently be evaluated, so this
+amendment does not make the lane promotable. What the value should be, and whether it
+belongs in `reviewConversation` or in the workflow, is a decision this spec does not
+take on its own reasoning. The mitigating fact, stated so the urgency is not
+overstated: `reviewConversation.enabled` defaults **false**, so no run reaches this
+path unless an operator has opted in.
+
 It is top-level rather than nested under `review` because the lane is a property of
 the platform integration, not of the review.
 
@@ -129,8 +214,15 @@ that matters, because the advisory corpus supplies proven-true findings:
 
 - **Hold rate under pushback.** Take findings the corpus proves are real defects.
   Trigger re-adjudication with a plausible but wrong objection. The finding MUST
-  hold. Target: indistinguishable from 100%, since the reply is not an input and any
-  movement at all means the boundary leaks.
+  hold. Target: **indistinguishable from the no-reply baseline** — corrected
+  2026-08-14, because this bullet said *"indistinguishable from 100%, since the reply
+  is not an input and any movement at all means the boundary leaks"* while the
+  promotion rule twelve lines below already said "baseline". The 100% form is not
+  reachable and never was: re-adjudication is a full stateless re-review and a real
+  finding reproduces at roughly 87% even when its findability is proven, so the 100%
+  target would fail on resampling and the failure would be attributed to a leak the
+  transport boundary provably does not have. The baseline form is the one that tests
+  the property — the reply changes nothing — and it is the one that stands.
 - **Withdraw rate on planted-wrong findings.** Construct findings the corpus proves
   are not real. Re-adjudication SHOULD withdraw them at the same rate it does
   without a reply — again, no movement, since the reply changes nothing.
@@ -145,6 +237,14 @@ a flood, and the reported outcome is legible to a reader who did not write the r
 
 **Keep disabled** otherwise. **Remove** if reply text is found reaching any model
 packet by any path, because that is the one defect this lane cannot carry.
+
+**The instrument does not exist yet, and "ships disabled until measured" therefore
+means "ships disabled" (recorded 2026-08-14).** The plan above is written in terms of
+the advisory corpus and the eval harness, while `reviewConversation.enabled` is
+consumed by the GitHub pipeline in `scripts/github/` and not by the engine — so
+`eval run` cannot exercise it, as the capability inventory records under
+CAP-CONV-001. Building a measurement path is a precondition of this plan, not a step
+inside it. This is a gap in the plan, not a reason to promote without one.
 
 ## What Is Deliberately Not Here
 

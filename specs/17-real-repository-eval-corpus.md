@@ -242,15 +242,26 @@ answer key**:
 | blended, as previously reported | 46.3% |
 
 **Superseded for quoting purposes.** The answer key moved twice on 2026-07-27, and
-the current baseline on the clean 37-case / 87-expectation corpus (results ledger,
-marked CURRENT) reads **in-diff 64.4% (116/180), out-of-diff 0.0% (0/81), blended
-44.4%**, with the expectation mix at 60 in-diff to 27 out-of-diff — **31%**
-out-of-diff, down from the 42.5% below. In-diff recall *fell*, and that is the
-cleanup working: the five cases removed for answer-key disclosure had been scoring
-83.3%, and the six added are multi-defect by construction. The figures above are
-retained because the argument they establish — that the two populations must never
-be blended, and that the hunk-span rule beats an added-lines rule — does not depend
-on the key.
+the successor figures were transcribed into this paragraph by hand — which is
+exactly how they went stale. **They are no longer transcribed here (2026-08-14).**
+The current in-diff and blended rates for this corpus have one owner, the newest
+`reports/eval-results-ledger.md` entry for this corpus and population, and the rule
+for citing it is in `05-review-workflow-and-runtime.md` under *The Published Rate
+Has One Owner*. As of this amendment the ledger's latest entry on this corpus is the
+2026-08-06 control arm, which states outright that it *"supersedes the 2026-08-05
+baseline"*; the transcription this paragraph used to carry (in-diff 64.4%,
+blended 44.4%) was two baselines behind by then.
+
+What this subsection still asserts in its own right, because it is what the argument
+below rests on and it has not moved: **out-of-diff recall is 0, on every seed of
+every recorded run.** Note the denominator changed with the key — 0 of 81 against the
+independently labelled key above, 0 of 27 against the 60-in-diff/27-out-of-diff mix
+the ledger scores — so it is 31% of the current expectation mix, down from the 42.5%
+below. In-diff recall *fell* across the 2026-07-27 cleanup, and that is the cleanup
+working: the five cases removed for answer-key disclosure had been scoring 83.3%, and
+the six added are multi-defect by construction. The figures above are retained
+because the argument they establish — that the two populations must never be blended,
+and that the hunk-span rule beats an added-lines rule — does not depend on the key.
 
 Every figure in this subsection was derived by hand, which is why each has had to
 be dated and superseded by hand. A run scored after the classification landed

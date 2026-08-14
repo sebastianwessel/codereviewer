@@ -38,7 +38,7 @@ already run CodeQL, linters, formatters, tests, and build checks.
 | ID | Criterion | Verification |
 | --- | --- | --- |
 | VIS-001 | Actionable review output includes only admitted findings whose refutation verdict is `proved`. | Admission, refutation, and report integration tests. |
-| VIS-002 | Default runs leak no raw source, prompts, provider responses, or secrets into logs/traces/reports. | Redaction and artifact snapshot tests. |
+| VIS-002 | Default runs leak no raw source, prompts, or provider responses into logs/traces/reports, and remove every secret shape on the redactor's pattern list plus every operator-configured exact value. Completeness beyond that list is NOT claimed — see `07-security-privacy-operations.md`, *What The Mechanism Supports, And What It Does Not*. | Redaction and artifact snapshot tests over known tokens, per seam. |
 | VIS-003 | Provider packages are optional and isolated from base imports. | Provider-resolution unit tests and static import scan. |
 | VIS-004 | Reports are deterministic from canonical contracts. | Snapshot and schema validation tests. |
 | VIS-005 | Agent implementation work proceeds from approved tickets only. | Planning gate and ticket review. |

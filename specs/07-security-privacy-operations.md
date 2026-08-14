@@ -149,6 +149,64 @@ redactor — a capability no production call site can reach is not a capability,
 this one was reachable only from its own unit test until 2026-08-11
 (`src/domains/configuration/secret-redaction.test.ts`).
 
+### What The Mechanism Supports, And What It Does Not
+
+**Amendment 2026-08-14.** `VIS-002` and `INV-SEC-001` are stated as absolutes —
+runs *"leak no … secrets"*. The mechanism is a closed list of pattern families plus
+operator-configured exact values, and the verification is snapshot tests over
+**known** tokens. Tests over known tokens establish that the listed patterns are
+removed from the covered surfaces; they cannot establish "no secrets", and the
+record shows the method missing in both directions:
+
+- **False negative, shipped for months.** The reviewed diff was the one path that did
+  not redact until 2026-08-11 (above). The verification method did not catch it.
+- **Second false negative.** The configured-exact-secret redactor was reachable only
+  from its own unit test until 2026-08-11.
+- **False positive, at a measured rate.** Over this repository's 1,019 tracked files
+  and 4,234 dependency files (52 MB), the redactor made 210 substitutions and **zero
+  were real secrets**; 76 were not credential-shaped at all, because
+  `sk-[A-Za-z0-9_-]{16,}` had no left boundary and matched the tail of any hyphenated
+  identifier containing `sk-`.
+
+**The supported claim**, which is what these invariants should be read as: the listed
+pattern families and configured exact values are removed from logs, traces, reports
+and provider-bound context, verified by snapshot tests at each seam. **Residual
+secret shapes outside the list are not covered and no completeness claim is made.**
+The invariants are not weakened as requirements — the requirement is still that
+nothing on the list reaches those surfaces — but a reader must not take "verified by
+redaction tests" as a proof of absence for shapes nobody enumerated.
+
+### Over-Redaction Of Model Input Is A First-Class Failure Mode
+
+Direction matters, and it changed with the surface on 2026-08-11. Over-redacting a
+**log** is cosmetic: a value a human would have read is hidden. Over-redacting
+**model input** is a silent quality change — the reviewer is shown `[REDACTED]` where
+the file has text and reasons about code that does not exist, which is a recall and
+precision defect with no natural detector, because a finding that was never made
+produces no output.
+
+Requirements, all shipped 2026-08-13:
+
+- **Redaction of packet-bound material MUST be counted**, separately for the reviewed
+  diff and for task context.
+- **A non-zero count MUST be disclosed as a run warning** naming both counts and the
+  remedy (search the changed files for `[REDACTED]` and decide whether a credential
+  is committed there or a pattern matched ordinary code). The warning MUST be silent
+  at zero: one that fires every run is one nobody reads, and zero is the measured
+  expected result on ordinary source.
+- **Report-artifact redaction is deliberately NOT counted**, and the asymmetry is the
+  reason: redacting an artifact is terminal, while redacting packet-bound source is
+  generative — every finding around the token is downstream of it.
+- **The context ledger MUST measure the string the model actually received.** It
+  recorded content pre-redaction while the document carried the redacted text, so
+  `contentHash` and both byte counts described a string the model never saw and a
+  reader comparing the hash against the file on disk got a match.
+- **A pattern MUST NOT match mid-identifier.** `sk-` gained `(?<![A-Za-z0-9_-])`,
+  which trades one case, stated rather than glossed: a key glued directly onto a
+  preceding identifier character is no longer redacted. Every real emission form —
+  line start, `=`, quote, `Bearer `, `(` — is pinned by a test. Re-measured after the
+  change: mid-word hits 76 → 0.
+
 ## Prompt Injection And Model Boundary
 
 Prompt injection cannot be fully prevented for arbitrary untrusted repository
@@ -473,6 +531,14 @@ User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and
 
 ## CI/CD Hardening
 
+**The template is shipped, so this section is no longer about the future
+(2026-08-14).** `.github/workflows/code-review.yml` and `scripts/github/` are inside
+First Release Scope (`00-scope-and-glossary.md`), and until this amendment the
+section below was written in the future tense — *"R1 must document these constraints
+before any CI template is shipped"* — about a template already shipped. The
+constraints below are therefore **requirements on the shipped workflow**, not
+guidance for a later one.
+
 Future hosted CI examples and templates must use secure defaults:
 
 - least-privilege repository token permissions;
@@ -485,7 +551,33 @@ Future hosted CI examples and templates must use secure defaults:
 - ephemeral runners or cleaned workspaces for sensitive runs;
 - separate review/report generation from publishing permissions.
 
-R1 must document these constraints before any CI template is shipped.
+**Compliance of the shipped workflow, checked 2026-08-14 and recorded rather than
+asserted.** It triggers on `pull_request` rather than `pull_request_target`, so
+untrusted code is never checked out in a privileged context; top-level `permissions`
+is `contents: read` and only the one job that must comment widens it to
+`pull-requests: write`; every action is pinned by commit SHA; nothing from the
+pull-request title or body is interpolated into a `run:` or `env:`; and the
+`concurrency` group bounds how many reviews are in flight per pull request. It uses
+the job's `GITHUB_TOKEN` rather than OIDC, which the list above requires only for
+cloud credentials, of which it has none.
+
+**This section is the workflow's threat model; the tables above are the engine's.**
+The invariant *"the only network path is the explicitly selected model provider
+endpoint"* and the attacker-vector table are written as product-level claims and were
+derived when `src/` was the whole product. They describe the engine, and the engine
+still makes no forge call and holds no forge credential. The shipped integration is a
+second network destination (the forge API) and the one credential-holding surface,
+and it reads attacker-authored pull-request text and posts model-derived content
+back. A reviewer auditing the product against the tables above alone would conclude
+there is exactly one network destination and no credential-holding surface; there are
+two and there is one. The engine-level invariants are unchanged and were not
+weakened — what was missing is that they are scoped to `src/`, which is now said
+here.
+
+**Not a live vulnerability, and the distinction is deliberate.** The gap this
+amendment closes is one of spec coverage: the controls exist in the workflow and are
+listed above; what did not exist was a spec statement that they are required, which
+is what makes a future edit to the workflow a violation rather than a preference.
 
 ## Standards Map
 
@@ -526,3 +618,15 @@ decision, not a cleanup. What is NOT acceptable, and is fixed, is a run reportin
 success for something it did not do. Emitting real spans, or withdrawing the key,
 is the follow-up — either is fine; the current state must simply not lie about
 which one it is.
+
+**"Either is fine" is not a decision, and the interim state has a cost (noted
+2026-08-14).** The paragraph above is right that both resolutions are acceptable and
+right that the choice is the product owner's. What it does not do is close, and the
+state it leaves standing is a **shipped, schema-validated configuration key whose
+only effect on a default install is to fail the run** with
+`opentelemetry_dependency_missing`. An operator who reads the key, sets it, and has
+not separately installed two packages this project does not depend on gets a failed
+run for enabling observability. That is a trap rather than a neutral holding
+position, so the follow-up is recorded here as **owed and undated** rather than as
+satisfied by the honesty fix. Nothing above is withdrawn: the fix to the lying log
+line was the urgent half and it landed.

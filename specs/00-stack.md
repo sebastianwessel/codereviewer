@@ -39,13 +39,25 @@ check that parsed these rows and compared each range against the matching
 | CLI `codereviewer eval slice-manifest` | Public R1 | `evaluation` | Eval contract | Emits a corpus slice manifest for a selected case set. |
 | CLI `codereviewer baseline write` | Public R1 | `admission`, `reporting` | Baseline file contract | Writes the configured baseline from a completed report; never invoked by `review`. |
 | CLI `codereviewer drift check` | Public R1 | `drift` | Drift categories | Runs the deterministic drift checks and exits by `drift.failOn`. |
-| CLI `codereviewer impact check` | Public R1 | `change-impact` | Change-impact report contract | Reports dependents of changed symbols as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
-| CLI `codereviewer intent check` | Public R1 | `intent-fulfilment` | Intent-fulfilment report contract | Maps stated obligations to evidence in the change as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
+| CLI `codereviewer impact check` | Public R1 | `change-impact` | Change-impact report contract | Reports dependents of changed symbols as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. **The same lane also runs inside a default `review`** (see below). |
+| CLI `codereviewer intent check` | Public R1 | `intent-fulfilment` | Intent-fulfilment report contract | Maps stated obligations to evidence in the change as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. **The same lane also runs inside a default `review`, issuing provider calls** (see below). |
 | Library `src/index.ts` | Public R1 | root package | exported TypeScript types | Re-exports stable types/helpers with no side effects. |
 | Config file `.codereviewer/config.json` | Public R1 | `configuration` | `03-contracts/config.schema.json` | Strict JSON config, merged with env and CLI flags. |
 | Report JSON `report.json` | Public R1 | `reporting` | `03-contracts/review-report.schema.json` | Canonical machine-readable run output. |
 | Markdown `report.md` | Public R1 | `reporting` | report rendering spec | Human-readable deterministic artifact. |
 | SARIF `report.sarif` | Public R1 | `reporting` | SARIF 2.1.0 export rules | Local SARIF export only; upload/publishing excluded. |
+
+**Correction 2026-08-14 — the advisory lanes are not standalone-only.** Both rows
+above read *"Never invoked by `review`."* until this amendment, and both had been
+false since 2026-08-11, when `changeImpact.enabled` and `intentFulfilment.enabled`
+were defaulted on. `src/cli/advisory-lanes.ts` runs both in-process after the review,
+over the same run context. This is the one table that claims to enumerate the public
+surface, so the wrong answer here is the wrong answer for three separate questions: a
+default `review` **does** issue intent extraction and per-obligation judgement calls
+(cost — see spec 04, *One Ceiling, Consumed As Headroom*), it **does** send the
+change's stated intent to a provider (what leaves the machine), and it **does** write
+`impact-report.json` and `intent-report.json` beside `report.md`. The rows that
+genuinely are never invoked by `review` — `baseline write` — say so on their own.
 
 ## Execution Semantics
 

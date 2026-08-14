@@ -114,6 +114,36 @@ instead of into a directory of its own.)
 The 74.1% remains a scope measurement quoted in this spec and NOT a capability
 claim in user-facing documentation.
 
+### The Pull-Request Comment Is A Governed Surface Too
+
+**Added 2026-08-14.** This spec named two surfaces — the JSON on stdout and the
+rendered `impact-report.md`/`.json` — and both predate the default flip, when the
+lane was opt-in and its reader was whoever ran the command. Since 2026-08-11 the
+lane's largest audience reads it somewhere this spec never mentioned: an `### Impact`
+section rendered into the top level of the pull-request comment
+(`scripts/github/summary-comment.ts`). Every rule below about what this capability
+may and may not assert applies there, and the silence has already cost something.
+
+- **A column heading is an assertion, and it is bound by the same rule as a
+  warning.** *Neither warning may assert a cause it did not check* is stated for the
+  two warnings; it is a property of the report, not of warnings. A heading that names
+  a relation the traversal did not resolve asserts that relation to every reader who
+  never opens the artifact.
+- **Known divergence, and it is the exact failure this rule forbids.** The rendered
+  table reads `| Symbol | Defined in | Callers | Test callers |`, while
+  *Known and NOT reported*, entry 7 records that *"references are matched as text,
+  not resolved as bindings"* — an aliased import lists the import line and **not** the
+  `loadUser(...)` call sites. A text-match count is therefore printed under a word
+  that names a resolved binding. The count is right for what it counts; the heading
+  names something else. The reader-facing fix is to name the column **reference
+  sites**, matching the vocabulary this spec uses everywhere else, and the divergence
+  is recorded here rather than the requirement being softened to fit the renderer.
+- **Precision travels with the list.** With adjudication off the list reaches this
+  surface untriaged at a measured precision lower bound of 5.2%. Whatever qualifier
+  the artifact carries about that, the comment surface owes the same one: a reader
+  who only ever sees the comment must not be given a more confident artifact than a
+  reader who opens the report.
+
 ## Requirements
 
 - **A run with no diff is not a run this stage can answer.** `review --files`
@@ -167,6 +197,30 @@ claim in user-facing documentation.
   "measured and rejected on 2026-08-09 (0/7 against a pre-registered 40% bar)" and
   the denominator was not the one this spec pre-registered). An operator can switch
   the lane off, and a run with it off is byte-identical to one from before the flip.
+- **The clauses above answer a pipeline question; the rule they had to clear asks a
+  reader question (recorded 2026-08-14).** "No provider call", "feeds nothing into
+  discovery", "cannot help or hurt recall" and "byte-identical with it off" are all
+  true, and every one of them is about cost, recall or reversibility. *Decision rule,
+  fixed before the first measurement* asks something else: **ship enabled by default
+  only if the false-positive rate is *"low enough that a human is not trained to
+  ignore it"*, and ship disabled if it *"finds real dependents but too noisily to
+  default on."*** On reader cost this spec's own figures are not favourable — the
+  deterministic arm's measured precision **lower bound is 5.2%** (154 predicted
+  files, 8 proven dependents, ledger 2026-08-09), *"without step 3 the report is
+  roughly 90% noise by construction"*, and with adjudication off nothing is triaged
+  at all. That is the second bullet's case, and the flip is the first bullet's
+  outcome. **The flip is not reversed here** — which questions a review answers is a
+  product decision and this spec says so — but no document may now imply it cleared
+  the pre-registered rule, and the rule is not retired: it stands, unmet, and the
+  route to meeting it is a triage layer (see *Adjudication Is Undecided, Not
+  Rejected*).
+
+  The same error was paid for once already, with a killed capability. Spec 24:
+  *"'it fires rarely' was never a defence. Reader precision here is 0%, not 100% of
+  a small number. A capability that fires rarely and is wrong every time costs a
+  reviewer strictly more than one that does not exist."* Containing pipeline damage
+  is not containing reader damage, and the two must not be swapped in an argument
+  for a default.
 
 ## Adjudication Is Undecided, Not Rejected
 

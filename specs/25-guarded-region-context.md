@@ -110,23 +110,56 @@ failed.**
 
 | intervention | mechanism | outcome |
 |---|---|---|
-| spec 16 cross-file retrieval | agentic — model searches the repo | off by default; no measured win |
+| spec 16 cross-file retrieval | agentic — model searches the repo | off by default; no measured win — **REVERSED, see below** |
 | spec 18 context scout | agentic — a pass selects context | withdrawn on mechanism |
 | spec 19 un-anchored pass | extra discovery pass | withdrawn; failed its pre-fixed rule |
+
+> **Correction 2026-08-14 — the first row was reversed by measurement and this table
+> was not updated.** Both halves of it are now false. The ledger entry *Spec 16
+> cross-file retrieval — REVERSES the earlier net-negative verdict* (2026-08-01,
+> $3.94, same pinned engine `c11579c` both arms) reports recall 42.5% → **48.3%**,
+> adjusted precision 97.4% → **100%**, and cost **−7%**; the earlier negative verdict
+> had been measuring a silent 24 KB read truncation the model was never told about,
+> so *"the earlier measurement could not distinguish the feature from that bug"*. A
+> second run put it +2.3pp with precision again at 100% and cost again down. The
+> feature is **on by default** since 2026-08-01.
+>
+> **What this does not become.** The reversal is not significance: +5.7pp sits at
+> p = 0.096 on a single run, the entry closes *"Replicate before making it the
+> default"*, and **no record of that replication exists in the ledger** — so the
+> default rests on "nothing measured argues against it", which spec 16 states
+> plainly. The requested replication is neither run nor recorded as outstanding, and
+> naming that here is the point of the correction.
+>
+> **And it is not a reversal on every endpoint.** The 2026-08-11 ledger entry lists
+> cross-file retrieval among *"six structural interventions [that] have now failed"* —
+> that count is scoped to **later-in-file (out-of-diff) recall**, where it is null
+> along with the other five, and it does not contradict the overall-recall reversal
+> above. Both statements are true of different populations, which is exactly the
+> distinction a stale row loses.
 
 Against that, the intervention that **did** move the cross-file cases was a
 **framing** change — the untrusted-input guard, one prompt line, which recovered
 cross-file and caller cases that retrieval and the scout could not.
 
-Two conclusions carry forward and shape this spec:
+Two conclusions carried forward and shaped this spec's arms, and one of them no
+longer holds as stated:
 
 - **Deterministic beats agentic** for scoping (externally: Snyk `CodeReduce`
   28.9% → 82.75% *with the same model*; Semgrep 43.5% vs 12.6% recall at equal
-  precision). All three failures above were agentic or unscoped.
-- **Framing has outperformed retrieval here**, on our own corpus.
+  precision). This stands; all three interventions above were agentic or unscoped.
+- **Framing has outperformed retrieval here**, on our own corpus. **Retained as the
+  prior these arms were designed under, and superseded as a current position:**
+  framing's win is the larger and the significant one, but retrieval is no longer a
+  measured failure — it is a measured, unreplicated, precision-positive gain that
+  ships on. A reader taking "retrieval is one of three failures" from this table
+  would be steered away from the only intervention here that measured a gain at
+  *lower* cost.
 
 Arm A below is therefore the framing-only arm, and it is the arm this spec
-expects to win. Arm B is the retrieval arm and it inherits a **low prior**.
+expected to win. Arm B is the retrieval arm and it inherited a **low prior** — a
+prior the spec 16 reversal, which landed after these arms were run and rejected,
+would not now support at the same strength.
 
 ## Trigger — Deterministic, Structural, Language-Neutral
 
@@ -306,6 +339,11 @@ Every outcome is decisive, which is the test of whether the run is worth making:
 | A wins, B ≈ A | ship A, retire spec 24, close retrieval permanently |
 | B > A | deterministically scoped retrieval does pay — reopens a written-off line |
 | both fail | guarded-region context is dead; spec 24 stands on its own firing-rate work |
+
+**This table is a pre-run commitment, and the row that fired is the last one.** Both
+arms failed (see *Outcome*, above), so *"close retrieval permanently"* is a branch
+that was written and never taken — it is not a conclusion this spec reached, and it
+must not be quoted as one. Noted 2026-08-14 because a reader did quote it as one.
 
 Approving Arm A alone remains a legitimate reading of the evidence and is
 cheaper. It costs the framing-versus-retrieval answer, which generalizes beyond

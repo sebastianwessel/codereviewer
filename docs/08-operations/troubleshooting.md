@@ -337,7 +337,13 @@ counts. Look for files skipped by size (`review.maxFileBytes`) or by
 ### `cost_budget_exceeded` — exit 1
 
 `review.maxCostUsd` was exceeded. The check runs **after** the review, so this
-reports what was spent rather than stopping it. See
+reports what was spent rather than stopping it.
+
+A related message that is **not** this error: if the review finished inside the cap
+but left no headroom, an advisory stage reports that it produced no report because
+the run had already spent its budget. That is a warning, not a failure — the exit
+code is unchanged and the review is complete. Raise `review.maxCostUsd`, or run
+`impact check` / `intent check` separately under their own budget. See
 [controlling-cost.md](../04-guides/controlling-cost.md).
 
 ---

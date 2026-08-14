@@ -677,15 +677,49 @@ result. The run-to-run band must be measured before a change is judged against i
 On the real-repository corpus, four seeds of one identical configuration produced
 recall 81.3%, 87.5%, 81.3%, and 75.0% — a mean of 81.3% with a standard deviation of
 4.4 percentage points, matched findings ranging 12 to 14, adjusted precision ranging
-92.3% to 100%, and zero to one genuine false positive. A change measured on a single
-seed must therefore move recall by more than roughly twice that deviation before it
-can be distinguished from noise, and a smaller claimed effect requires several seeds.
-Later measurement on an expanded corpus found a comparable band of about 4.8 points.
+92.3% to 100%, and zero to one genuine false positive. Later measurement on an
+expanded corpus found a comparable band of about 4.8 points.
 
 Two consequences follow, and both are requirements rather than advice. A headline
 figure is the MEAN across seeds, never the best observed run. And a quality claim
 that rests on one seed must be reported with the band, because quoting the top of a
 range as the result overstates the engine.
+
+**The single-seed resolution rule is WITHDRAWN (amendment 2026-08-14).** This
+subsection previously ended its first paragraph with a third requirement: *"A change
+measured on a single seed must therefore move recall by more than roughly twice that
+deviation before it can be distinguished from noise, and a smaller claimed effect
+requires several seeds."* That sentence is removed rather than re-numbered, because
+the band it multiplied has been superseded and the rule derived from it authorised the
+error this document exists to prevent.
+
+The superseding measurement is the ledger entry *2026-08-07 — Intent-framing clause
+REVERTED, and the real variance (CORRECTS AN EARLIER ENTRY)*. Four independent
+three-seed estimates of the SAME quantity — no-intervention recall — read 3.92, 6.30,
+2.22 and 8.38pp, a 3.8x spread; pooled over 8 degrees of freedom the sd is **5.71pp**,
+and the entry's own conclusion is *"Three seeds resolve ~11pp, not ~8 and not ~16.
+Detecting a 5-point effect at this variance needs roughly 20 seeds per arm."* The
+2026-08-06 control arm read 60.0 / 68.3 / 70.0% on identical inputs.
+
+| | figure | status |
+| --- | --- | --- |
+| four-seed sd on the primary corpus | 4.4pp | dated record of those four runs; NOT a resolution claim |
+| expanded-corpus band | ~4.8pp | dated record; same restriction |
+| pooled sd, 4 estimates / 8 df (2026-08-07) | **5.71pp** | the figure a resolution claim cites |
+
+**What a single seed resolves: nothing.** Under the withdrawn rule a reader with one
+seed and a ~9pp movement had explicit spec authority to call it distinguishable from
+noise, while three seeds resolve ~11pp. That is the size of every effect this project
+has spent money chasing and correctly rejected — sub-file partitioning −2.9pp, the
+correctness fixes +5.13pp then +0.77pp, the un-anchored pass +0.83pp — and it is the
+exact false positive the 2026-08-07 confirmation study was run to prevent. A
+single-seed run with no control arm is the one case the paired test below cannot
+reach, and the answer for that case is that it decides nothing; it may be reported as
+an observation and must not be reported as a difference.
+
+The paired, finding-level test remains the decision rule wherever a control arm
+exists — see *One Observation Per Expectation Per Arm* — and its own argument against
+deciding by a three-seed sd is the same argument that withdraws this rule.
 
 Those four seeds are cited here for the run-to-run **variance** they establish,
 which is what this subsection is about. They are not a current recall figure and
@@ -1641,8 +1675,11 @@ run's output either validates against schema or it does not, and a provider
 call either errored or it did not. Every other metric is a MEAN over a
 model-backed, non-deterministic run. The "Metrics" section above records a
 measured four-seed recall band (81.3%, 87.5%, 81.3%, 75.0%; mean 81.3%,
-standard deviation 4.4 percentage points) on the primary corpus, and later
-measurement on an expanded corpus found a comparable band (~4.8 points). A
+standard deviation 4.4 percentage points) on the primary corpus, later
+measurement on an expanded corpus found a comparable band (~4.8 points), and the
+2026-08-07 pooled figure that supersedes both as a resolution claim is **5.71pp**.
+The argument here does not depend on which of those is used — it is stronger under
+the larger band, since a wider band is a flakier gate. A
 default gate that thresholds on mean recall (or on the raw, fixture-
 incompleteness-inflated `falsePositiveCount` — see its definition in
 "Metrics") would fail unpredictably depending on which side of that band a

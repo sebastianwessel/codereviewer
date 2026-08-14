@@ -92,9 +92,18 @@ adapters for no benefit.
 
 ## Runtime Version
 
-Node.js `24.15.0` is the minimum because `@purista/harness@1.6.0` declares
-`>=24.15.0`. `.nvmrc` must contain `24.15.0`, and `package.json` `engines.node`
-must declare `>=24.15.0`.
+Node.js `24.15.0` is the minimum because `@purista/harness` declares `>=24.15.0`,
+per the evidence table above. `.nvmrc` must contain `24.15.0`, and `package.json`
+`engines.node` must declare `>=24.15.0`.
+
+**Corrected 2026-08-14:** this cited `@purista/harness@1.6.0`, a version the evidence
+table does not resolve — it resolved `1.7.1` when read on 2026-07-31, and the
+lockfile now resolves `1.7.3`. The floor is unaffected, because every harness version
+in the table declares the same `>=24.15.0`; citing the table rather than a pinned
+version is what stops the justification going stale again. The table itself is a
+dated snapshot and its refresh is owed under *Dependency updates require … dependency
+evidence refresh in this spec*; no automated check covers that drift, which
+`00-stack.md` already records about its own version table.
 
 ## Supply Chain Requirements
 

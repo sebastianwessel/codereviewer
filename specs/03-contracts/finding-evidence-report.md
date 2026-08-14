@@ -50,7 +50,13 @@ populates; `refutation` renamed what refutation mints as `model-rationale`;
 engine does not have; `proof` duplicated the verification domain's
 `Verdict`/`Claim`; `diff` claimed a finding rests on a hunk, but the diff travels
 as `reviewedDiffRanges` and a citation into changed code is a citation into a
-file. All six removed on 2026-08-10.
+file. **All eleven removed on 2026-08-10** — this sentence read *"All six"* until
+2026-08-14, and six, eleven and twelve cannot all be right in a contract whose whole
+purpose is to reconcile against the schema by counting. It reconciles as: eleven
+named here, plus `deterministic-signal` below removed later, is the twelve; seventeen
+less twelve leaves five kept (`file`, `diagnostic`, `refutation` → renamed
+`model-rationale`, `tool-read`, `tool-search`); `citation` was added afterwards with
+its producer, giving the **six** values the enum carries today.
 
 `deterministic-signal` was KEPT once, on 2026-08-10, as the sole exception to the
 rule this contract otherwise enforces — add a value in the same change that

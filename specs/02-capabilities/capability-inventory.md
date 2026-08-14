@@ -47,6 +47,7 @@ task.
 | CAP-EVAL-003 | Semantic judge matching | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-005 | Real-repository evaluation corpus | ACT-OPS | Yes | `17-real-repository-eval-corpus.md`, `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-004 | Per-mechanism security measurement (recall/precision by CWE mechanism + context-depth, held-out anti-contamination) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `15-security-focused-review.md` |
+| CAP-EVAL-006 | Benchmark posture (`eval run` overrides that force the intended PR-review path) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-SEC-001 | Security review lens (generic OWASP/CWE checklist discovery, refutation-gated) | ACT-MODEL, ACT-REVIEWER | Yes | `15-security-focused-review.md`, `05-review-workflow-and-runtime.md` |
 | CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-IMPACT-001 | Change-impact review (`impact check` and an in-process lane of `review`, deterministic reference traversal, on by default since 2026-08-11) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
@@ -449,7 +450,35 @@ the same spec.
   repository history rather than hand-authored fixtures.
 - Verification: corpus manifest and eval runner tests.
 
-### CAP-EVAL-004 Benchmark Posture
+### CAP-EVAL-004 Per-Mechanism Security Measurement
+
+**One id named two capabilities until 2026-08-14.** The inventory row above assigned
+CAP-EVAL-004 to per-mechanism security measurement while the detail section below
+assigned it to Benchmark Posture. They are unrelated, and each was missing the other's
+half: this capability had a row and no detail section, Benchmark Posture had a detail
+section and no row, so a ticket or readiness review tracing the id resolved to two
+incompatible definitions. Benchmark Posture is now **CAP-EVAL-006** and has a row; no
+other document referenced either id.
+
+- Trigger: `codereviewer eval run` over the security corpus; reported per CWE
+  mechanism and per context depth.
+- Contracts: `15-security-focused-review.md` — *Measure By Mechanism Or Do Not
+  Claim Security* (rates by mechanism and by context depth), the bounded-rate rule
+  (*"a per-mechanism precision rate is published only when it is bounded"*; an
+  unbounded rate is `null` and the counts are what a reader uses), and the
+  anti-contamination policy (temporal cutoff, held-out seed unpublished and rotated).
+  `06-evaluation-and-quality-gates.md` owns the runner, the split declaration and the
+  `contaminationNote` requirement.
+- Preconditions: a corpus whose expected findings and detectors are labelled by
+  mechanism. Improvements are decided on the held-out set; the dev set is for
+  iteration only.
+- Side effects: provider calls for review and for eval matching/judging.
+- Final state: per-mechanism and per-depth rates on the eval report, each either
+  bounded or `null` with counts.
+- Verification: eval scoring and corpus manifest tests, plus spec 15's own recorded
+  divergences.
+
+### CAP-EVAL-006 Benchmark Posture
 
 - Trigger: `codereviewer eval run --review-mode pr --review-depth thorough`.
 - Side effects: provider calls for review, plus semantic eval matching and judge
@@ -488,8 +517,17 @@ the same spec.
   primary spend bound and refuses rather than truncating when it binds.
 - Preconditions: `intentFulfilment.enabled`, **on by default since 2026-08-11**.
   When disabled, or enabled with no provider configured, the lane reports that
-  rather than failing: nothing in it can fail the run. Defaulting it on therefore
-  costs a repository without a model provider nothing but a stated status.
+  rather than failing: nothing in it can fail the run.
+- What defaulting it on costs, corrected 2026-08-14. This entry read *"Defaulting it
+  on therefore costs a repository without a model provider nothing but a stated
+  status."* That is true and it is an argument about the population where the lane is
+  **inert**, offered for a default that only spends on the complementary population —
+  every repository that has a provider. For those, a default `review` issues one
+  extraction call, one judgement call **per obligation** (`maxObligations` default
+  100), and one explanation call. The bound is `review.maxCostUsd`, consumed as
+  headroom after the review's own spend (spec 04, *One Ceiling, Consumed As
+  Headroom*); with no cap configured there is no bound, which is the same position
+  the review itself is in.
 - Side effects: provider calls, and on a completed run `intent-report.md` and
   `intent-report.json` written into an `<artifactDir>/intent-<uuid>/` run
   directory, which is not entered in the run index. Every non-completed outcome

@@ -223,7 +223,8 @@ npm run update:model-pricing:write
 6. **Keep the scope to the branch's own work** — always pass `--base-ref` so
    the diff is against the merge base, not a stale branch point.
 7. **Set `review.maxCostUsd`** so a runaway change fails loudly instead of
-   quietly.
+   quietly. It is also the only bound on the advisory stages below: they spend
+   the headroom the review leaves, and a stage with none does not start.
 8. **Turn off `intentFulfilment.enabled`** (on by default) if you do not read
    its output, since it is the one default-on capability that can add real
    provider spend — an extraction call, a judgement call per obligation, and an

@@ -328,7 +328,15 @@ everywhere, as in the first entry above. See
 
 `maxCostUsd` is checked **after** the review completes: exceeding it fails the
 run with `cost_budget_exceeded` (exit `1`) and still writes partial artifacts.
-It is a tripwire, not a mid-run brake. See
+It is a tripwire, not a mid-run brake.
+
+It is also the ceiling the two advisory stages spend against. Change-impact and
+intent-fulfilment run after the review and consume whatever headroom it left, in
+order. A stage that reaches its turn with nothing left **does not start** — no git
+call, no provider call — and the run carries a warning naming the spend, the cap,
+and the standalone command to run under its own budget. That is one ceiling for the
+whole `review` invocation, not one per stage, and it stops spending rather than
+failing: the review keeps its own exit code and quality gate either way. See
 [controlling-cost.md](controlling-cost.md).
 
 **There is no whole-run time limit, deliberately.** A deadline would abort work

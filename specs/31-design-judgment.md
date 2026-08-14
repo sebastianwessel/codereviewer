@@ -22,6 +22,55 @@ of a diff; the maintainer's is authoritative only because they are the maintaine
 The rest of this spec is preserved as written, because what it refused in advance is
 what makes the result trustworthy.
 
+### What The Number Measured, Stated Precisely (2026-08-14)
+
+The gate asked *"can two curators independently agree on what the right design was?"*
+as a proxy for *"can ground truth be constructed at all?"* (below, *Why This Spec Is
+A Gate*). The outcome is stated as **not built, now or later** — and that outcome
+stands. What needs stating is what the 41.7% is a measurement **of**, because the
+proxy and the thing it stood for came apart:
+
+1. **The curators were model agents.** The ledger records Curator B reporting a
+   contamination defect *"unprompted, as a threat to the study it was participating
+   in"*. So 41.7% is the blind **recovery rate of the kind of system this lane would
+   be** — a capability measurement — not a statement about whether ground truth
+   exists.
+2. **Ground truth WAS constructed, and this spec's own data says so.** 30 candidates
+   harvested under a screened population, with the key judge marking **0 of 24**
+   `not-a-design-objection`: every case carried a recorded, verbatim, authoritative
+   objection. That is a corpus. What failed was **recovery against it**.
+3. **The dominant failure mode is this project's ordinary condition elsewhere.**
+   "Curator found a different real problem in the same diff" is the *unlisted-real*
+   phenomenon, measured at ~52% real and worth ~10.3pp of recall on the security
+   corpus — where it has never been read as evidence that security ground truth is
+   unconstructible.
+4. **"Indistinguishable from chance" is not the right description.** Chance on
+   free-text objection recovery is near 0%, not 50%. The 50% floor is a defensible
+   product preference about how often an advisory lane may be wrong; it is not a
+   statistical baseline, and calling it one lends the threshold an authority it does
+   not have.
+5. **n was 24, not the pre-registered 30**, and 10/24 carries an exact 95% interval
+   of roughly **[22%, 63%]** — which spans the entire 50–70% *"record and stop"* band.
+   The **strongest** form of the rule rests on a point estimate that cannot exclude
+   the adjacent, materially weaker verdict.
+
+**Restated finding.** *A competent blind reader recovers the maintainer's specific
+objection about two times in five, so a design lane's recall ceiling is ~40% and its
+precision is unfalsifiable against a single-authority key.* That supports the same
+decision — do not ship a design lane; advisory output wrong at this rate trains
+readers to ignore a surface it shares with findings that hold at ~96% — without
+asserting the stronger claim that design ground truth cannot be constructed.
+
+**"Without new evidence" is undefined, and the corpus is decaying under it.** The
+same report records that design ground truth **decays**: 3 of 30 pre-review commits
+were already garbage-collected, one going from fetchable to 404 within a single
+session. So the prohibition has a clock on its own escape hatch. The follow-up the
+evidence actually licenses is naming what would count — the obvious candidate being
+**a design lane's recall scored against the maintainer key, exactly as the security
+lane is scored against advisories**, which the restated finding above already gives a
+ceiling for. That is a product-owner decision and is recorded here as open rather
+than taken; what is not open is shipping a lane, which stays refused.
+
 ---
 
 Original status: approved as a **gate**, not as a capability. Nothing here authorises

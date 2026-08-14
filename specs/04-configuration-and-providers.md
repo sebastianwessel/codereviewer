@@ -131,7 +131,7 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `maxFileBytes` | integer 1..5000000 | `500000` | Files above cap are skipped. |
 | `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the 8,000,000-byte packet ceiling and the depth-derived cross-file per-read cap. Unset means nothing bounds the packet in advance and the provider decides (spec 26). Never skips or truncates source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
-| `maxCostUsd` | number >= 0 | *unset* | Checked once, after the run's work completes and before the success result is built: the run fails when the computed run cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. |
+| `maxCostUsd` | number >= 0 | *unset* | Checked once, after the review's work completes and before the success result is built: the run fails when the computed review cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. It is also the ceiling the advisory stages spend against — see *One Ceiling, Consumed As Headroom* below. |
 
 `review.crossFileRetrieval`, `review.signalFacts` and `review.citations` are nested
 review blocks and are inventoried in their own sections below.
@@ -331,6 +331,45 @@ exposes it:
 Run summaries aggregate available token/cost metadata per provider, model, task,
 and run. Full per-task cost enforcement remains a required follow-up when the
 selected provider adapters expose reliable usage data at the task boundary.
+
+### One Ceiling, Consumed As Headroom
+
+**Added 2026-08-14, and it is a correction rather than an addition.** Until
+2026-08-11 both advisory stages (specs 22 and 23) were off by default, so
+`maxCostUsd` bounding only the review's own cost was a complete description. The
+default flip made it an incomplete one: intent spends **one judgement call per
+obligation** against a `maxObligations` default of 100, after the review's check had
+already run, and nothing counted it. An operator who set a ceiling did not have one.
+
+The rule, as implemented in `src/cli/advisory-lanes.ts`:
+
+- **A stage that spends is bounded by the run's cost budget, and it stops instead of
+  failing.** The number in `maxCostUsd` is what an operator is willing to spend on
+  `codereviewer review`, not per stage. The stages therefore consume the HEADROOM the
+  review left, in the order they run, each measured against what the ones before it
+  actually spent. Per-stage caps are refused: they would let one invocation spend a
+  multiple of the configured number with every stage reporting itself in budget.
+- **Bounded, and still unable to fail the run.** This stops SPENDING, not judging. A
+  stage with no headroom does not start, the review keeps its own exit code and
+  quality gate, and the reader gets a warning naming the spend, the cap, and the
+  standalone command to run under its own budget. No budget outcome here reaches the
+  gate, so specs 22 and 23's rule that an advisory stage cannot fail a pipeline holds
+  by construction.
+- **Stopped before, not reported after.** The check sits ahead of the diff, so a
+  stage with no headroom issues no git subprocess and resolves no provider. An
+  overrun reported afterwards is a receipt, not a bound.
+- **Unknown spend is not zero spend.** A usage block with no price makes the total
+  undefined, which halts enforcement rather than waving the next stage through on a
+  total known to be too low — the same direction as the rule above that an
+  unavailable cost leaves `maxCostUsd` unenforced with `cost-unavailable`.
+
+**What it does NOT bound, stated because a half-described bound is worse than none.**
+A stage that STARTS with headroom runs to completion, so the run's true ceiling is
+the cap plus one stage's spend; cutting a stage off mid-flight would have to publish
+a partial report and no spec defines one. The fix and verification lanes (spec 12)
+also spend after the review's check: their spend is counted, and they are not
+themselves gated. That is a known gap with the same shape, not a decision that they
+should be unbounded.
 
 ## Context Budget Defaults
 

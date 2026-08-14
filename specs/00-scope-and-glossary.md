@@ -64,9 +64,22 @@ The out-of-diff zero is restated here because it is what the scope boundary
 below rests on, it is a count over a full denominator rather than a rate, and
 it has not moved in any recorded run. Every one of those
 misses was in a file the reviewer had been shown in full: none needed
-retrieval, a larger context window, or a bigger model, so this is not a
-context or retrieval limitation, and giving the reviewer more of either does
-not close it.
+retrieval or a larger context window, so this is not a context or retrieval
+limitation, and giving the reviewer more of either does not close it.
+
+**"Nor a bigger model" was struck on 2026-08-14, because it was never
+measured.** Retrieval and context size are established — the 2026-08-10
+multi-defect entry scores the same defect in the same file as its own case and
+finds it 13 of 15 times in-diff against 0 of 5 out-of-diff, *"only the hunk
+boundary differs"*, which *"retires retrieval, context size and difficulty as
+explanations"*. Model tier is not established in the same way: the only
+recorded model comparison measured a *cheaper* model matching recall, and the
+2026-08-07 entry records that *"`gpt-5.1-codex-max` is unusable on this key
+(listed by `/v1/models`, 404 on chat-completions), so the STRONGER-tier
+question remains open."* The supported statement is that **eleven structural
+and prompt interventions have failed against this population and no stronger
+tier has been testable** — which carries the scope decision below on its own,
+without asserting the population is unreachable by any model.
 
 This is a scope boundary, stated deliberately rather than left implicit:
 **pull-request review** ("does this change introduce a defect?") and
@@ -132,7 +145,7 @@ engine itself.
 | INV-OS-001 | Filesystem behavior supports Linux and Windows paths. | Unit tests with POSIX and Windows path fixtures. |
 | INV-LANG-001 | Core contracts are language-neutral. Language-specific data remains inside deterministic signal extractors, repository context tools, or provider prompts and is normalized before reaching findings, reports, admission, or evaluation. | Contract tests and schema review. |
 | INV-PROV-001 | Base install does not include provider SDKs except `@purista/harness`. | `package.json` and lockfile inspection. |
-| INV-SEC-001 | Logs, traces, reports, and errors do not include prompt text, source snippets, tokens, secrets, or raw tool output by default. | Redaction tests and artifact snapshot tests. |
+| INV-SEC-001 | Logs, traces, reports, and errors do not include prompt text, source snippets, tokens, or raw tool output by default, and every secret shape on the redactor's pattern list plus every operator-configured exact value is removed from them. Coverage of secret shapes OUTSIDE that list is not claimed; see `07-security-privacy-operations.md`, *What The Mechanism Supports, And What It Does Not*. | Redaction tests and artifact snapshot tests over known tokens. |
 | INV-PUB-001 | No model-only merge approval, merge blocking, or publication decision. Model-origin findings may surface in review output, but merge and publishing authority remains deterministic and local-artifact only. | Admission and quality-gate tests. |
 | INV-STRUCT-001 | Code is grouped by domain/topic with colocated tests and shared helpers for repeated behavior. | Structure lint/review checklist. |
 
