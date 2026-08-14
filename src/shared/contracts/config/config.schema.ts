@@ -1134,11 +1134,4 @@ export type OpenTelemetryConfig = z.infer<typeof OpenTelemetryConfigSchema>
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>
 export type ObservabilityConfig = z.infer<typeof ObservabilityConfigSchema>
 export type CostConfig = z.infer<typeof CostConfigSchema>
-export type SignalFactContextConfig = z.infer<
-  typeof SignalFactContextConfigSchema
->
-export type CitationConfig = z.infer<typeof CitationConfigSchema>
-export type ReviewConversationConfig = z.infer<
-  typeof ReviewConversationConfigSchema
->
 export type CodeReviewerConfig = z.infer<typeof CodeReviewerConfigSchema>

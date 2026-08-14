@@ -7,7 +7,10 @@ export {
   type RunTokenUsage
 } from './token-cost.js'
 export {
-  createProviderUsageRecorder,
-  type ProviderUsageRecorder
+  createProviderUsageRecorder
 } from './provider-usage-recorder.js'
-export { LaneUsageSchema, summarizeLaneUsage, type LaneUsage } from './lane-usage.js'
+export {
+  LaneUsageSchema,
+  summarizeLaneUsage,
+  type LaneUsage
+} from './lane-usage.js'

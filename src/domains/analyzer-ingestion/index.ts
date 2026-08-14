@@ -6,37 +6,29 @@
 
 export {
   ingestAnalyzerArtifacts,
-  createAnalyzerPathResolver,
-  type AnalyzerIngestionResult
+  createAnalyzerPathResolver
 } from './ingest.js'
 export {
   analyzerSignalsFraming,
-  analyzerSignalsSectionHeader,
   renderAnalyzerSignalsSection
 } from './analyzer-section.js'
 export {
   analyzerEvidenceFor,
-  analyzerEvidenceForAlerts,
-  analyzerEvidenceId
+  analyzerEvidenceForAlerts
 } from './analyzer-evidence.js'
 export {
   attributeAlertsToChange,
   indexChangedRanges,
   rankAttributedAlerts,
-  type AttributionResult,
   type ChangedLineRange
 } from './changed-side-attribution.js'
 export {
   ANALYZER_MESSAGE_MAX,
   AnalyzerAlertSchema,
   AnalyzerArtifactMetricSchema,
-  AnalyzerArtifactProvenanceSchema,
   AttributedAnalyzerAlertSchema,
   type AnalyzerAlert,
   type AnalyzerArtifactMetric,
-  type AnalyzerArtifactProvenance,
-  type AnalyzerAttribution,
   type AnalyzerIdentity,
   type AttributedAnalyzerAlert
 } from './contracts.js'
-export { MAX_ANALYZER_RESULTS_PER_ARTIFACT } from './artifact-reader.js'

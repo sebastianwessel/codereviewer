@@ -2,7 +2,6 @@ export {
   admitCandidate,
   CandidateFindingSchema,
   type AdmissionPolicy,
-  type AdmissionResult,
   type AnchorTextResolver,
   type CandidateFinding,
   type ReviewedDiffRange,
@@ -19,11 +18,9 @@ export {
 export {
   matchBaselineFindings,
   resolveBaselineFingerprints,
-  type BaselineFingerprintRecord,
-  type BaselineMatchResult
+  type BaselineFingerprintRecord
 } from './baseline-matcher.js'
 export {
-  BaselineEntrySchema,
   BaselineFileSchema,
   buildBaselineEntries,
   renderBaselineJson,

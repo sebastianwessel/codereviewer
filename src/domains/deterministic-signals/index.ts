@@ -10,9 +10,6 @@ export {
   discoverPolyglotSignalTestMappings
 } from './polyglot/polyglot-signal-extractor.js'
 export {
-  deterministicSignalEvidenceOwnsPath,
-  supportSignalFactOwnsPath,
-  supportSignalLanguageForSource,
   assertDeterministicSignalEvidenceOwnsPath,
   assertSupportSignalFactOwnsPath,
   supportedSignalLanguages,
@@ -26,18 +23,19 @@ export {
   isTestTreePath
 } from './shared/test-discovery.js'
 export {
-  computeTestAdequacySignal,
-  type TestAdequacySignalInput
+  computeTestAdequacySignal
 } from './test-adequacy/test-adequacy-signal.js'
 export {
   supportedSignalLanguageForPath,
   routeFilesBySignalLanguage,
-  routeSignalSourceFilesByLanguage,
-  type SignalLanguageRoutingResult,
-  type RoutedSignalLanguageFiles
+  routeSignalSourceFilesByLanguage
 } from './shared/signal-language-router.js'
-export { astGrepVersion } from './ast-grep/ast-grep-parser.js'
-export { deterministicSignalExtractorVersions } from './deterministic-signal-metadata.js'
+export {
+  astGrepVersion
+} from './ast-grep/ast-grep-parser.js'
+export {
+  deterministicSignalExtractorVersions
+} from './deterministic-signal-metadata.js'
 export type {
   SupportSignalDetection,
   SupportedSignalLanguage,

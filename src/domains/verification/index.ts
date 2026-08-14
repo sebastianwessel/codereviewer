@@ -6,37 +6,32 @@
 // findings.
 export {
   MAX_CLAIMS_PER_PROVIDER,
-  type ClaimGatherInput,
   type ClaimGatherOutput,
   type ClaimProvider
 } from './contracts.js'
-export { createClaimsFileProvider } from './claims-file-provider.js'
-export { createPriorFindingsProvider } from './prior-findings-provider.js'
+export {
+  createClaimsFileProvider
+} from './claims-file-provider.js'
+export {
+  createPriorFindingsProvider
+} from './prior-findings-provider.js'
 export {
   createCurrentFindingsProvider,
   currentFindingClaimId,
-  eligibleCurrentFindings,
-  type CurrentFindingsProviderConfig
+  eligibleCurrentFindings
 } from './current-findings-provider.js'
 export {
   enrichFindingsWithFixes,
-  type CurrentFileReader,
-  type FixEnrichmentResult
+  type CurrentFileReader
 } from './fix-enrichment.js'
 export {
   runVerificationFlow,
   type ClaimAgentResult,
-  type ClaimAgentRunner,
-  type RunVerificationFlowInput,
-  type VerificationFlowResult
+  type ClaimAgentRunner
 } from './verification-flow.js'
 export {
-  ApplyCheckOutcomeSchema,
   CLAIM_PROVIDER_FAILED_WARNING_PREFIX,
-  ClaimObservationSchema,
-  FixOutcomeSchema,
   ModelVerdictSchema,
-  VerificationBoundReasonSchema,
   VerificationReportSchema,
   emptyVerificationReport,
   runWarningsForVerificationReport,
@@ -49,7 +44,6 @@ export {
 } from './verification-report.js'
 export {
   createHarnessClaimInvestigator,
-  investigateClaimInstructions,
   type HarnessClaimInvestigator
 } from './investigate-claim-agent.js'
 export {
@@ -57,15 +51,15 @@ export {
   type InvestigationRunContext,
   type InvestigationRunResult
 } from './investigation-run.js'
-export { runVerificationRun } from './verification-run.js'
+export {
+  runVerificationRun
+} from './verification-run.js'
 export {
   runFixRun,
-  resolveFixMinSeverity,
-  type FixRunResult
+  resolveFixMinSeverity
 } from './fix-run.js'
 export {
   corroborateFindings,
-  type CorroborateFindingsInput,
   type CorroborationMatchKind,
   type FindingCorroboration
 } from './corroboration.js'

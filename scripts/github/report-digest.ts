@@ -190,9 +190,11 @@ const ReviewReportSchema = z.object({
     runId: z.string(),
     costUsd: z.number().nullish(),
     // Whether a model actually searched the change. Optional in the engine's
-    // contract too, for reports written before the field existed — and saying
-    // nothing is not the same as saying a search ran, so only the explicit
-    // 'not-performed' changes what this comment claims.
+    // contract too, because a caller that cannot say omits it rather than
+    // guessing — not because an older build wrote it differently; this file's
+    // header states why that window does not exist here. Saying nothing is not
+    // the same as saying a search ran, so only the explicit 'not-performed'
+    // changes what this comment claims.
     modelSearch: z.string().nullish(),
     warnings: z.array(z.string())
   }),

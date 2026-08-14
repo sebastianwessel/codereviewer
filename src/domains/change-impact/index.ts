@@ -3,51 +3,35 @@
 // so a failure here can never fail a diff review.
 export {
   collectChangedSymbols,
-  type ChangedFileChangeKind,
   type ChangedSymbol,
-  type ChangedSymbolChangeKind,
-  type ChangedSymbolKind,
-  type ChangedSymbolSourceFile,
-  type CollectChangedSymbolsInput,
-  type CollectChangedSymbolsResult
+  type ChangedSymbolSourceFile
 } from './changed-symbols.js'
 export {
   adjudicateDeterministically,
   collectAdjudicationPairs,
   runAdjudication,
-  type AdjudicationOutcome,
-  type AdjudicationPair,
-  type CandidateImpactFinding,
-  type DeterministicVerdict,
-  type RunAdjudicationInput
+  type AdjudicationOutcome
 } from './adjudication.js'
 export {
-  createChangeImpactLane,
-  type ChangeImpactLane
+  createChangeImpactLane
 } from './change-impact-lane.js'
 export {
   changedSymbolKey,
-  collectContractChanges,
-  type CollectContractChangesInput
+  collectContractChanges
 } from './contract-changes.js'
 export {
-  CONTRACT_DIMENSION_IDS,
   describeContractDelta,
-  type ContractChange,
-  type ContractDeltaInput,
-  type ContractDimensionId
+  type ContractChange
 } from './contract-delta.js'
 export {
-  admitImpactFinding,
-  CandidateImpactFindingSchema,
-  type ImpactAdmissionPolicy,
-  type ImpactAdmissionResult
+  admitImpactFinding
 } from './impact-admission.js'
-export { modelRelianceJudgementInstructions } from './instructions.js'
+export {
+  modelRelianceJudgementInstructions
+} from './instructions.js'
 export {
   normalizeRelianceJudgement,
   relianceJudgementInputFor,
-  relianceVerdicts,
   verifyRelianceJudgement,
   ModelRelianceJudgementSchema,
   NO_RELIANCE_VERDICTS,
@@ -60,35 +44,31 @@ export {
 } from './reliance-judgement.js'
 export {
   discoverDependents,
-  type DiscoverDependentsInput,
   type DiscoveredReferenceSite,
   type SymbolDependents
 } from './dependent-discovery.js'
-export { renderChangeImpactMarkdown } from './impact-markdown.js'
+export {
+  renderChangeImpactMarkdown
+} from './impact-markdown.js'
 export {
   groupImpactedFiles,
-  type GroupedImpact,
-  type GroupImpactedFilesInput
+  type GroupedImpact
 } from './impacted-files.js'
 export {
   AdjudicationStatusSchema,
   ChangeImpactReferenceReportSchema,
-  ChangedSymbolReportSchema,
   CompatibilityClassSchema,
   impactedSymbolKey,
   ImpactedFileSchema,
   ImpactFindingSchema,
   ImpactRelianceSchema,
   ModelVerdictCountsSchema,
-  RemovalPairingSchema,
   type AdjudicationStatus,
   type ChangeImpactReferenceReport,
   type ChangedSymbolReport,
-  type CompatibilityClass,
   type ImpactedFile,
   type ImpactedFileSymbol,
   type ImpactFinding,
-  type ImpactReliance,
   type ModelVerdictCounts,
   type ReferenceSite,
   type RemovalPairing,
@@ -97,15 +77,12 @@ export {
 export {
   indexAddedDeclarations,
   type AddedDeclaration,
-  type RemovalPairingIndex,
-  type RemovedDeclaration
+  type RemovalPairingIndex
 } from './removal-pairing.js'
 export {
   runChangeImpact,
-  type ChangeImpactAgents,
-  type RunChangeImpactInput
+  type ChangeImpactAgents
 } from './impact-run.js'
 export {
-  classifyReferenceDestination,
-  type ReferenceDestinationKind
+  classifyReferenceDestination
 } from './reference-destination.js'

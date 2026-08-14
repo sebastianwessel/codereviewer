@@ -1,7 +1,4 @@
 export {
-  EVAL_ARTIFACT_ONLY_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX,
-  EVAL_INCONCLUSIVE_MATCH_WARNING_PREFIX,
-  EVAL_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX,
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   PROVIDER_ERROR_WARNING_PREFIX,
   artifactOnlyPlausibilityFailClosedWarnings,
@@ -11,7 +8,6 @@ export {
 } from './eval-warnings.js'
 export {
   EvalCaseSchema,
-  EvalCaseSetSchema,
   EvalLineRangeSchema,
   ExpectedFindingSchema,
   ExpectedFindingTierSchema,
@@ -30,9 +26,7 @@ export {
   assertBenchmarkSlicesHydrated,
   hydrateCodeReviewBenchmarkPack,
   isPlaceholderPositiveSlice,
-  placeholderSliceMarker,
-  type HydrateBenchmarkPackOptions,
-  type HydrateBenchmarkPackResult
+  placeholderSliceMarker
 } from './corpus/benchmark-hydration.js'
 export {
   answerKeyLeakIn,
@@ -45,13 +39,11 @@ export {
   CorpusSplitSchema,
   FullCommitShaSchema,
   PermissiveLicenseSchema,
-  RealRepoCorpusCaseSchema,
   RealRepoCorpusManifestSchema,
   RemovedCommentDisclosureReviewSchema,
   type CorpusSplit,
   type RealRepoCorpusCase,
-  type RealRepoCorpusManifest,
-  type RemovedCommentDisclosureReview
+  type RealRepoCorpusManifest
 } from './corpus/real-repo-corpus.schema.js'
 export {
   countExpectedImpactByReachability,
@@ -62,14 +54,11 @@ export {
   parseChangeImpactCorpusManifestJson,
   ChangeImpactCorpusCaseSchema,
   ChangeImpactCorpusManifestSchema,
-  EvidenceOfBreakageSchema,
   ExpectedCompatibilityClassSchema,
   ExpectedImpactSchema,
   ImpactReachabilitySchema,
-  LocalPlausibilitySchema,
   type ChangeImpactCorpusCase,
   type ChangeImpactCorpusManifest,
-  type EvidenceOfBreakage,
   type ExpectedImpact,
   type ImpactReachability,
   type ImpactReachabilityCounts
@@ -78,39 +67,24 @@ export {
   createMetricsVersionHistory,
   type MetricComparabilityOf,
   type MetricsVersionDivergenceOf,
-  type MetricsVersionEntry,
-  type MetricsVersionHistory
+  type MetricsVersionEntry
 } from './report/versions/metrics-version-history.js'
 export {
   CHANGE_IMPACT_METRICS_VERSION,
   CHANGE_IMPACT_METRICS_VERSION_HISTORY,
   changeImpactMetricComparability,
-  changeImpactMetricsAffectedBetween,
-  type ChangeImpactComparabilityKey,
-  type ChangeImpactMetricComparability,
-  type ChangeImpactMetricsVersionDivergence
+  changeImpactMetricsAffectedBetween
 } from './change-impact-eval/change-impact-metrics-versions.js'
 export {
-  adjudicatedDestinationFiles,
-  changeImpactArms,
   changeImpactUnmeasuredReasons,
   corpusSplits,
   impactReachabilityClasses,
-  isAdjudicationMeasured,
-  referenceDestinationFiles,
   scoreChangeImpactCases,
-  type ChangeImpactAdjudicationDelta,
-  type ChangeImpactArm,
   type ChangeImpactArmMetrics,
   type ChangeImpactCaseInput,
   type ChangeImpactCaseOutcome,
-  type ChangeImpactCaseScore,
-  type ChangeImpactCoverage,
-  type ChangeImpactRate,
   type ChangeImpactRecall,
-  type ChangeImpactScore,
-  type ChangeImpactUnmeasuredReason,
-  type ScoredExpectation
+  type ChangeImpactScore
 } from './change-impact-eval/change-impact-scoring.js'
 export {
   buildChangeImpactEvalReport,
@@ -121,26 +95,21 @@ export {
   CHANGE_IMPACT_EVAL_SUMMARY_ARTIFACT_NAME,
   type ChangeImpactEvalReport
 } from './change-impact-eval/change-impact-eval-report.js'
-export { renderChangeImpactEvalSummary } from './change-impact-eval/change-impact-eval-rendering.js'
+export {
+  renderChangeImpactEvalSummary
+} from './change-impact-eval/change-impact-eval-rendering.js'
 // Intent-fulfilment corpus (spec 23 §Evaluation). A third corpus with a third
 // answer key, exported beside the other two and never merged with them.
 export {
   countOutstandingExpectationsByArm,
   intentArms,
   IntentArmSchema,
-  IntentCorpusCaseSchema,
-  IntentCorpusManifestSchema,
-  IntentMismatchOriginSchema,
-  IntentSourceSchema,
-  OutstandingExpectationSchema,
   parseIntentCorpusManifest,
   parseIntentCorpusManifestJson,
   type IntentArm,
   type IntentArmCounts,
   type IntentCorpusCase,
   type IntentCorpusManifest,
-  type IntentMismatchOrigin,
-  type IntentSourceDefinition,
   type OutstandingExpectation
 } from './intent-eval/intent-corpus.schema.js'
 export {
@@ -152,13 +121,8 @@ export {
   renderIntentDocument,
   INTENT_CASE_ARTIFACT_NAME,
   INTENT_CASE_CONTEXT_DIRECTORY,
-  INTENT_CASE_INTENT_DOCUMENT,
   INTENT_CASE_WORK_TREE,
-  type AssembledIntent,
   type HydratedIntentCase,
-  type HydrateIntentCorpusOptions,
-  type HydrateIntentCorpusResult,
-  type IntentCaseResult,
   type IntentLineMapEntry
 } from './intent-eval/intent-corpus-hydration.js'
 export {
@@ -171,39 +135,28 @@ export {
   type IntentArmMetrics,
   type IntentCaseInput,
   type IntentCaseOutcome,
-  type IntentCaseScore,
-  type IntentCoverage,
-  type IntentFalseSatisfiedMetrics,
   type IntentRate,
-  type IntentScore,
-  type IntentUnmeasuredReason,
-  type ScoredIntentExpectation
+  type IntentScore
 } from './intent-eval/intent-eval-scoring.js'
 export {
   buildIntentEvalReport,
   parseIntentEvalReport,
-  IntentEvalReportSchema,
   INTENT_EVAL_ARTIFACT_ROOT,
   INTENT_EVAL_REPORT_ARTIFACT_NAME,
   INTENT_EVAL_SUMMARY_ARTIFACT_NAME,
   type IntentEvalReport
 } from './intent-eval/intent-eval-report.js'
-export { renderIntentEvalSummary } from './intent-eval/intent-eval-rendering.js'
 export {
-  intentMetricComparability,
-  intentMetricsAffectedBetween,
-  INTENT_METRICS_VERSION,
-  INTENT_METRICS_VERSION_HISTORY,
-  type IntentComparabilityKey,
-  type IntentMetricComparability,
-  type IntentMetricsVersionDivergence
+  renderIntentEvalSummary
+} from './intent-eval/intent-eval-rendering.js'
+export {
+  INTENT_METRICS_VERSION
 } from './intent-eval/intent-metrics-versions.js'
 export {
   readEngineIdentity,
   ENGINE_COMMIT_UNKNOWN,
   engineCommitArgs,
-  engineWorkingTreeArgs,
-  type EngineIdentity
+  engineWorkingTreeArgs
 } from './report/engine-identity.js'
 export {
   buildChangeImpactCase,
@@ -212,37 +165,25 @@ export {
   defaultChangeImpactOutputRoot,
   diffHeaderPaths,
   hydrateChangeImpactCorpus,
-  type ChangeImpactCaseResult,
-  type HydrateChangeImpactCorpusOptions,
-  type HydrateChangeImpactCorpusResult
+  type ChangeImpactCaseResult
 } from './change-impact-eval/change-impact-corpus-hydration.js'
 export {
-  minimumDisclosureWordCount,
   removedProseCommentsIn,
-  resolveRemovedCommentDisclosures,
-  type RemovedCommentDisclosureResolution
+  resolveRemovedCommentDisclosures
 } from './corpus/real-repo-diff-comment-disclosure.js'
 export {
   assertReviewedDiffIsUncontaminated,
   buildRealRepoSlice,
-  defaultRealRepoManifestPath,
-  defaultRealRepoOutputSliceRoot,
   diffPathsOutsideReviewedSet,
   hydrateRealRepoCorpus,
   realRepoHydrationSource,
   resolveCaseHydrationState,
-  type CaseHydrationState,
-  type CorpusGitCommandRunner,
-  type HydrateRealRepoCorpusOptions,
-  type HydrateRealRepoCorpusResult,
-  type RealRepoCaseResult
+  type CorpusGitCommandRunner
 } from './corpus/real-repo-corpus-hydration.js'
 export {
   EVAL_SEMANTIC_JUDGE_STAGE,
   matchEvalFindings,
   missingSemanticJudgeError,
-  type EvalFindingMatch,
-  type EvalInconclusiveMatch,
   type EvalMatcherResult,
   type EvalSemanticJudge,
   type EvalSemanticJudgeInput,
@@ -261,13 +202,10 @@ export {
   type EvalPlausibilityJudge,
   type EvalPlausibilityJudgeInput,
   type EvalPlausibilityJudgeResult,
-  type EvalPlausibilityOutcome,
-  type EvalPlausibilityResult,
-  type EvalPlausibilitySource
+  type EvalPlausibilityResult
 } from './judging/eval-plausibility-judge.js'
 export {
   DEFAULT_MINIMUM_JUDGE_AGREEMENT,
-  EvalJudgeCalibrationPairSchema,
   evalJudgeCalibrationSet,
   scoreJudgeCalibration,
   type EvalJudgeCalibrationPair,
@@ -275,7 +213,6 @@ export {
 } from './judging/eval-judge-calibration.js'
 export {
   DEFAULT_MINIMUM_PLAUSIBILITY_AGREEMENT,
-  EvalPlausibilityCalibrationPairSchema,
   evalPlausibilityCalibrationSet,
   scorePlausibilityCalibration,
   type EvalPlausibilityCalibrationPair,
@@ -289,16 +226,19 @@ export {
   type EvalMetricCaseResult,
   type EvalMetrics
 } from './scoring/metrics.js'
-export { runEvaluation } from './run/eval-runner.js'
+export {
+  runEvaluation
+} from './run/eval-runner.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   renderEvalSummary
 } from './rendering/summary/eval-summary-report-rendering.js'
-export { renderEvalComparison } from './rendering/comparison/eval-comparison-report-rendering.js'
 export {
-  EvalComparisonReportSchema,
+  renderEvalComparison
+} from './rendering/comparison/eval-comparison-report-rendering.js'
+export {
   parseEvalComparisonReport,
   type EvalComparisonCase,
   type EvalComparisonMetricGroup,
@@ -307,7 +247,6 @@ export {
   type EvalComparisonRun
 } from './report/eval-comparison-view.js'
 export {
-  EvalRecallViewSchema,
   parseEvalRecallView,
   type EvalRecallView
 } from './report/eval-recall-view.js'
@@ -316,15 +255,12 @@ export {
   metricComparability,
   metricsAffectedBetween,
   type EvalComparabilityKey,
-  type MetricComparability,
-  type MetricsVersionDivergence
+  type MetricComparability
 } from './report/versions/eval-metrics-versions.js'
 export {
   PAIRED_SIGNIFICANCE_ALPHA,
   pairedRecallVerdict,
   type PairedArmSummary,
-  type PairedPopulationFinding,
-  type PairedPopulationKind,
   type PairedPopulationVerdict,
   type PairedRecallVerdict
 } from './scoring/eval-paired-recall-verdict.js'
@@ -333,14 +269,15 @@ export {
   type PrecisionBracket,
   type PrecisionBracketBound
 } from './scoring/eval-precision-bracket.js'
-export { renderEvalRecallReport } from './rendering/eval-recall-report-rendering.js'
+export {
+  renderEvalRecallReport
+} from './rendering/eval-recall-report-rendering.js'
 export {
   EVAL_METRICS_VERSION,
   EvalRegressionThresholdsSchema,
   EvalReportCapabilityFlagsSchema,
   EvalReportSchema,
   type EvalCaseOutput,
-  type EvalContextLedgerEntry,
   type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalReport,
@@ -359,14 +296,10 @@ export {
 } from './corpus/eval-fixture-loader.js'
 export {
   createEvalSliceManifest,
-  EvalSliceManifestCaseSchema,
-  EvalSliceManifestSchema,
-  type EvalSliceManifest,
-  type EvalSliceManifestCase
+  EvalSliceManifestSchema
 } from './corpus/eval-slice-manifest.js'
 export {
-  calculateEvalDiffStats,
-  type EvalDiffStats
+  calculateEvalDiffStats
 } from './scoring/eval-diff-stats.js'
 export {
   allDiffScopes,
@@ -374,6 +307,5 @@ export {
   DiffScopeSchema,
   expectedFindingDiffScopes,
   hunkSpansByPath,
-  type DiffScope,
-  type DiffHunkSpansByPath
+  type DiffScope
 } from './scoring/eval-diff-scope.js'

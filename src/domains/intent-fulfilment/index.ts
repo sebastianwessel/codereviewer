@@ -4,7 +4,6 @@
 // advisory-only requirement rests on that separation.
 export {
   collectChangeSurface,
-  type ChangedFileSurface,
   type ChangedLine,
   type ChangeSurface,
   type ChangeSurfaceSourceFile
@@ -14,22 +13,19 @@ export {
   ModelFulfilmentExplanationSchema,
   fulfilmentExplanationInputFor,
   normalizeFulfilmentExplanation,
-  type FulfilmentExplanationInput,
   type FulfilmentExplanationRunner
 } from './explanation.js'
 export {
-  createHarnessIntentFulfilmentAgents,
-  type HarnessIntentFulfilmentAgents
+  createHarnessIntentFulfilmentAgents
 } from './intent-fulfilment-agents.js'
 export {
-  createIntentFulfilmentLane,
-  type IntentFulfilmentLane
+  createIntentFulfilmentLane
 } from './intent-fulfilment-lane.js'
-export { renderIntentFulfilmentMarkdown } from './intent-markdown.js'
 export {
-  ChangeCitationSchema,
+  renderIntentFulfilmentMarkdown
+} from './intent-markdown.js'
+export {
   ExtraScopeEntrySchema,
-  IntentCitationSchema,
   IntentFulfilmentReportSchema,
   ObligationSchema,
   ObligationStatusSchema,
@@ -37,14 +33,12 @@ export {
   type ExtraScopeEntry,
   type IntentCitation,
   type IntentFulfilmentReport,
-  type IntentFulfilmentSummary,
   type Obligation,
   type ObligationStatus
 } from './intent-fulfilment-report.js'
 export {
   runIntentFulfilment,
-  type IntentFulfilmentAgents,
-  type RunIntentFulfilmentInput
+  type IntentFulfilmentAgents
 } from './intent-fulfilment-run.js'
 export {
   resolveIntentCitation,
@@ -63,9 +57,7 @@ export {
   normalizeFulfilmentJudgement,
   verifyJudgement,
   type FulfilmentJudgement,
-  type FulfilmentJudgementInput,
-  type FulfilmentJudgementRunner,
-  type VerifiedJudgement
+  type FulfilmentJudgementRunner
 } from './judgement.js'
 export {
   ModelObligationExtractionSchema,
@@ -73,6 +65,5 @@ export {
   normalizeObligationExtraction,
   obligationExtractionInputFor,
   type ExtractedObligation,
-  type ObligationExtractionInput,
   type ObligationExtractionRunner
 } from './obligation-extraction.js'

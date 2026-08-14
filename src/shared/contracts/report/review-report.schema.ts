@@ -45,16 +45,23 @@ export const RunSummarySchema = z.strictObject({
   // signals already on the report cannot carry it:
   //
   //   - `discovery` is absent both for a run that issued no discovery call AND
-  //     for one this engine wrote before spec 27 added the field, so reading its
-  //     absence as "no search ran" would strip an older, genuinely searched run
-  //     of its rates and accuse it of not having looked.
+  //     for a genuinely searched run that recorded no telemetry, so reading its
+  //     absence as "no search ran" would strip a real search of its rates and
+  //     accuse it of not having looked.
   //   - `model` is absent for a run that did not RECORD its model, which is a
   //     different fact from a run that used none.
   //
-  // Optional for reports written before this field existed: absent means THIS
-  // REPORT DOES NOT SAY, which is not the same claim as `performed`, so a surface
-  // may only suppress its rates on an explicit `not-performed`. Every report this
-  // engine writes states it.
+  // OPTIONAL FOR A LIVE REASON, not for an older artifact. `createReviewRunSummary`
+  // omits the key entirely when its caller passes undefined, and the caller's input
+  // type requires the key while allowing that value precisely so a caller that
+  // cannot say has to say so deliberately. Absent therefore means THIS REPORT DOES
+  // NOT SAY, which is not the same claim as `performed`, so a surface may only
+  // suppress its rates on an explicit `not-performed`.
+  //
+  // There is no compatibility window behind this. Producer and consumer ship in
+  // one commit, no review report is ever read back from disk by this engine, and
+  // the only one that exists anywhere is a byproduct inside a hydrated corpus
+  // fixture that nothing reads.
   modelSearch: z.enum(['performed', 'not-performed']).optional(),
   durationMs: z.int().min(0),
   costUsd: z.number().min(0).optional(),
@@ -297,9 +304,8 @@ export const ReviewReportSchema = z.strictObject({
   // `baseline.includeResolvedInReport` is enabled.
   resolvedBaselineEntries: z.array(FindingFingerprintSchema).optional(),
   // Optional because a run whose findings came from deterministic signals alone
-  // issued no discovery call, and a report written before this field existed has
-  // none to state. Absent means "not recorded", which is not the same claim as a
-  // recorded zero.
+  // issued no discovery call and has none to state. Absent means "not recorded",
+  // which is not the same claim as a recorded zero.
   discovery: ReviewDiscoveryReportSchema.optional(),
   // Spec 29. Optional for the same reason `discovery` is: absent means THIS RUN
   // DID NOT COMPUTE IT, which is a different claim from a computed result whose

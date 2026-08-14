@@ -1,7 +1,5 @@
 export {
   resolveProviderModelAlias,
-  type ProviderImport,
-  type ProviderResolution,
-  type ResolveProviderModelAliasOptions
+  type ProviderImport
 } from './provider-resolution.js'
 

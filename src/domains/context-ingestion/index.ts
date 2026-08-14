@@ -8,24 +8,24 @@
 // the line numbering it publishes is the numbering this parser produces. That
 // makes the parse rule a contract between two domains rather than an internal
 // detail, and a contract only one side can see is one nobody can test.
-export { parseFrontmatter } from './frontmatter.js'
+export {
+  parseFrontmatter
+} from './frontmatter.js'
 export type {
   ChangeIntentBrief,
   ContextFragment,
-  ContextFragmentKind,
-  ContextGatherInput,
   ContextGatherOutput,
   ContextProvider,
-  ContextSummarizer,
-  SummarizeInput
+  ContextSummarizer
 } from './contracts.js'
-export { createDigestSummarizer } from './digest-summarizer.js'
-export { createModelSummarizer } from './model-summarizer.js'
+export {
+  createDigestSummarizer
+} from './digest-summarizer.js'
+export {
+  createModelSummarizer
+} from './model-summarizer.js'
 export {
   gatherContextFragments,
   runContextIngestion,
-  type ContextGatherOptions,
-  type ContextGatherResult,
-  type ContextIngestionResult,
-  type ProviderGatherMetric
+  type ContextIngestionResult
 } from './ingest.js'

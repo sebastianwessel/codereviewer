@@ -4,7 +4,9 @@ export {
   type ReportArtifactWriter,
   type WrittenReportArtifact
 } from './json-reporter.js'
-export { renderMarkdownReport } from './markdown-reporter.js'
+export {
+  renderMarkdownReport
+} from './markdown-reporter.js'
 export {
   renderSarifReport,
   type SarifRenderOptions
@@ -27,7 +29,9 @@ export {
   renderReviewComments,
   type RenderedReviewComment
 } from './review-comment-renderers.js'
-export { renderRunSummaryJson } from './run-summary.js'
+export {
+  renderRunSummaryJson
+} from './run-summary.js'
 export {
   emptyRunIndex,
   latestRunWithReport,

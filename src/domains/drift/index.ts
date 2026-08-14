@@ -1,13 +1,7 @@
 export {
   runDriftCheck,
-  DriftCheckResultSchema,
-  DriftFindingSchema,
-  DriftGateSchema,
-  GeneratedArtifactStatusSchema,
   type DriftCheckResult,
-  type DriftFinding,
-  type DriftGate,
-  type GeneratedArtifactStatus
+  type DriftFinding
 } from './drift-checker.js'
 export {
   artifactContracts,
@@ -16,13 +10,7 @@ export {
   checkArtifactExamples,
   checkArtifactExamplesInFile,
   findArtifactExampleProblems,
-  renderArtifactExampleIssues,
-  ArtifactExampleCheckResultSchema,
-  ArtifactExampleIssueKindSchema,
-  ArtifactExampleIssueSchema,
-  type ArtifactExampleCheckResult,
-  type ArtifactExampleIssue,
-  type ArtifactExampleIssueKind
+  renderArtifactExampleIssues
 } from './artifact-example-checker.js'
 export {
   checkConfigDocumentFile,
@@ -32,12 +20,8 @@ export {
   configScanRoots,
   extractJsonBlocks,
   renderConfigExampleIssues,
-  ConfigExampleCheckResultSchema,
-  ConfigExampleIssueKindSchema,
-  ConfigExampleIssueSchema,
-  type ConfigExampleCheckResult,
-  type ConfigExampleIssue,
-  type ConfigExampleIssueKind,
   type JsonBlock
 } from './config-example-checker.js'
-export { type TextFile } from './markdown-sources.js'
+export {
+  type TextFile
+} from './markdown-sources.js'

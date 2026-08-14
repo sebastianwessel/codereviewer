@@ -53,7 +53,7 @@ describe('SARIF reporter', () => {
       'src/app.ts'
     )
     expect(sarif.runs[0].results[0].partialFingerprints).toEqual({
-      'v1-category-rule-path-location-title-evidence': 'abc123'
+      'v3-category-path-anchor': 'abc123'
     })
     expect(sarif.runs[0].results[0].properties.fixProposal).toEqual({
       summary: 'Return the computed value from the changed branch.',

@@ -8,10 +8,11 @@ export {
   type ContextRetrievalResult,
   type ContextRetriever
 } from './context-retriever.js'
-export { ContextRetrievalEligibilityConfigSchema } from './eligibility.js'
+export {
+  ContextRetrievalEligibilityConfigSchema
+} from './eligibility.js'
 export type {
-  ContextRetrievalEligibilityConfig,
-  EligibilityResult
+  ContextRetrievalEligibilityConfig
 } from './eligibility.js'
 
 // The bounded tool surface and the model-facing repository-tool contract are part
@@ -22,19 +23,14 @@ export {
   ToolCallBudgetExceededError,
   isToolCallBudgetExceededError,
   createBoundedRetrievalTools,
-  type BoundedRetrievalTools,
   type RetrievalTools
 } from './bounded-tools.js'
 export {
   lookupSymbolReferences,
-  type LookupSymbolReferencesInput,
-  type SymbolReferenceQuery,
-  type SymbolReferenceResult,
   type SymbolReferenceSite
 } from './symbol-reference-lookup.js'
 export {
   contextRetrievalConditions,
-  ContextRetrievalConditionError,
   isContextRetrievalConditionError,
   type ContextRetrievalCondition
 } from './expected-conditions.js'

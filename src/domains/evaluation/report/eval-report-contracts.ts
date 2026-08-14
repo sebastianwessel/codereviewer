@@ -200,7 +200,7 @@ export const EvalCaseReportSchema = z.strictObject({
   // mirrored: the provider-issue and refutation mirrors above exist because the
   // eval reshapes those, and there is nothing to reshape here — a copy would only
   // create two definitions that can drift. Absent when the review report carried
-  // none (a provider-errored case, or a report written before the field existed).
+  // none, which is a provider-errored case.
   discovery: ReviewReportSchema.shape.discovery,
   contextLedger: z.array(EvalContextLedgerEntrySchema).default([]),
   // EVERY finding the review produced for this case -- actionable and
@@ -433,8 +433,9 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // recorded either way: a report that cannot name its own judge leaves every
   // number in it ambiguous between a reviewer difference and a scorer
   // difference, which is exactly the failure the pinning exists to remove.
-  // Optional for the same reason as the two above (an offline run has no
-  // judge), and so a report archived before the field existed still parses.
+  // Optional for the same reason as the two above: an offline run has no judge.
+  // Not for an archived report — this is the producer contract, which no archive
+  // is ever read through.
   judgeModelName: z.string().min(1).optional(),
   // Which optional capabilities the run actually had ENABLED.
   //
@@ -446,9 +447,10 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // reader asks of a fix-lane figure, and the hash still cannot: it is kept for
   // identity, and this is kept for content.
   //
-  // OPTIONAL, AND ABSENT MEANS "NOT RECORDED" -- NEVER "NOTHING WAS ENABLED". A
-  // report archived before this field existed was written by a build that did
-  // not know to record it, and defaulting it to an all-`false` set would
+  // OPTIONAL, AND ABSENT MEANS "NOT RECORDED" -- NEVER "NOTHING WAS ENABLED".
+  // The producer's own input types it optional and omits the key when a caller
+  // does not supply it, so absence is reachable in a report written today; it is
+  // not a statement about older builds. Defaulting it to an all-`false` set would
   // fabricate an answer about a run nobody can re-interrogate. Same rule, and
   // the same reason, as `scoring.plausibilityJudged`.
   capabilities: EvalReportCapabilityFlagsSchema.optional()
@@ -476,23 +478,20 @@ export const EvalMetricGroupSchema = z.strictObject({
 export { EVAL_METRICS_VERSION } from './versions/eval-metrics-versions.js'
 
 export const EvalReportSchema = z.strictObject({
-  // '2.0' since 2026-08-11. It moved because the case result's SHAPE moved twice
-  // that day — the four per-classification finding arrays became one
-  // `producedFindings`, which then gained `description` — while this literal went
-  // on claiming '1.0'.
+  // '1.0', and it stays there while the product is unreleased. This literal was
+  // briefly bumped to '2.0' on the theory that a version which does not move when
+  // the payload does asserts a compatibility that does not hold — but the incident
+  // behind that theory refutes it. When the case result's four per-classification
+  // finding arrays became one `producedFindings`, about a hundred engine-pinned
+  // archives stopped opening, and they were rejected ON UNKNOWN KEYS: the strict
+  // shape below did the catching, while the version literal still matched and
+  // caught nothing. Bumping it afterwards reopened no archive.
   //
-  // A version that does not change when the payload does is worse than no version:
-  // it asserts compatibility that does not hold, and here it did real damage. Every
-  // archive written before that day declares the version this reader expects and is
-  // then rejected on unknown keys, so about a hundred engine-pinned runs — the
-  // evidence base the ledger is written from — stopped opening. `eval compare`
-  // survived because it reads through a tolerant view; `eval recall-report` did
-  // not, and its analysis had to be redone by hand.
-  //
-  // The rule this encodes: bump it whenever a field is added, removed or reshaped
-  // here or in anything it contains. `metricsVersion` is a different question and
-  // answers it separately — that one says how the numbers were COMPUTED, this one
-  // says what shape they arrive in.
+  // Nothing in this repository dispatches on the value — no migration, no branch,
+  // no reader that behaves differently per version — so it is documentation, and
+  // it documents one schema generation. `metricsVersion` is the opposite case and
+  // is genuinely versioned: an ordered history with a declared `affects` set per
+  // entry, where the value changes what the code does. See spec 06.
   schemaVersion: z.literal('1.0'),
   // This is the PRODUCER contract, and it carries no tolerance for an artifact an
   // older build wrote: a report that does not satisfy it was not written by a

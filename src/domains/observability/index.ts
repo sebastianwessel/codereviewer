@@ -1,8 +1,9 @@
-export { configureOpenTelemetry } from './open-telemetry.js'
+export {
+  configureOpenTelemetry
+} from './open-telemetry.js'
 export {
   createNoContentEventRecorder,
   createNoContentStepEvent,
-  type NoContentAttributes,
   type NoContentEventRecorder,
   type NoContentObservabilitySnapshot,
   type NoContentRunEvent

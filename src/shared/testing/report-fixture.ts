@@ -105,7 +105,7 @@ export const createReportFixture = (): ReviewReport =>
         baselineStatus: 'new',
         fingerprints: [
           {
-            algorithm: 'v1-category-rule-path-location-title-evidence',
+            algorithm: 'v3-category-path-anchor',
             value: 'abc123'
           }
         ]
