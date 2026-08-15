@@ -10,17 +10,17 @@ import {
   formatTokenMetric,
   UNKNOWN_VALUE
 } from '../eval-report-markdown-formatting.js'
-import {
-  type EvalComparabilityKey,
-  type MetricComparability
+import type {
+  EvalComparabilityKey,
+  MetricComparability
 } from '../../report/versions/eval-metrics-versions.js'
 import {
   precisionBracket,
   type PrecisionBracket
 } from '../../scoring/eval-precision-bracket.js'
-import {
-  type EvalComparisonMetrics,
-  type EvalComparisonReport
+import type {
+  EvalComparisonMetrics,
+  EvalComparisonReport
 } from '../../report/eval-comparison-view.js'
 
 // A value both reports recorded, whose difference means nothing because the

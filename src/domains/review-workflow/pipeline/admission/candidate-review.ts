@@ -1,5 +1,5 @@
-import { type CandidateFinding } from '../../../admission/index.js'
-import { type RefutationResolution } from '../refutation/execution.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type { RefutationResolution } from '../refutation/execution.js'
 import {
   candidateWithinReviewedScope,
   isModelProposedCandidate
@@ -7,7 +7,7 @@ import {
 import { createRefutationEvidence } from '../refutation/evidence.js'
 import { activeRefutationResultForCandidate } from '../refutation/result.js'
 import { refutationProviderErrorOutcome } from './provider-error-outcome.js'
-import { type AdmissionCandidateOutcome } from './outcome.js'
+import type { AdmissionCandidateOutcome } from './outcome.js'
 import {
   noRefuterAdmissionOutcome,
   outOfDiffScopeOutcome,
@@ -18,7 +18,7 @@ import {
   refutedCandidateOutcome,
   weakEvidenceRejectedOutcome
 } from '../refutation/verdict-outcome.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 
 /**
  * Turns ONE candidate plus its already-resolved refutation verdict into an

@@ -3,10 +3,10 @@ import {
   type EvidenceRecord,
   type RefutationResult
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { truncateToFieldBound } from '../../../../shared/text/truncate.js'
-import { type FindingRefutationResult } from '../agent-contracts.js'
+import type { FindingRefutationResult } from '../agent-contracts.js'
 
 const checkResultForVerdict = (
   verdict: FindingRefutationResult['verdict']

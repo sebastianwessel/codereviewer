@@ -1,4 +1,4 @@
-import { type DiffScope } from '../../scoring/eval-diff-scope.js'
+import type { DiffScope } from '../../scoring/eval-diff-scope.js'
 import {
   appendMarkdownTable,
   escapeMarkdownCell,
@@ -19,8 +19,8 @@ import {
   precisionBracket,
   type PrecisionBracket
 } from '../../scoring/eval-precision-bracket.js'
-import { type EvalReport } from '../../report/eval-report-contracts.js'
-import { type EvalMetrics } from '../../scoring/metrics.js'
+import type { EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalMetrics } from '../../scoring/metrics.js'
 
 // Precision is published as a BRACKET everywhere, never as a point. See
 // `eval-precision-bracket.ts`: under an incomplete answer key precision is not

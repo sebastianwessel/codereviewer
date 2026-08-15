@@ -1,50 +1,34 @@
-import { execFile } from 'node:child_process'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { promisify } from 'node:util'
-import {
-  resolveExistingPathInsideRoot,
-  resolveWritePathInsideRoot
-} from '../../../platform/path-service.js'
-import { isFileNotFoundError } from '../../../shared/errors/error-normalizer.js'
 import {
   countExpectedImpactByReachability,
   parseChangeImpactCorpusManifestJson,
   type ChangeImpactCorpusCase,
-  type ChangeImpactCorpusManifest,
   type ImpactReachabilityCounts
 } from './change-impact-corpus.schema.js'
 import {
-  removedProseCommentsIn,
-  resolveRemovedCommentDisclosures
-} from '../corpus/real-repo-diff-comment-disclosure.js'
+  assertCorpusDiffIsUncontaminated,
+  hydrateGitCorpus,
+  readCorpusManifestText,
+  readOptionalText,
+  storedDiffOf
+} from '../corpus/git-corpus-hydration.js'
 import {
-  answerKeyLeakIn,
-  selectCorpusCases,
-  tokenNormalizedDiffFingerprint
-} from '../corpus/real-repo-corpus.schema.js'
-import {
-  gitDisableAutoCrlfArgs,
-  gitFetchArgs,
-  gitCheckoutArgs,
-  gitInitArgs,
-  gitParentOfArgs,
-  gitRemoteArgs,
-  pruneUnknownCaseDirectories,
-  resolveCaseHydrationState,
+  checkoutCorpusCase,
+  defaultCorpusGitRunner,
+  CORPUS_WORK_TREE_DIRECTORY,
   type CorpusGitCommandRunner
-} from '../corpus/real-repo-corpus-hydration.js'
+} from '../corpus/git-corpus-plumbing.js'
 
 // Hydration for the change-impact corpus (spec 22 §Evaluation).
 //
-// The git plumbing, the integrity decision and the pruning rule are spec 17's and
-// are imported rather than re-implemented. What does NOT carry over is the
-// ORIENTATION: spec 17 checks out the fix's parent and reads the fix backwards,
-// while a change-impact case checks out the INTRODUCING commit and reads the
-// change forwards, exactly as it was made. Everything below that differs from
-// spec 17 differs because of that one fact.
-
-const execFileAsync = promisify(execFile)
+// The git plumbing, the integrity decision, the hydration loop and the pruning
+// rule are shared with spec 17's corpus and are imported rather than
+// re-implemented. What does NOT carry over is the ORIENTATION: spec 17 checks out
+// the fix's parent and reads the fix backwards, while a change-impact case checks
+// out the INTRODUCING commit and reads the change forwards, exactly as it was
+// made. Everything below that differs from spec 17 differs because of that one
+// fact.
 
 export const defaultChangeImpactManifestPath =
   'eval/corpora/change-impact-dependents/manifest.json'
@@ -57,18 +41,6 @@ export const defaultChangeImpactOutputRoot =
   '.codereviewer/eval/change-impact-cases/change-impact-dependents'
 
 export const changeImpactHydrationSource = 'change-impact-forward-checkout-v1'
-
-const gitOutputByteCap = 64 * 1024 * 1024
-
-const defaultGitRunner: CorpusGitCommandRunner = async ({ args, cwd }) => {
-  const { stdout } = await execFileAsync('git', [...args], {
-    cwd,
-    maxBuffer: gitOutputByteCap,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-  })
-
-  return stdout
-}
 
 // FORWARD: base is the parent, head is the introducing commit. That direction is
 // required, not stylistic — the new side of the diff must be the tree that was
@@ -115,47 +87,26 @@ export const diffHeaderPaths = (diff: string): readonly string[] => {
   return [...paths].sort((left, right) => left.localeCompare(right))
 }
 
+// The contamination guard for this corpus. The rules live in
+// `assertCorpusDiffIsUncontaminated`; what this corpus adds is its own wording.
+// The forward orientation removes spec 17's dominant leak — a comment the FIX
+// added showing up as a removed line — but not the rule's reason to exist. A
+// change that DELETES an explanatory comment still shows the reviewer prose that
+// may state the contract it is about to move, and a curator still has to judge
+// each one.
 export const assertReviewedDiffIsUncontaminated = (input: {
   readonly corpusCase: ChangeImpactCorpusCase
   readonly diff: string
   readonly log?: (message: string) => void
 }): void => {
-  const diffLeak = answerKeyLeakIn(input.diff)
-
-  if (diffLeak !== undefined) {
-    throw new Error(
-      `Change-impact case "${input.corpusCase.id}": the reviewed diff names the defect, so the answer key is inside the model's input ("${diffLeak}"). Drop the case or choose reviewed paths that exclude the disclosure.`
-    )
-  }
-
-  // The forward orientation removes spec 17's dominant leak — a comment the FIX
-  // added showing up as a removed line — but not the rule's reason to exist. A
-  // change that DELETES an explanatory comment still shows the reviewer prose that
-  // may state the contract it is about to move, and a curator still has to judge
-  // each one.
-  const flaggedComments = removedProseCommentsIn(input.diff)
-  const acknowledgedComments =
-    input.corpusCase.removedCommentDisclosureReview?.acknowledgedComments ?? []
-  const { unresolvedComments, staleAcknowledgements } =
-    resolveRemovedCommentDisclosures({ flaggedComments, acknowledgedComments })
-
-  if (unresolvedComments.length > 0) {
-    throw new Error(
-      `Change-impact case "${input.corpusCase.id}": the reviewed diff removes ${unresolvedComments.length} prose comment(s) no curator has judged. Read each one against the case's expectations, then either drop the case or record it under removedCommentDisclosureReview.acknowledgedComments: ${unresolvedComments.map((comment) => `"${comment}"`).join(', ')}.`
-    )
-  }
-
-  if (staleAcknowledgements.length > 0) {
-    throw new Error(
-      `Change-impact case "${input.corpusCase.id}": removedCommentDisclosureReview acknowledges comment(s) the reviewed diff no longer removes, so the resolution would blanket-cover whatever appears next. Remove them: ${staleAcknowledgements.map((comment) => `"${comment}"`).join(', ')}.`
-    )
-  }
-
-  if (flaggedComments.length > 0) {
-    input.log?.(
-      `${input.corpusCase.id}: ${flaggedComments.length} removed prose comment(s) reviewed as non-disclosing on ${input.corpusCase.removedCommentDisclosureReview?.reviewedAt ?? 'an unrecorded date'}`
-    )
-  }
+  assertCorpusDiffIsUncontaminated({
+    caseLabel: `Change-impact case "${input.corpusCase.id}"`,
+    caseId: input.corpusCase.id,
+    diff: input.diff,
+    disclosureReview: input.corpusCase.removedCommentDisclosureReview,
+    unjudgedCommentNote: '',
+    ...(input.log === undefined ? {} : { log: input.log })
+  })
 }
 
 // The hydrated case artefact. Deliberately NOT the eval slice contract: an eval
@@ -238,41 +189,6 @@ export type HydrateChangeImpactCorpusResult = {
   readonly cases: readonly ChangeImpactCaseResult[]
 }
 
-const readOptionalText = async (
-  filePath: string
-): Promise<string | undefined> => {
-  try {
-    return await readFile(filePath, 'utf8')
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return undefined
-    }
-
-    throw error
-  }
-}
-
-const readStoredCase = async (
-  casePath: string
-): Promise<Record<string, unknown> | undefined> => {
-  const text = await readOptionalText(casePath)
-
-  if (text === undefined) {
-    return undefined
-  }
-
-  try {
-    return JSON.parse(text) as Record<string, unknown>
-  } catch {
-    return undefined
-  }
-}
-
-const storedDiffOf = (
-  stored: Record<string, unknown> | undefined
-): string | undefined =>
-  typeof stored?.diff === 'string' ? stored.diff : undefined
-
 // A stored case carries a copy of the case definition, so editing the manifest
 // leaves every existing checkout describing the previous one. Spec 17 records what
 // happens without this check: a corpus silently scored against a stale answer key,
@@ -304,88 +220,6 @@ const storedCaseMatchesDefinition = (input: {
   } catch {
     return false
   }
-}
-
-const readHeadCommit = async (input: {
-  readonly runGit: CorpusGitCommandRunner
-  readonly workTreeDirectory: string
-}): Promise<string | undefined> => {
-  try {
-    return (
-      await input.runGit({
-        args: ['rev-parse', '--verify', 'HEAD'],
-        cwd: input.workTreeDirectory
-      })
-    ).trim()
-  } catch {
-    return undefined
-  }
-}
-
-const checkoutCase = async (input: {
-  readonly corpusCase: ChangeImpactCorpusCase
-  readonly caseDirectory: string
-  readonly runGit: CorpusGitCommandRunner
-}): Promise<string> => {
-  const workTreeDirectory = path.join(input.caseDirectory, 'repo')
-  const gitDirectory = path.join(input.caseDirectory, 'git')
-
-  await rm(input.caseDirectory, { recursive: true, force: true })
-  await mkdir(workTreeDirectory, { recursive: true })
-  await input.runGit({
-    args: gitInitArgs({ gitDirectory, workTreeDirectory }),
-    cwd: input.caseDirectory
-  })
-  await input.runGit({ args: gitDisableAutoCrlfArgs(), cwd: workTreeDirectory })
-  await input.runGit({
-    args: gitRemoteArgs(input.corpusCase.repositoryUrl),
-    cwd: workTreeDirectory
-  })
-  await input.runGit({
-    args: gitFetchArgs({ commit: input.corpusCase.introducingCommit }),
-    cwd: workTreeDirectory
-  })
-
-  const parentCommit = (
-    await input.runGit({
-      args: gitParentOfArgs(input.corpusCase.introducingCommit),
-      cwd: workTreeDirectory
-    })
-  ).trim()
-
-  if (parentCommit !== input.corpusCase.parentCommit) {
-    throw new Error(
-      `Change-impact case "${input.corpusCase.id}": upstream parent of ${input.corpusCase.introducingCommit} is ${parentCommit}, but the manifest declares ${input.corpusCase.parentCommit}.`
-    )
-  }
-
-  // The INTRODUCING commit is the working tree, because that is the state a
-  // reviewer of this change would have and the state every expected line range
-  // is written against.
-  await input.runGit({
-    args: gitCheckoutArgs(input.corpusCase.introducingCommit),
-    cwd: workTreeDirectory
-  })
-
-  const headCommit = await readHeadCommit({
-    runGit: input.runGit,
-    workTreeDirectory
-  })
-
-  if (headCommit !== input.corpusCase.introducingCommit) {
-    throw new Error(
-      `Change-impact case "${input.corpusCase.id}": checkout landed on ${headCommit ?? 'an unknown commit'} instead of ${input.corpusCase.introducingCommit}.`
-    )
-  }
-
-  return input.runGit({
-    args: gitForwardDiffArgs({
-      parentCommit: input.corpusCase.parentCommit,
-      introducingCommit: input.corpusCase.introducingCommit,
-      reviewedPaths: input.corpusCase.reviewedPaths
-    }),
-    cwd: workTreeDirectory
-  })
 }
 
 // Every expected dependent must exist in the checkout and must actually have the
@@ -421,16 +255,28 @@ const assertExpectedImpactResolves = async (input: {
 }
 
 const hydrateCase = async (input: {
-  readonly manifest: ChangeImpactCorpusManifest
+  readonly datasetId: string
   readonly corpusCase: ChangeImpactCorpusCase
   readonly caseDirectory: string
-  readonly casePath: string
+  readonly artifactPath: string
   readonly runGit: CorpusGitCommandRunner
   readonly log?: (message: string) => void
 }): Promise<{ readonly reviewedFileCount: number; readonly diff: string }> => {
-  const diff = await checkoutCase({
-    corpusCase: input.corpusCase,
+  const diff = await checkoutCorpusCase({
+    caseLabel: `Change-impact case "${input.corpusCase.id}"`,
     caseDirectory: input.caseDirectory,
+    repositoryUrl: input.corpusCase.repositoryUrl,
+    fetchCommit: input.corpusCase.introducingCommit,
+    declaredParentCommit: input.corpusCase.parentCommit,
+    // The INTRODUCING commit is the working tree, because that is the state a
+    // reviewer of this change would have and the state every expected line range
+    // is written against.
+    checkoutCommit: input.corpusCase.introducingCommit,
+    reviewedDiffArgs: gitForwardDiffArgs({
+      parentCommit: input.corpusCase.parentCommit,
+      introducingCommit: input.corpusCase.introducingCommit,
+      reviewedPaths: input.corpusCase.reviewedPaths
+    }),
     runGit: input.runGit
   })
   const changedFiles = diffHeaderPaths(diff)
@@ -465,16 +311,19 @@ const hydrateCase = async (input: {
 
   await assertExpectedImpactResolves({
     corpusCase: input.corpusCase,
-    workTreeDirectory: path.join(input.caseDirectory, 'repo')
+    workTreeDirectory: path.join(
+      input.caseDirectory,
+      CORPUS_WORK_TREE_DIRECTORY
+    )
   })
 
-  await mkdir(path.dirname(input.casePath), { recursive: true })
+  await mkdir(path.dirname(input.artifactPath), { recursive: true })
   await writeFile(
-    input.casePath,
+    input.artifactPath,
     `${JSON.stringify(
       buildChangeImpactCase({
         corpusCase: input.corpusCase,
-        datasetId: input.manifest.datasetId,
+        datasetId: input.datasetId,
         diff,
         changedFiles
       }),
@@ -491,151 +340,65 @@ export const hydrateChangeImpactCorpus = async (
 ): Promise<HydrateChangeImpactCorpusResult> => {
   const manifestPath = options.manifestPath ?? defaultChangeImpactManifestPath
   const outputRoot = options.outputRoot ?? defaultChangeImpactOutputRoot
-  const runGit = options.runGit ?? defaultGitRunner
   const manifest = parseChangeImpactCorpusManifestJson(
-    await readFile(
-      await resolveExistingPathInsideRoot(options.repositoryRoot, manifestPath),
-      'utf8'
-    )
+    await readCorpusManifestText(options.repositoryRoot, manifestPath)
   )
-  const selectedCases = selectCorpusCases(
-    manifest.cases,
-    options.caseFilters ?? []
-  )
-  const resolvedOutputRoot = await resolveWritePathInsideRoot(
-    options.repositoryRoot,
-    outputRoot
-  )
-
-  if (options.force === true) {
-    await Promise.all(
-      selectedCases.map(async (corpusCase) =>
-        rm(path.join(resolvedOutputRoot, corpusCase.id), {
-          recursive: true,
-          force: true
-        })
-      )
-    )
-  }
-
-  await mkdir(resolvedOutputRoot, { recursive: true })
-
-  const results: ChangeImpactCaseResult[] = []
-  const fingerprintOwners = new Map<string, string>()
-  let hydratedCaseCount = 0
-  let repairedCaseCount = 0
-  let cachedCaseCount = 0
-  let reviewedFileCount = 0
-
-  for (const corpusCase of selectedCases) {
-    const caseDirectory = path.join(resolvedOutputRoot, corpusCase.id)
-    const casePath = path.join(caseDirectory, 'case.json')
-    const [headCommit, stored] = await Promise.all([
-      readHeadCommit({
-        runGit,
-        workTreeDirectory: path.join(caseDirectory, 'repo')
-      }),
-      readStoredCase(casePath)
-    ])
-    const storedDiff = storedDiffOf(stored)
-    const state = resolveCaseHydrationState({
-      headCommit,
-      expectedCheckoutCommit: corpusCase.introducingCommit,
-      sliceDiff: storedDiff,
-      sliceMatchesCaseDefinition: storedCaseMatchesDefinition({
+  const outcome = await hydrateGitCorpus<
+    ChangeImpactCorpusCase,
+    ChangeImpactCaseResult
+  >({
+    repositoryRoot: options.repositoryRoot,
+    outputRoot,
+    caseFilters: options.caseFilters ?? [],
+    force: options.force === true,
+    runGit: options.runGit ?? defaultCorpusGitRunner,
+    ...(options.log === undefined ? {} : { log: options.log }),
+    manifestCases: manifest.cases,
+    artifactFileName: 'case.json',
+    expectedCheckoutCommit: (corpusCase) => corpusCase.introducingCommit,
+    storedArtifactMatchesCase: ({ stored, corpusCase }) =>
+      storedCaseMatchesDefinition({
         stored,
         corpusCase,
         datasetId: manifest.datasetId
-      })
-    })
-
-    if (state === 'hydrated' && storedDiff !== undefined) {
-      assertReviewedDiffIsUncontaminated({
-        corpusCase,
-        diff: storedDiff,
-        ...(options.log === undefined ? {} : { log: options.log })
-      })
-
-      const reusedFileCount = diffHeaderPaths(storedDiff).length
-
-      cachedCaseCount += 1
-      reviewedFileCount += reusedFileCount
-      results.push({
-        id: corpusCase.id,
-        split: corpusCase.split,
-        state: 'cached',
-        reviewedFileCount: reusedFileCount,
-        expectedImpactCount: corpusCase.expectedImpact.length,
-        diffFingerprint: tokenNormalizedDiffFingerprint(storedDiff)
-      })
-      continue
-    }
-
-    options.log?.(
-      `${state === 'stale' ? 'Repairing' : 'Hydrating'} ${corpusCase.id}`
-    )
-
-    const hydrated = await hydrateCase({
-      manifest,
+      }),
+    assertDiffIsUncontaminated: assertReviewedDiffIsUncontaminated,
+    countReviewedFiles: (diff) => diffHeaderPaths(diff).length,
+    hydrateCase: async (input) =>
+      hydrateCase({ datasetId: manifest.datasetId, ...input }),
+    buildCaseResult: ({
       corpusCase,
-      caseDirectory,
-      casePath,
-      runGit,
-      ...(options.log === undefined ? {} : { log: options.log })
-    })
-
-    if (state === 'stale') {
-      repairedCaseCount += 1
-    } else {
-      hydratedCaseCount += 1
-    }
-
-    reviewedFileCount += hydrated.reviewedFileCount
-    results.push({
+      state,
+      reviewedFileCount,
+      diffFingerprint
+    }) => ({
       id: corpusCase.id,
       split: corpusCase.split,
-      state: state === 'stale' ? 'repaired' : 'hydrated',
-      reviewedFileCount: hydrated.reviewedFileCount,
+      state,
+      reviewedFileCount,
       expectedImpactCount: corpusCase.expectedImpact.length,
-      diffFingerprint: tokenNormalizedDiffFingerprint(hydrated.diff)
-    })
-  }
-
-  for (const result of results) {
-    const owner = fingerprintOwners.get(result.diffFingerprint)
-
-    if (owner !== undefined) {
-      throw new Error(
-        `Change-impact cases "${owner}" and "${result.id}" hydrate the same normalized change; remove the duplicate.`
-      )
-    }
-
-    fingerprintOwners.set(result.diffFingerprint, result.id)
-  }
-
-  const prunedCaseIds =
-    (options.caseFilters ?? []).length > 0
-      ? []
-      : await pruneUnknownCaseDirectories(
-          resolvedOutputRoot,
-          new Set(manifest.cases.map((corpusCase) => corpusCase.id))
-        )
+      diffFingerprint
+    }),
+    duplicateChangeMessage: ({ ownerCaseId, caseId }) =>
+      `Change-impact cases "${ownerCaseId}" and "${caseId}" hydrate the same normalized change; remove the duplicate.`
+  })
 
   return {
     manifestPath,
     outputRoot,
     datasetId: manifest.datasetId,
-    hydratedCaseCount,
-    repairedCaseCount,
-    cachedCaseCount,
-    reviewedFileCount,
-    expectedImpactCount: selectedCases.reduce(
+    hydratedCaseCount: outcome.hydratedCaseCount,
+    repairedCaseCount: outcome.repairedCaseCount,
+    cachedCaseCount: outcome.cachedCaseCount,
+    reviewedFileCount: outcome.reviewedFileCount,
+    expectedImpactCount: outcome.selectedCases.reduce(
       (total, corpusCase) => total + corpusCase.expectedImpact.length,
       0
     ),
-    expectedImpactByReachability:
-      countExpectedImpactByReachability(selectedCases),
-    prunedCaseIds,
-    cases: results
+    expectedImpactByReachability: countExpectedImpactByReachability(
+      outcome.selectedCases
+    ),
+    prunedCaseIds: outcome.prunedCaseIds,
+    cases: outcome.cases
   }
 }

@@ -1,6 +1,6 @@
 import { allDiffScopes } from '../../scoring/eval-diff-scope.js'
 import { appendMarkdownTable, formatPercent } from '../eval-report-markdown-formatting.js'
-import { type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalReport } from '../../report/eval-report-contracts.js'
 import { formatDiffScopeRecall } from './eval-summary-headline-metrics-rendering.js'
 
 const tierDisplayOrder = [

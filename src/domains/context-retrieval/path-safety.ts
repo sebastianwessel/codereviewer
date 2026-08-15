@@ -15,6 +15,19 @@ import {
   pathNotFoundCondition
 } from './expected-conditions.js'
 
+/**
+ * The repository-relative path of an entry inside a listed or traversed
+ * directory, in the portable (POSIX-separator) form every mediated surface
+ * reports.
+ *
+ * Shared by the directory listing and the search traversal so the two cannot
+ * name the same entry differently.
+ */
+export const portableChildPath = (
+  directory: string,
+  childName: string
+): string => normalizeRepositoryRelativePath(path.posix.join(directory, childName))
+
 // Whether a filesystem error means "nothing is there". `ENOENT` is the plain
 // case; `ENOTDIR` is the same statement made about an intermediate segment (a
 // path under a regular file). Every other errno — a permission failure above

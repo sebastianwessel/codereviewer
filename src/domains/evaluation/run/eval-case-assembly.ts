@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import type {
   AdmittedFinding,
   ReviewReport
@@ -31,7 +31,7 @@ import {
 } from '../scoring/metrics.js'
 import { securityFindingMechanismCountsForCase } from '../scoring/security-mechanism-attribution.js'
 import {
-  EvalCaseReportSchema,
+  type EvalCaseReportSchema,
   EvalProviderIssueReportSchema,
   type EvalCaseOutput
 } from '../report/eval-report-contracts.js'

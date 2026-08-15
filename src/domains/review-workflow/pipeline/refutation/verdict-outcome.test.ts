@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type EvidenceRecord,
-  type RefutationResult
+import type { CandidateFinding } from '../../../admission/index.js'
+import type {
+  EvidenceRecord,
+  RefutationResult
 } from '../../../../shared/contracts/index.js'
-import { type FindingRefutationResult } from '../agent-contracts.js'
+import type { FindingRefutationResult } from '../agent-contracts.js'
 import { activeRefutationResultForCandidate } from './result.js'
 import {
   admissibleRefutationOutcome,

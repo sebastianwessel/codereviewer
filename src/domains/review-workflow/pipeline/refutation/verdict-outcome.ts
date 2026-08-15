@@ -4,9 +4,9 @@ import {
   type EvidenceRecord,
   type RefutationResult
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { truncateForContract } from '../../../../shared/text/truncate.js'
-import { type FindingRefutationResult } from '../agent-contracts.js'
+import type { FindingRefutationResult } from '../agent-contracts.js'
 import {
   emptyAdmissionCandidateOutcome,
   type AdmissionCandidateOutcome

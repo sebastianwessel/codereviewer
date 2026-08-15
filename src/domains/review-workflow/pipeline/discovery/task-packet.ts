@@ -9,7 +9,7 @@ import {
   pathFromEvidence,
   taskCoversPath
 } from '../task-planning.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 import {
   createTaskPacketBudgetExceededError,
   serializedBytes

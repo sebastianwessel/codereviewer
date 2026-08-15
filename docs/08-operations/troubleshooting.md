@@ -172,6 +172,16 @@ or a fresh orphan branch).
 npm run cli -- baseline write --report .codereviewer/runs/<runId>/report.json
 ```
 
+The same code covers a `--report` path that exists but could not be read, and
+the message says which of those it was — each needs a different fix:
+
+| Message says | `details.cause` | Do this |
+| --- | --- | --- |
+| does not exist | `ENOENT` | Check the path, or omit `--report` to use the newest completed run. |
+| permission denied | `EACCES` / `EPERM` | Grant read access, or point at a report this user can read. |
+| is a directory, not a file | `EISDIR` | Point at the `report.json` inside it. |
+| refused before it was read | `path_outside_repository` | Pass a repository-relative path inside the repository. |
+
 ### `baseline_source_invalid` — exit 3
 
 > The file at "…" is valid JSON but is not a review report.

@@ -1,11 +1,11 @@
-import {
-  type BuiltinToolName,
-  type Logger,
-  type ModelAlias,
-  type SkillsConfig
+import type {
+  BuiltinToolName,
+  Logger,
+  ModelAlias,
+  SkillsConfig
 } from '@purista/harness'
-import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
-import { type WorkflowTaskEvent } from '../pipeline/agent-contracts.js'
+import type { CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
+import type { WorkflowTaskEvent } from '../pipeline/agent-contracts.js'
 
 export type CreateReviewHarnessOptions = {
   readonly modelAlias: ModelAlias

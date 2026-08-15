@@ -269,7 +269,7 @@ export {
 
 // `providerImport` on `RunReviewOptions`: a caller injecting its own provider
 // module has to be able to type the function it passes.
-export { type ProviderImport } from './domains/provider-resolution/index.js'
+export type { ProviderImport } from './domains/provider-resolution/index.js'
 
 // `reviewDiffMaps` on `RunReviewOptions` accepts an already-parsed diff.
 // `parseGitDiffMaps` is published with it because it is the only supported way
@@ -296,25 +296,25 @@ export {
 
 // `sharedContext` on `ReviewRunnerResult`, and the two record types the snapshot
 // is made of.
-export {
-  type AdmissionDecisionRecord,
-  type ReviewSharedContextSnapshot,
-  type SharedContextEntry
+export type {
+  AdmissionDecisionRecord,
+  ReviewSharedContextSnapshot,
+  SharedContextEntry
 } from './domains/shared-context/index.js'
 
 // `candidateFindings` on the shared-context snapshot. The admission policy that
 // turns a candidate into an `AdmittedFinding` stays internal; only the shape a
 // caller can observe is published.
-export { type CandidateFinding } from './domains/admission/index.js'
+export type { CandidateFinding } from './domains/admission/index.js'
 
 // `supportSignalFacts` on the shared-context snapshot, and the two unions its
 // fields are drawn from. The extractors that produce these facts stay internal —
 // which language a fact came from is part of the fact, but running an extractor
 // is not something a caller does.
-export {
-  type SupportedSignalLanguage,
-  type SupportSignalFact,
-  type SupportSignalFactKind
+export type {
+  SupportedSignalLanguage,
+  SupportSignalFact,
+  SupportSignalFactKind
 } from './domains/deterministic-signals/index.js'
 
 // Reading and rendering a report. The renderers, the validator that turns an

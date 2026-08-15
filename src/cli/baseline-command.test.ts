@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import { BaselineWriteStdoutEnvelopeSchema } from '../shared/contracts/index.js'
+import { resolveBaselineSourceReport } from './baseline-source.js'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -94,6 +95,91 @@ describe('baseline write CLI', () => {
 
     expect(result.exitCode).toBe(3)
     expect(result.stderr).toContain('baseline_source_unavailable')
+  })
+
+  // One code, four causes needing four different actions. They used to be one
+  // sentence — "could not be read" — so a typo, a permission problem, a
+  // directory and a refused path were indistinguishable to the caller.
+  describe('an unreadable report says WHICH way it was unreadable', () => {
+    test('a path that is not there is named as missing', async () => {
+      const root = await createTempDir()
+
+      const result = await runCli(
+        ['baseline', 'write', '--report', '.codereviewer/runs/missing/report.json'],
+        { cwd: root, environment: {} }
+      )
+
+      const envelope = JSON.parse(result.stderr)
+
+      expect(envelope.code).toBe('baseline_source_unavailable')
+      expect(envelope.message).toContain(
+        '.codereviewer/runs/missing/report.json'
+      )
+      expect(envelope.message).toContain('does not exist')
+      expect(envelope.message).toContain('--report')
+    })
+
+    test('a directory is named as a directory, not as a missing file', async () => {
+      const root = await createTempDir()
+
+      await mkdir(join(root, '.codereviewer', 'reports'), { recursive: true })
+
+      const result = await runCli(
+        ['baseline', 'write', '--report', '.codereviewer/reports'],
+        { cwd: root, environment: {} }
+      )
+      const envelope = JSON.parse(result.stderr)
+
+      expect(envelope.code).toBe('baseline_source_unavailable')
+      expect(envelope.message).toContain('is a directory, not a file')
+      expect(envelope.message).not.toContain('does not exist')
+    })
+
+    test('a path outside the repository says it was refused before it was read', async () => {
+      const root = await createTempDir()
+
+      const result = await runCli(
+        ['baseline', 'write', '--report', '../elsewhere/report.json'],
+        { cwd: root, environment: {} }
+      )
+      const envelope = JSON.parse(result.stderr)
+
+      expect(envelope.code).toBe('baseline_source_unavailable')
+      expect(envelope.message).toContain('inside the repository')
+      expect(envelope.message).toContain('refused before it was read')
+    })
+
+    // The stderr envelope carries `{code, message}` only, so the machine-readable
+    // cause is asserted where it lives: on the structured error itself.
+    test('the structured error carries the normalized cause in details', async () => {
+      const root = await createTempDir()
+
+      await expect(
+        resolveBaselineSourceReport({
+          repositoryRoot: root,
+          artifactDir: '.codereviewer/runs',
+          explicitReportPath: '.codereviewer/runs/missing/report.json'
+        })
+      ).rejects.toMatchObject({
+        code: 'baseline_source_unavailable',
+        category: 'repository',
+        exitCode: 3,
+        details: {
+          reportPath: '.codereviewer/runs/missing/report.json',
+          cause: 'ENOENT'
+        }
+      })
+
+      await expect(
+        resolveBaselineSourceReport({
+          repositoryRoot: root,
+          artifactDir: '.codereviewer/runs',
+          explicitReportPath: '../elsewhere/report.json'
+        })
+      ).rejects.toMatchObject({
+        details: { cause: 'path_outside_repository' }
+      })
+    })
   })
 
   // A document that merely parses as JSON is not a report. Before the source was

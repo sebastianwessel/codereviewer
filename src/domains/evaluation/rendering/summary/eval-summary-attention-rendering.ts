@@ -1,11 +1,11 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   resolveExpectedFindingMatchMode,
   type EvalCase
 } from '../../corpus/eval-fixture.schema.js'
 import { expectedLocationLabel } from '../eval-report-expected-finding-labels.js'
 import { caseStatus, humanActionableWarnings, providerIssueLabel } from '../eval-report-case-labels.js'
-import { EvalCaseReportSchema, type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalCaseReportSchema, EvalReport } from '../../report/eval-report-contracts.js'
 import { expectedLabelForMatch, findCase } from './eval-summary-case-rendering.js'
 
 const attentionCasesForSummary = (

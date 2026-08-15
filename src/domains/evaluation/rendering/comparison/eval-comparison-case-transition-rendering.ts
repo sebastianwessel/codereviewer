@@ -4,9 +4,9 @@ import {
   UNKNOWN_VALUE
 } from '../eval-report-markdown-formatting.js'
 import { caseStatus } from '../eval-report-case-labels.js'
-import {
-  type EvalComparisonCase,
-  type EvalComparisonReport
+import type {
+  EvalComparisonCase,
+  EvalComparisonReport
 } from '../../report/eval-comparison-view.js'
 
 // A case whose report did not record the inputs the status is derived from is

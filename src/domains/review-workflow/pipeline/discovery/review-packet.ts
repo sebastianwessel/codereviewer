@@ -10,11 +10,11 @@ import {
   diffSegmentsForPaths,
   type DiffLineRange
 } from '../../../../shared/diff/git-diff-header.js'
-import {
-  type ContextDocument,
-  type HolisticReviewInput,
-  type TaskReviewInput,
-  type WorkflowReviewTask
+import type {
+  ContextDocument,
+  HolisticReviewInput,
+  TaskReviewInput,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered

@@ -3,7 +3,7 @@ import {
   type FindingRefutationBatchInput,
   type ModelFindingRefutationBatchResult
 } from '../pipeline/agent-contracts.js'
-import { type DebugLogger } from '../pipeline/debug-logger.js'
+import type { DebugLogger } from '../pipeline/debug-logger.js'
 
 export const runRefutationProviderCall = async (
   input: {

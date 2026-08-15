@@ -1,20 +1,20 @@
-import { type Logger } from '@purista/harness'
-import {
-  type ContextDocument,
-  type FindingRefutationRunner,
-  type SkillContextDocument,
-  type TaskReviewInput,
-  type TaskReviewResult,
-  type WorkflowReviewTask,
-  type WorkflowTaskEvent
+import type { Logger } from '@purista/harness'
+import type {
+  ContextDocument,
+  FindingRefutationRunner,
+  SkillContextDocument,
+  TaskReviewInput,
+  TaskReviewResult,
+  WorkflowReviewTask,
+  WorkflowTaskEvent
 } from './agent-contracts.js'
-import { type ProviderIssue } from './provider-issues.js'
-import { type CandidateFinding } from '../../admission/index.js'
+import type { ProviderIssue } from './provider-issues.js'
+import type { CandidateFinding } from '../../admission/index.js'
 import {
   createContextRetriever,
   type ContextRetriever
 } from '../../context-retrieval/index.js'
-import { type ContextLedgerEntry } from '../../review-planning/index.js'
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
@@ -27,9 +27,9 @@ import {
   runQueuedReviewTasks
 } from './task-queue.js'
 import { completeReviewWorkflow } from './completion.js'
-import {
-  type ReviewWorkflowInput,
-  type ReviewWorkflowOutput
+import type {
+  ReviewWorkflowInput,
+  ReviewWorkflowOutput
 } from './contracts.js'
 
 const boundedWorkflowConcurrency = (
@@ -184,7 +184,10 @@ export const runReviewWorkflowHandler = async (params: {
       throw new ReviewTaskExecutionError({
         taskEvents: error.taskEvents,
         partialResults: error.partialResults,
-        originalError: error.originalError
+        originalError: error.originalError,
+        // Re-typed as this workflow's own result type; every field the queue
+        // recorded is carried across, including the concurrent workers' errors.
+        additionalErrors: error.additionalErrors
       })
     }
 

@@ -1,10 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
-import {
-  EvidenceRecordSchema,
-  type EvidenceRecord
-} from '../../shared/contracts/index.js'
+import { EvidenceRecordSchema } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import {
@@ -17,44 +13,26 @@ import {
   evaluatePathEligibility,
   type ContextRetrievalEligibilityConfig
 } from './eligibility.js'
-import {
-  queryBlankCondition,
-  readBudgetExhaustedCondition,
-  searchBudgetExhaustedCondition
-} from './expected-conditions.js'
+import { readBudgetExhaustedCondition } from './expected-conditions.js'
 import { sliceUtf8Bytes, utf8ByteLength } from '../../shared/text/utf8-bytes.js'
-import { createLineMatcher, type ContextRetrievalMatchMode } from './line-matching.js'
-import { resolveEligibleExistingPath, type RequestedEntryKind } from './path-safety.js'
+import { createGrepEngine } from './grep-engine.js'
+import type { ContextRetrievalMatchMode } from './line-matching.js'
+import {
+  portableChildPath,
+  resolveEligibleExistingPath,
+  type RequestedEntryKind
+} from './path-safety.js'
+import type {
+  ContextRetrievalResult,
+  RetrievalResultRecord
+} from './retrieval-result.js'
 
-// One matched line, with the text that matched. Returning the text is what makes
-// a search result usable on its own: previously a caller received `path:line`
-// only and had to spend a second mediated read per hit to see what it had found.
-export type ContextRetrievalMatch = {
-  readonly path: string
-  readonly line: number
-  readonly text: string
-}
-
-export type ContextRetrievalResult = {
-  readonly tool: 'read' | 'list' | 'grep'
-  readonly path?: string
-  readonly queryHash?: string
-  readonly summary: string
-  readonly content: string
-  // The file line `content` begins at, present only for a `read` that was
-  // narrowed to a range (spec 28). Without it the content is just bytes, and the
-  // only thing that could number them is 1 — which contradicts the summary this
-  // same result carries ("Lines 20-23 of 30") and, worse, contradicts the
-  // absolute `path:line` coordinates `grep` hands back, which is where a ranged
-  // read's bounds came from in the first place.
-  readonly startLine?: number
-  // Structured matches, present only for `grep`. Additive: `content` keeps its
-  // historical `path:line` shape so every existing caller and every model-facing
-  // tool output is byte-identical.
-  readonly matches?: readonly ContextRetrievalMatch[]
-  readonly ledgerEntry: ContextLedgerEntry
-  readonly evidence: EvidenceRecord
-}
+// Re-exported from their own module so the grep engine can consume them without
+// importing this factory back. Every existing importer keeps its import path.
+export type {
+  ContextRetrievalMatch,
+  ContextRetrievalResult
+} from './retrieval-result.js'
 
 export type ContextRetriever = {
   readonly budget: () => ContextRetrievalBudget
@@ -114,8 +92,31 @@ export type ContextRetriever = {
 const evidenceIdFor = (value: string): string =>
   `ev_${sha256(value).slice(0, 24)}`
 
-const portableChildPath = (directory: string, childName: string): string =>
-  normalizeRepositoryRelativePath(path.posix.join(directory, childName))
+/**
+ * What a listed directory entry is, or that it could not be established.
+ *
+ * `stat` follows symlinks, so a dangling link — and a plain race with a
+ * concurrent delete — throws. Run unguarded inside the `Promise.all` below, one
+ * such entry rejected the WHOLE listing, and the model was told a directory it
+ * can read is unreadable. The search traversal already takes the other side of
+ * this (`grep-engine.ts`: "skip it rather than failing the whole search"), and a
+ * listing is the surface where being wrong is most expensive.
+ *
+ * The entry is still LISTED, under `unknown`, rather than dropped: an omitted
+ * name understates the directory silently, which is the shape this repository
+ * has a name for. What a caller may conclude from `unknown <path>` is that the
+ * name exists and its kind could not be determined — not that it is absent, and
+ * not that it is a file.
+ */
+const listedEntryKind = async (
+  childAbsolutePath: string
+): Promise<'dir' | 'file' | 'unknown'> => {
+  try {
+    return (await stat(childAbsolutePath)).isDirectory() ? 'dir' : 'file'
+  } catch {
+    return 'unknown'
+  }
+}
 
 const linePreview = (content: string, maxLines = 12): string =>
   content
@@ -146,20 +147,9 @@ export const createContextRetriever = (input: {
       entryKind
     })
 
-  const recordResult = (record: {
-    readonly tool: ContextRetrievalResult['tool']
-    readonly reason: string
-    readonly path?: string
-    readonly taskId?: string
-    readonly content: string
-    readonly bytesConsidered: number
-    readonly bytesIncluded: number
-    readonly summary: string
-    readonly queryHash?: string
-    readonly redactionApplied?: boolean
-    // The file line `content` starts at, when it is not the top of the file.
-    readonly startLine?: number
-  }): ContextRetrievalResult => {
+  const recordResult = (
+    record: RetrievalResultRecord
+  ): ContextRetrievalResult => {
     const ledgerEntry = createContextLedgerEntry({
       kind: 'tool-result',
       ...(record.path === undefined ? {} : { path: record.path }),
@@ -209,6 +199,17 @@ export const createContextRetriever = (input: {
       evidence
     }
   }
+  // The search engine, over this retriever's own budget, redactor, eligibility
+  // gate, path resolver and recorder. It lives in `grep-engine.ts` so this
+  // factory reads as the surface it publishes; nothing below the returned object
+  // is reachable code any more.
+  const runGrepQueries = createGrepEngine({
+    budget,
+    redactor,
+    compiledEligibility,
+    resolveEligibleExisting,
+    recordResult
+  })
 
   return {
     budget: () => ({ ...budget }),
@@ -326,13 +327,11 @@ export const createContextRetriever = (input: {
         .map((entry) => entry.name)
       const childSummaries = await Promise.all(
         eligibleEntryNames.slice(0, budget.maxMatches).map(async (entryName) => {
-          const childAbsolutePath = path.join(absolutePath, entryName)
-          const childStat = await stat(childAbsolutePath)
+          const childKind = await listedEntryKind(
+            path.join(absolutePath, entryName)
+          )
 
-          return `${childStat.isDirectory() ? 'dir' : 'file'} ${portableChildPath(
-            portablePath,
-            entryName
-          )}`
+          return `${childKind} ${portableChildPath(portablePath, entryName)}`
         })
       )
       // A listing cut at the cap said "N entries returned" and nothing else, so
@@ -383,292 +382,5 @@ export const createContextRetriever = (input: {
       return result
     },
     grepRepositoryBatch: (input) => runGrepQueries(input)
-  }
-
-  /**
-   * Run several searches over ONE repository traversal.
-   *
-   * Every query is still budgeted, capped, ledgered and evidenced independently —
-   * a batch is an execution detail, not a relaxation of the bounded surface. What
-   * it removes is the file I/O: the previous shape re-walked the repository and
-   * re-read every eligible file once PER query, so a change-impact run looking up
-   * 27 changed symbols read the same 1,181 files 27 times (192 MB of reads for a
-   * 7 MB working set, ~45% of the command's wall clock).
-   *
-   * Results are identical to running the queries one at a time: traversal order is
-   * the same, each query keeps its own match list and its own cap, and the walk
-   * stops once EVERY query is satisfied rather than once the single query was.
-   */
-  async function runGrepQueries(input: {
-    readonly queries: readonly {
-      readonly query: string
-      readonly matchMode?: ContextRetrievalMatchMode
-      readonly maxMatchesPerQuery?: number
-    }[]
-    readonly paths?: readonly string[]
-    readonly taskId?: string
-  }): Promise<readonly ContextRetrievalResult[]> {
-    for (const entry of input.queries) {
-      // An expected condition, not a fault: the model-facing schema's `min(1)`
-      // stops the empty string but admits a query of spaces, so a model can reach
-      // this — and a blank query is a mistake it can correct on the next call. As a
-      // `TypeError` it reached the model as the harness's "Tool execution failed."
-      // with the reason stripped, which is the one thing this surface must never do.
-      if (entry.query.trim().length === 0) {
-        throw queryBlankCondition()
-      }
-    }
-
-    if (input.queries.length === 0) {
-      return []
-    }
-
-    // Charged up front for the whole batch. A batch that cannot be afforded in
-    // full is refused rather than partially served, so the budget stays the
-    // authority on how many searches a caller may make.
-    if (budget.usedSearches + input.queries.length > budget.maxSearches) {
-      throw searchBudgetExhaustedCondition()
-    }
-    budget.usedSearches += input.queries.length
-
-    // One match past the cap is collected on purpose. Whether a search was cut
-    // then becomes a FACT — there is a match that did not fit — instead of the
-    // inference "we returned exactly the cap, so maybe there were more". The
-    // extra is dropped before the result is assembled, so callers see at most
-    // `matchLimit`. `symbol-reference-lookup.ts` already resolves the same
-    // question the same way.
-    const states = input.queries.map((entry) => {
-      const matchLimit =
-        entry.maxMatchesPerQuery === undefined
-          ? budget.maxMatches
-          : Math.min(budget.maxMatches, entry.maxMatchesPerQuery)
-
-      return {
-        query: entry.query,
-        queryHash: sha256(entry.query),
-        matchLimit,
-        collectLimit: matchLimit + 1,
-        lineMatches: createLineMatcher(entry.query, entry.matchMode ?? 'literal'),
-        matches: [] as ContextRetrievalMatch[]
-      }
-    })
-    // Set when the traversal declined to descend because `maxDepth` was reached.
-    // A depth-pruned search returns fewer matches, or none, and is otherwise
-    // indistinguishable from a search that looked everywhere and found nothing —
-    // which turns "I did not look there" into "there is nothing there".
-    let depthPruned = false
-    const searchPaths =
-      input.paths === undefined || input.paths.length === 0
-        ? ['.']
-        : [...input.paths]
-    const allSatisfied = (): boolean =>
-      states.every((state) => state.matches.length >= state.collectLimit)
-
-    const collectFileMatches = async (
-      portablePath: string,
-      absolutePath: string
-    ): Promise<void> => {
-      if (allSatisfied()) {
-        return
-      }
-
-      let content: string
-
-      try {
-        content = await readFile(absolutePath, 'utf8')
-      } catch {
-        // Unreadable (permission error, race with a concurrent delete, a
-        // device file, ...): skip it rather than failing the whole search.
-        return
-      }
-      // Both match modes require the query to appear in the file as a substring
-      // (`identifier` only adds boundary conditions around that same substring),
-      // so a whole-file test settles every line at once for the queries this file
-      // cannot match. With many queries sharing one traversal that prefilter is
-      // what keeps per-line work proportional to the queries a file can actually
-      // answer instead of to the whole batch.
-      const active = states.filter(
-        (state) =>
-          state.matches.length < state.collectLimit &&
-          content.includes(state.query)
-      )
-
-      if (active.length === 0) {
-        return
-      }
-      const lines = content.split(/\r\n|\n|\r/u)
-
-      for (const [index, line] of lines.entries()) {
-        let redacted: string | undefined
-
-        for (const state of active) {
-          if (state.matches.length >= state.collectLimit) {
-            continue
-          }
-          if (!state.lineMatches(line)) {
-            continue
-          }
-
-          // Matching runs against the RAW line so which lines match is
-          // unchanged, but the text handed back is redacted with the same
-          // redactor the mediated read uses: a search result must never
-          // surface a secret a read of the same file would have masked.
-          // Redacted at most once per line however many queries matched it.
-          redacted ??= redactor.redact(line)
-          state.matches.push({
-            path: portablePath,
-            line: index + 1,
-            text: redacted
-          })
-        }
-
-        if (allSatisfied()) {
-          return
-        }
-      }
-    }
-
-    const readEligibleDirectoryEntries = async (absolutePath: string) => {
-      try {
-        return await readdir(absolutePath, { withFileTypes: true })
-      } catch {
-        return undefined
-      }
-    }
-
-    // In-process recursive traversal (never a shell). Bounded by
-    // `maxDepth` (directory levels descended) and `maxMatches` (checked
-    // before every directory read and every line), and pruned by the
-    // eligibility gate: an ineligible directory is never descended into,
-    // so excluded/secret content is never read during a search either.
-    // Non-regular entries (symlinks, sockets, ...) are silently skipped —
-    // the traversal never follows a symlink out of the mediated view.
-    const walkDirectory = async (
-      portablePath: string,
-      absolutePath: string,
-      depth: number
-    ): Promise<void> => {
-      if (allSatisfied()) {
-        return
-      }
-
-      if (depth > budget.maxDepth) {
-        depthPruned = true
-
-        return
-      }
-
-      const entries = await readEligibleDirectoryEntries(absolutePath)
-
-      if (entries === undefined) {
-        return
-      }
-
-      for (const entry of entries) {
-        if (allSatisfied()) {
-          return
-        }
-
-        const childPortablePath = portableChildPath(portablePath, entry.name)
-
-        // Gated as the kind it is, before anything is read or descended into. A
-        // subdirectory passes when an included file could live beneath it; a FILE
-        // must match the include list itself. That is what keeps a traversable
-        // directory from serving the files in it that the configuration does not
-        // cover (spec 07, *Mediated Read Eligibility*).
-        if (
-          !evaluatePathEligibility(
-            childPortablePath,
-            compiledEligibility,
-            entry.isDirectory() ? 'directory' : 'file'
-          ).eligible
-        ) {
-          continue
-        }
-
-        const childAbsolutePath = path.join(absolutePath, entry.name)
-
-        if (entry.isDirectory()) {
-          await walkDirectory(childPortablePath, childAbsolutePath, depth + 1)
-        } else if (entry.isFile()) {
-          await collectFileMatches(childPortablePath, childAbsolutePath)
-        }
-      }
-    }
-
-    for (const requestedPath of searchPaths) {
-      if (allSatisfied()) {
-        break
-      }
-
-      // A search root is a subtree to walk or a single file to scan, and the
-      // resolver holds it to the rule for whichever it turns out to be: a file
-      // that reaches `collectFileMatches` below has passed the FILE rule, never
-      // the directory relaxation.
-      const { portablePath, absolutePath } = await resolveEligibleExisting(
-        requestedPath,
-        'file-or-directory'
-      )
-      const entryStat = await stat(absolutePath)
-
-      if (entryStat.isDirectory()) {
-        await walkDirectory(portablePath, absolutePath, 0)
-      } else {
-        await collectFileMatches(portablePath, absolutePath)
-      }
-    }
-
-    return states.map((state) => {
-      // The over-fetched match is evidence that more exist; it is not returned.
-      const capReached = state.matches.length > state.matchLimit
-      const matches = state.matches.slice(0, state.matchLimit)
-      // `content` keeps its historical `path:line` shape. The matched text is
-      // returned separately in `matches`, so a model-facing tool output and
-      // every existing caller stay byte-identical.
-      const content = matches
-        .map((match) => `${match.path}:${match.line}`)
-        .join('\n')
-      // A search that was cut used to return exactly N hits and say "N matches
-      // returned", so the model concluded "these are all the callers" — the very
-      // reasoning step cross-file retrieval and claim investigation exist to
-      // perform. `bytesConsidered` equals `bytesIncluded` for a grep by
-      // construction, so the read path's `truncationNotice` can never fire here;
-      // the notice has to be part of the content.
-      //
-      // Depth pruning is disclosed separately because it is a different claim: a
-      // match cap means "there are more of these", while a depth bound means
-      // "there are places I did not look at all".
-      const cutNotices = [
-        capReached
-          ? `[TRUNCATED: the match cap of ${state.matchLimit} was reached and more matches exist. These are NOT all the matches. Narrow the query, or pass \`paths\` to search a subtree.]`
-          : '',
-        depthPruned
-          ? `[NOT EXHAUSTIVE: directories deeper than ${budget.maxDepth} levels below the search root were not descended into. Absence of a match is NOT evidence there is none. Pass \`paths\` to search a deeper subtree directly.]`
-          : ''
-      ].filter((notice) => notice.length > 0)
-      const contentWithNotices =
-        cutNotices.length === 0
-          ? content
-          : `${content}${content.length === 0 ? '' : '\n'}${cutNotices.join('\n')}`
-
-      return {
-        ...recordResult({
-          tool: 'grep',
-          ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
-          reason: 'context-retrieval-grep',
-          content: contentWithNotices,
-          bytesConsidered: Buffer.byteLength(contentWithNotices),
-          bytesIncluded: Buffer.byteLength(contentWithNotices),
-          summary: `Searched repository context for query hash ${state.queryHash.slice(
-            0,
-            16
-          )}; ${matches.length} matches returned${
-            capReached ? ' (match cap reached; more exist)' : ''
-          }${depthPruned ? ' (search depth bound reached; not exhaustive)' : ''}.`,
-          queryHash: state.queryHash
-        }),
-        matches
-      }
-    })
   }
 }

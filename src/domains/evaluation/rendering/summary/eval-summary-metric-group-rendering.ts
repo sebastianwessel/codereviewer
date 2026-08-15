@@ -9,7 +9,7 @@ import {
   precisionBracket,
   type PrecisionBracket
 } from '../../scoring/eval-precision-bracket.js'
-import { type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalReport } from '../../report/eval-report-contracts.js'
 
 type EvalSummaryMetricGroup = EvalReport['metricGroups'][number]
 

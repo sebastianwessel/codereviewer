@@ -1,13 +1,13 @@
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type FindingRefutationRunner,
-  type WorkflowReviewTask
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type {
+  FindingRefutationRunner,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import { reviewCandidateForAdmission } from './candidate-review.js'
 import { noRefuterAdmissionOutcome } from './preflight-outcome.js'
 import { mapWithBoundedConcurrencyInOrder } from '../ordered-bounded-map.js'
-import { type DebugLogger } from '../debug-logger.js'
+import type { DebugLogger } from '../debug-logger.js'
 import {
   executeBatchRefutation,
   type RefutationResolution
@@ -20,7 +20,7 @@ import {
   mergeAdmissionCandidateOutcomes,
   type AdmissionCandidateOutcome
 } from './outcome.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 
 // Only a model-proposed candidate inside the reviewed scope costs a refutation
 // call. Support-signal candidates and out-of-scope candidates are decided by

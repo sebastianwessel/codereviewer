@@ -9,18 +9,18 @@ import {
   formatTokenMetric,
   UNKNOWN_VALUE
 } from '../eval-report-markdown-formatting.js'
-import {
-  type EvalComparabilityKey,
-  type MetricComparability
+import type {
+  EvalComparabilityKey,
+  MetricComparability
 } from '../../report/versions/eval-metrics-versions.js'
 import {
   precisionBracket,
   type PrecisionBracket
 } from '../../scoring/eval-precision-bracket.js'
-import {
-  type EvalComparisonMetricGroup,
-  type EvalComparisonMetrics,
-  type EvalComparisonReport
+import type {
+  EvalComparisonMetricGroup,
+  EvalComparisonMetrics,
+  EvalComparisonReport
 } from '../../report/eval-comparison-view.js'
 
 type EvalReportPair = {

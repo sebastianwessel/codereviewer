@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type ModelFindingCitation } from '../agent-contracts.js'
+import type { ModelFindingCitation } from '../agent-contracts.js'
 import { citationEvidenceFor, verifyCitation } from './citation-evidence.js'
 
 // Numbered exactly the way `review-packet.ts` numbers a task's changed files

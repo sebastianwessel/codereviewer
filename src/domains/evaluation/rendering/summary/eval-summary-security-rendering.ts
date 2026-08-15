@@ -3,7 +3,7 @@ import {
   SecurityMechanismSchema
 } from '../../corpus/eval-fixture.schema.js'
 import { appendMarkdownTable, formatPercent } from '../eval-report-markdown-formatting.js'
-import { type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalReport } from '../../report/eval-report-contracts.js'
 
 // Security by mechanism / context depth (spec 15).
 //

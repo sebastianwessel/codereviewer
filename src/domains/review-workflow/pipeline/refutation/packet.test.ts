@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { ReviewContextDocumentSchema } from '../agent-contracts.js'
-import {
-  type ReviewContextDocument,
-  type WorkflowReviewTask
+import type {
+  ReviewContextDocument,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import {
   ReviewWorkflowInputSchema,

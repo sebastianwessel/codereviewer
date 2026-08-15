@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { WorkflowReviewTask } from '../agent-contracts.js'
 import { splitTaskInHalf } from './reactive-split.js'
 
 const document = (

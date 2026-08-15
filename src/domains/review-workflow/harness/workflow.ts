@@ -13,5 +13,5 @@ export {
   type ReviewWorkflowOutput
 } from '../pipeline/contracts.js'
 
-export { type CreateReviewHarnessOptions } from './options.js'
+export type { CreateReviewHarnessOptions } from './options.js'
 export { createModelBackedReviewHarness } from './model-backed-harness.js'

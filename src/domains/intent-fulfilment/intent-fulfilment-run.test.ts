@@ -12,7 +12,7 @@
 //   - "Every satisfied obligation cites path and line".
 //   - "Absent intent reports plainly and exits successfully".
 
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -916,12 +916,24 @@ describe('a limit that would bind refuses instead of truncating', () => {
     // nobody can test, and a reader who finds it reasonably concludes the intent can
     // still be silently truncated here, which is the exact belief spec 23's
     // refuse-never-truncate rule exists to remove.
-    const source = await readFile(
-      fileURLToPath(new URL('./intent-fulfilment-run.ts', import.meta.url)),
-      'utf8'
+    // THE WHOLE DOMAIN, not one file. Scanning only `intent-fulfilment-run.ts`
+    // made every NEGATIVE assertion below silently vacuous the moment the
+    // truncation stage moved to a sibling module — the positive anchor would
+    // still match, so the guard would report success while covering nothing.
+    // That is the same silent-absence shape this suite exists to catch, and the
+    // decomposition on 2026-08-15 came close enough to moving that stage to make
+    // it real. It also stops this guard from dictating which file the code lives
+    // in, which is not a constraint a dead-branch check has any business imposing.
+    const domainDirectory = fileURLToPath(new URL('.', import.meta.url))
+    const sources = await Promise.all(
+      (await readdir(domainDirectory))
+        .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+        .map(async (name) => readFile(join(domainDirectory, name), 'utf8'))
     )
+    const source = sources.join('\n')
 
-    // Guards against the test passing because the scan read the wrong file.
+    // Guards against the test passing because the scan found no files at all.
+    expect(sources.length).toBeGreaterThan(5)
     expect(source).toContain('export const runIntentFulfilment')
     // The refusal itself must survive the removal.
     expect(source).toContain('throw intentTooLargeError(')

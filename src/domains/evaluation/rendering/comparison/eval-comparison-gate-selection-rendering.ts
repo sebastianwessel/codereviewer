@@ -5,7 +5,7 @@ import {
   formatPercent,
   UNKNOWN_VALUE
 } from '../eval-report-markdown-formatting.js'
-import { type EvalComparisonReport } from '../../report/eval-comparison-view.js'
+import type { EvalComparisonReport } from '../../report/eval-comparison-view.js'
 
 // Nothing in this module defaults an absent value. A report that never recorded
 // its selection or its judge reliability says so through `UNKNOWN_VALUE`; it

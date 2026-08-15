@@ -41,11 +41,11 @@ import {
   intentHydrationSource,
   type HydratedIntentCase
 } from './intent-corpus-hydration.js'
-import {
-  type IntentCaseInput,
-  type IntentCaseOutcome
+import type {
+  IntentCaseInput,
+  IntentCaseOutcome
 } from './intent-eval-scoring.js'
-import { type IntentCorpusCase } from './intent-corpus.schema.js'
+import type { IntentCorpusCase } from './intent-corpus.schema.js'
 import { createRunContext } from '../../run-context/index.js'
 import type { Logger } from '../../observability/index.js'
 import { normalizeError } from '../../../shared/errors/error-normalizer.js'

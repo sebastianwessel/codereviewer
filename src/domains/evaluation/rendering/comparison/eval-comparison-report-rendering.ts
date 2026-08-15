@@ -28,9 +28,9 @@ import {
 import { appendEvalComparisonPairedRecall } from './eval-comparison-paired-recall-rendering.js'
 import { metricComparability } from '../../report/versions/eval-metrics-versions.js'
 import { pairedRecallVerdict } from '../../scoring/eval-paired-recall-verdict.js'
-import {
-  type EvalComparisonReport,
-  type EvalComparisonRun
+import type {
+  EvalComparisonReport,
+  EvalComparisonRun
 } from '../../report/eval-comparison-view.js'
 
 // An arm is a SET of runs. Within one arm every run must have been scored by the

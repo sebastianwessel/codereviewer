@@ -1,11 +1,11 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   appendMarkdownBulletSection,
   appendMarkdownTable,
   escapeMarkdownCell
 } from '../eval-report-markdown-formatting.js'
 import { caseStatus, providerIssueLabel } from '../eval-report-case-labels.js'
-import { EvalCaseReportSchema, type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalCaseReportSchema, EvalReport } from '../../report/eval-report-contracts.js'
 
 export const appendEvalSummaryGateReasons = (
   lines: string[],

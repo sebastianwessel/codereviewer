@@ -35,8 +35,8 @@ import { runReview as runReviewPipeline } from '../../review-workflow/index.js'
 import { runFixRun } from '../../verification/index.js'
 import type { AdmittedFinding } from '../../../shared/contracts/findings/finding.schema.js'
 import { parseGitDiffMaps } from '../../repository-intake/index.js'
-import { type ProviderImport } from '../../provider-resolution/index.js'
-import { type Logger } from '../../observability/index.js'
+import type { ProviderImport } from '../../provider-resolution/index.js'
+import type { Logger } from '../../observability/index.js'
 import {
   normalizeError,
   type StructuredError

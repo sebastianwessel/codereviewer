@@ -5,7 +5,7 @@ import {
   engineCommitArgs,
   engineWorkingTreeArgs
 } from './engine-identity.js'
-import type { CorpusGitCommandRunner } from '../corpus/real-repo-corpus-hydration.js'
+import type { CorpusGitCommandRunner } from '../corpus/git-corpus-plumbing.js'
 
 const scriptedGit = (
   responses: Readonly<Record<string, string | Error>>

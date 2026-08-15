@@ -2,7 +2,7 @@ import {
   RejectedFindingSchema,
   type RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { normalizeError } from '../../../../shared/errors/error-normalizer.js'
 import {
   emptyAdmissionCandidateOutcome,

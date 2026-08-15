@@ -734,17 +734,34 @@ export const emptyRunTotals: EvalRunTotals = {
   scoringCostUnavailable: false
 }
 
-export const calculateEvalMetrics = (
-  caseResults: readonly EvalMetricCaseResult[],
-  judgeReliability?: EvalJudgeReliability,
-  runTotals: EvalRunTotals = emptyRunTotals
-): EvalMetrics => {
-  const totalCaseCount = caseResults.length
+// The counts every other dimension is read against, plus the three headline
+// rates derived from them alone. They are returned together rather than
+// recomputed per field because several are used more than once: the matched
+// count is a numerator for precision and a denominator component for its
+// adjusted twin, and the admitted count is the denominator of both
+// `actionableRate` and `commentsPerKloc`.
+type CoreFindingTotals = {
+  readonly totalCaseCount: number
+  readonly totalExpectedFindingCount: number
+  readonly totalAdmittedFindingCount: number
+  readonly totalMatchedFindingCount: number
+  readonly totalFalsePositiveCount: number
+  readonly totalUnlistedRealFindingCount: number
+  readonly totalGenuineFalsePositiveCount: number
+  readonly providerIssueCount: number
+  readonly totalArtifactOnlyFindingCount: number
+  readonly totalArtifactOnlyMatchedFindingCount: number
+  readonly totalArtifactOnlyFalsePositiveCount: number
+  readonly precision: number
+  readonly adjustedPrecision: number
+  readonly recall: number
+}
+
+const coreFindingTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): CoreFindingTotals => {
   const totalExpectedFindingCount = sum(
     caseResults.map((result) => result.expectedFindingCount)
-  )
-  const totalAdmittedFindingCount = sum(
-    caseResults.map((result) => result.admittedFindingCount)
   )
   const totalMatchedFindingCount = sum(
     caseResults.map((result) => result.matchedFindingCount)
@@ -759,16 +776,54 @@ export const calculateEvalMetrics = (
   // as a real defect — including fail-closed ones — is a genuine false positive.
   const totalGenuineFalsePositiveCount =
     totalFalsePositiveCount - totalUnlistedRealFindingCount
-  const providerIssueCount = caseResults.filter(hasProviderIssue).length
-  const totalArtifactOnlyFindingCount = sum(
-    caseResults.map((result) => result.artifactOnlyFindingCount)
-  )
-  const totalArtifactOnlyMatchedFindingCount = sum(
-    caseResults.map((result) => result.artifactOnlyMatchedFindingCount)
-  )
-  const totalArtifactOnlyFalsePositiveCount = sum(
-    caseResults.map((result) => result.artifactOnlyFalsePositiveCount)
-  )
+
+  return {
+    totalCaseCount: caseResults.length,
+    totalExpectedFindingCount,
+    totalAdmittedFindingCount: sum(
+      caseResults.map((result) => result.admittedFindingCount)
+    ),
+    totalMatchedFindingCount,
+    totalFalsePositiveCount,
+    totalUnlistedRealFindingCount,
+    totalGenuineFalsePositiveCount,
+    providerIssueCount: caseResults.filter(hasProviderIssue).length,
+    totalArtifactOnlyFindingCount: sum(
+      caseResults.map((result) => result.artifactOnlyFindingCount)
+    ),
+    totalArtifactOnlyMatchedFindingCount: sum(
+      caseResults.map((result) => result.artifactOnlyMatchedFindingCount)
+    ),
+    totalArtifactOnlyFalsePositiveCount: sum(
+      caseResults.map((result) => result.artifactOnlyFalsePositiveCount)
+    ),
+    precision: ratio(
+      totalMatchedFindingCount,
+      totalMatchedFindingCount + totalFalsePositiveCount,
+      1
+    ),
+    // adjustedPrecision does not penalise real defects the fixture omitted; only
+    // genuine false positives (including fail-closed, unjudged ones) sit in its
+    // denominator. Empty value 1 like precision (0 findings -> 1).
+    adjustedPrecision: ratio(
+      totalMatchedFindingCount,
+      totalMatchedFindingCount + totalGenuineFalsePositiveCount,
+      1
+    ),
+    recall: ratio(totalMatchedFindingCount, totalExpectedFindingCount, 1)
+  }
+}
+
+// Severity-weighted precision/recall and their harmonic mean. Same shape as the
+// unweighted pair in `coreFindingTotals`, but every finding contributes its
+// severity weight instead of 1.
+const severityWeightTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly severityWeightedPrecision: number
+  readonly severityWeightedRecall: number
+  readonly severityWeightedF1: number
+} => {
   const totalExpectedSeverityWeight = sum(
     caseResults.flatMap((result) => result.expectedSeverityWeights)
   )
@@ -778,20 +833,37 @@ export const calculateEvalMetrics = (
   const totalFalsePositiveSeverityWeight = sum(
     caseResults.flatMap((result) => result.falsePositiveSeverityWeights)
   )
-  const precision = ratio(
-    totalMatchedFindingCount,
-    totalMatchedFindingCount + totalFalsePositiveCount,
+  const severityWeightedPrecision = ratio(
+    totalMatchedExpectedSeverityWeight,
+    totalMatchedExpectedSeverityWeight + totalFalsePositiveSeverityWeight,
     1
   )
-  // adjustedPrecision does not penalise real defects the fixture omitted; only
-  // genuine false positives (including fail-closed, unjudged ones) sit in its
-  // denominator. Empty value 1 like precision (0 findings -> 1).
-  const adjustedPrecision = ratio(
-    totalMatchedFindingCount,
-    totalMatchedFindingCount + totalGenuineFalsePositiveCount,
+  const severityWeightedRecall = ratio(
+    totalMatchedExpectedSeverityWeight,
+    totalExpectedSeverityWeight,
     1
   )
-  const recall = ratio(totalMatchedFindingCount, totalExpectedFindingCount, 1)
+
+  return {
+    severityWeightedPrecision,
+    severityWeightedRecall,
+    severityWeightedF1: harmonicMean(
+      severityWeightedPrecision,
+      severityWeightedRecall
+    )
+  }
+}
+
+// Tier recall (spec 06). One aggregation feeds all three published fields, so
+// the per-tier rates, the product roll-up and the nit rate can never disagree
+// about the same tier's counts.
+const tierRecallTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly recallByTier: Record<ExpectedFindingTier, number>
+  readonly productRecall: number
+  readonly nitRecall: number
+} => {
   const tierTotals = allTiers.map((tier) => {
     const expected = sum(
       caseResults.map((result) => result.tierCounts[tier].expected)
@@ -813,15 +885,30 @@ export const calculateEvalMetrics = (
   const productTierTotals = tierTotals.filter((entry) =>
     (productRecallTiers as readonly string[]).includes(entry.tier)
   )
-  const productRecall = ratio(
-    sum(productTierTotals.map((entry) => entry.matched)),
-    sum(productTierTotals.map((entry) => entry.expected)),
-    1
-  )
-  const nitRecall = recallByTier.nit
-  // Security dimension (spec 15). Aggregate the per-case mechanism and
-  // context-depth tallies exactly like recallByTier, but with an empty value of
-  // 0 so a mechanism with no expected findings reports 0, not a misleading 100%.
+
+  return {
+    recallByTier,
+    productRecall: ratio(
+      sum(productTierTotals.map((entry) => entry.matched)),
+      sum(productTierTotals.map((entry) => entry.expected)),
+      1
+    ),
+    nitRecall: recallByTier.nit
+  }
+}
+
+// Security dimension (spec 15). Aggregate the per-case mechanism tallies exactly
+// like recallByTier, but the rate is `rateOrNull`: a mechanism the corpus never
+// tested must not report the same number as one the reviewer missed every time.
+const securityMechanismRecallTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly securityRecallByMechanism: Record<SecurityMechanism, number | null>
+  readonly securityMechanismCounts: Record<
+    SecurityMechanism,
+    SecurityFindingCounts
+  >
+} => {
   const securityMechanismTotals = allSecurityMechanisms.map((mechanism) => ({
     mechanism,
     expected: sum(
@@ -835,18 +922,42 @@ export const calculateEvalMetrics = (
       )
     )
   }))
-  const securityRecallByMechanism = Object.fromEntries(
-    securityMechanismTotals.map(({ mechanism, expected, matched }) => [
-      mechanism,
-      rateOrNull(matched, expected)
-    ])
-  ) as Record<SecurityMechanism, number | null>
-  const securityMechanismCounts = Object.fromEntries(
-    securityMechanismTotals.map(({ mechanism, expected, matched }) => [
-      mechanism,
-      { expected, matched }
-    ])
-  ) as Record<SecurityMechanism, SecurityFindingCounts>
+
+  return {
+    securityRecallByMechanism: Object.fromEntries(
+      securityMechanismTotals.map(({ mechanism, expected, matched }) => [
+        mechanism,
+        rateOrNull(matched, expected)
+      ])
+    ) as Record<SecurityMechanism, number | null>,
+    securityMechanismCounts: Object.fromEntries(
+      securityMechanismTotals.map(({ mechanism, expected, matched }) => [
+        mechanism,
+        { expected, matched }
+      ])
+    ) as Record<SecurityMechanism, SecurityFindingCounts>
+  }
+}
+
+// The same aggregation over context depth, plus the obvious-vs-hard split that
+// is derived from it rather than tallied again: obvious is the `local` depth and
+// hard is every other one, so both halves come from these totals.
+const securityContextDepthRecallTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly securityRecallByContextDepth: Record<
+    SecurityContextDepth,
+    number | null
+  >
+  readonly securityContextDepthCounts: Record<
+    SecurityContextDepth,
+    SecurityFindingCounts
+  >
+  readonly securityObviousRecall: number | null
+  readonly securityHardRecall: number | null
+  readonly securityObviousCount: number
+  readonly securityHardCount: number
+} => {
   const securityContextDepthTotals = allSecurityContextDepths.map((depth) => ({
     depth,
     expected: sum(
@@ -860,18 +971,6 @@ export const calculateEvalMetrics = (
       )
     )
   }))
-  const securityRecallByContextDepth = Object.fromEntries(
-    securityContextDepthTotals.map(({ depth, expected, matched }) => [
-      depth,
-      rateOrNull(matched, expected)
-    ])
-  ) as Record<SecurityContextDepth, number | null>
-  const securityContextDepthCounts = Object.fromEntries(
-    securityContextDepthTotals.map(({ depth, expected, matched }) => [
-      depth,
-      { expected, matched }
-    ])
-  ) as Record<SecurityContextDepth, SecurityFindingCounts>
   const obviousDepthTotals = securityContextDepthTotals.filter((entry) =>
     isObviousSecurityContextDepth(entry.depth)
   )
@@ -882,17 +981,53 @@ export const calculateEvalMetrics = (
     obviousDepthTotals.map((entry) => entry.expected)
   )
   const securityHardExpected = sum(hardDepthTotals.map((entry) => entry.expected))
-  const securityObviousRecall = rateOrNull(
-    sum(obviousDepthTotals.map((entry) => entry.matched)),
-    securityObviousExpected
-  )
-  const securityHardRecall = rateOrNull(
-    sum(hardDepthTotals.map((entry) => entry.matched)),
-    securityHardExpected
-  )
-  // Per-mechanism adjusted precision (spec 15 *Acceptance*). Aggregate the
-  // per-case admitted-finding tallies, then publish a rate ONLY where it is
-  // bounded: see SecurityMechanismAdjustedPrecisionSchema.
+
+  return {
+    securityRecallByContextDepth: Object.fromEntries(
+      securityContextDepthTotals.map(({ depth, expected, matched }) => [
+        depth,
+        rateOrNull(matched, expected)
+      ])
+    ) as Record<SecurityContextDepth, number | null>,
+    securityContextDepthCounts: Object.fromEntries(
+      securityContextDepthTotals.map(({ depth, expected, matched }) => [
+        depth,
+        { expected, matched }
+      ])
+    ) as Record<SecurityContextDepth, SecurityFindingCounts>,
+    securityObviousRecall: rateOrNull(
+      sum(obviousDepthTotals.map((entry) => entry.matched)),
+      securityObviousExpected
+    ),
+    securityHardRecall: rateOrNull(
+      sum(hardDepthTotals.map((entry) => entry.matched)),
+      securityHardExpected
+    ),
+    securityObviousCount: securityObviousExpected,
+    securityHardCount: securityHardExpected
+  }
+}
+
+// Per-mechanism adjusted precision (spec 15 *Acceptance*). Aggregate the
+// per-case admitted-finding tallies, then publish a rate ONLY where it is
+// bounded: see SecurityMechanismAdjustedPrecisionSchema.
+const securityMechanismPrecisionTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly securityAdjustedPrecisionByMechanism: Record<
+    SecurityMechanism,
+    number | null
+  >
+  readonly securityFindingMechanismCounts: Record<
+    SecurityMechanismBucket,
+    SecurityFindingMechanismCounts
+  >
+  readonly securityMechanismAttributionCounts: {
+    readonly expectation: number
+    readonly cwe: number
+    readonly unknown: number
+  }
+} => {
   const securityFindingMechanismCounts = Object.fromEntries(
     allSecurityMechanismBuckets.map((bucket) => [
       bucket,
@@ -918,42 +1053,54 @@ export const calculateEvalMetrics = (
   const unattributedGenuineFalsePositives =
     securityFindingMechanismCounts[UNATTRIBUTED_SECURITY_MECHANISM]
       .genuineFalsePositive
-  const securityAdjustedPrecisionByMechanism = Object.fromEntries(
-    allSecurityMechanisms.map((mechanism) => {
-      const counts = securityFindingMechanismCounts[mechanism]
-      const denominator = counts.matched + counts.genuineFalsePositive
 
-      return [
-        mechanism,
-        unattributedGenuineFalsePositives > 0
-          ? null
-          : rateOrNull(counts.matched, denominator)
-      ]
-    })
-  ) as Record<SecurityMechanism, number | null>
-  // Derived rather than tallied a second time, because the tally rules make the
-  // source unambiguous: a `matched` entry can only have come from the expectation
-  // it matched, a mechanism-bucketed genuine false positive can only have come
-  // from the finding's own CWE tags, and the `unknown` bucket is by definition
-  // what neither source could label. A second counter would be a second thing to
-  // keep in step with `securityFindingMechanismCountsForCase`.
-  const securityMechanismAttributionCounts = {
-    expectation: sum(
-      allSecurityMechanisms.map(
-        (mechanism) => securityFindingMechanismCounts[mechanism].matched
-      )
-    ),
-    cwe: sum(
-      allSecurityMechanisms.map(
-        (mechanism) =>
-          securityFindingMechanismCounts[mechanism].genuineFalsePositive
-      )
-    ),
-    unknown: unattributedGenuineFalsePositives
+  return {
+    securityAdjustedPrecisionByMechanism: Object.fromEntries(
+      allSecurityMechanisms.map((mechanism) => {
+        const counts = securityFindingMechanismCounts[mechanism]
+        const denominator = counts.matched + counts.genuineFalsePositive
+
+        return [
+          mechanism,
+          unattributedGenuineFalsePositives > 0
+            ? null
+            : rateOrNull(counts.matched, denominator)
+        ]
+      })
+    ) as Record<SecurityMechanism, number | null>,
+    securityFindingMechanismCounts,
+    // Derived rather than tallied a second time, because the tally rules make the
+    // source unambiguous: a `matched` entry can only have come from the expectation
+    // it matched, a mechanism-bucketed genuine false positive can only have come
+    // from the finding's own CWE tags, and the `unknown` bucket is by definition
+    // what neither source could label. A second counter would be a second thing to
+    // keep in step with `securityFindingMechanismCountsForCase`.
+    securityMechanismAttributionCounts: {
+      expectation: sum(
+        allSecurityMechanisms.map(
+          (mechanism) => securityFindingMechanismCounts[mechanism].matched
+        )
+      ),
+      cwe: sum(
+        allSecurityMechanisms.map(
+          (mechanism) =>
+            securityFindingMechanismCounts[mechanism].genuineFalsePositive
+        )
+      ),
+      unknown: unattributedGenuineFalsePositives
+    }
   }
-  // Diff scope (spec 17). Aggregated like the tier counts, but the rate is
-  // `rateOrNull`, not `ratio`: an empty denominator here must not render as the
-  // 0.0% that a fully-missed out-of-diff population legitimately reports.
+}
+
+// Diff scope (spec 17). Aggregated like the tier counts, but the rate is
+// `rateOrNull`, not `ratio`: an empty denominator here must not render as the
+// 0.0% that a fully-missed out-of-diff population legitimately reports.
+const diffScopeRecallTotals = (
+  caseResults: readonly EvalMetricCaseResult[]
+): {
+  readonly recallByDiffScope: Record<DiffScope, number | null>
+  readonly diffScopeCounts: Record<DiffScope, DiffScopeFindingCounts>
+} => {
   const diffScopeTotals = allDiffScopes.map((scope) => ({
     scope,
     expected: sum(
@@ -963,28 +1110,43 @@ export const calculateEvalMetrics = (
       caseResults.map((result) => result.diffScopeCounts[scope].matched)
     )
   }))
-  const recallByDiffScope = Object.fromEntries(
-    diffScopeTotals.map(({ scope, expected, matched }) => [
-      scope,
-      rateOrNull(matched, expected)
-    ])
-  ) as Record<DiffScope, number | null>
-  const diffScopeCounts = Object.fromEntries(
-    diffScopeTotals.map(({ scope, expected, matched }) => [
-      scope,
-      { expected, matched }
-    ])
-  ) as Record<DiffScope, DiffScopeFindingCounts>
-  const severityWeightedPrecision = ratio(
-    totalMatchedExpectedSeverityWeight,
-    totalMatchedExpectedSeverityWeight + totalFalsePositiveSeverityWeight,
-    1
-  )
-  const severityWeightedRecall = ratio(
-    totalMatchedExpectedSeverityWeight,
-    totalExpectedSeverityWeight,
-    1
-  )
+
+  return {
+    recallByDiffScope: Object.fromEntries(
+      diffScopeTotals.map(({ scope, expected, matched }) => [
+        scope,
+        rateOrNull(matched, expected)
+      ])
+    ) as Record<DiffScope, number | null>,
+    diffScopeCounts: Object.fromEntries(
+      diffScopeTotals.map(({ scope, expected, matched }) => [
+        scope,
+        { expected, matched }
+      ])
+    ) as Record<DiffScope, DiffScopeFindingCounts>
+  }
+}
+
+export const calculateEvalMetrics = (
+  caseResults: readonly EvalMetricCaseResult[],
+  judgeReliability?: EvalJudgeReliability,
+  runTotals: EvalRunTotals = emptyRunTotals
+): EvalMetrics => {
+  const {
+    totalCaseCount,
+    totalExpectedFindingCount,
+    totalAdmittedFindingCount,
+    totalFalsePositiveCount,
+    totalUnlistedRealFindingCount,
+    totalGenuineFalsePositiveCount,
+    providerIssueCount,
+    totalArtifactOnlyFindingCount,
+    totalArtifactOnlyMatchedFindingCount,
+    totalArtifactOnlyFalsePositiveCount,
+    precision,
+    adjustedPrecision,
+    recall
+  } = coreFindingTotals(caseResults)
 
   return EvalMetricsSchema.parse({
     parseValidity: ratio(
@@ -996,12 +1158,7 @@ export const calculateEvalMetrics = (
     precision,
     adjustedPrecision,
     f1: harmonicMean(precision, recall),
-    severityWeightedPrecision,
-    severityWeightedRecall,
-    severityWeightedF1: harmonicMean(
-      severityWeightedPrecision,
-      severityWeightedRecall
-    ),
+    ...severityWeightTotals(caseResults),
     lineCheckCount: sum(
       caseResults.map((result) => result.matchedLineCheckCount)
     ),
@@ -1207,22 +1364,11 @@ export const calculateEvalMetrics = (
     inconclusiveMatchCount: sum(
       caseResults.map((result) => result.inconclusiveMatchCount)
     ),
-    recallByTier,
-    productRecall,
-    nitRecall,
-    recallByDiffScope,
-    diffScopeCounts,
-    securityRecallByMechanism,
-    securityMechanismCounts,
-    securityRecallByContextDepth,
-    securityContextDepthCounts,
-    securityObviousRecall,
-    securityHardRecall,
-    securityObviousCount: securityObviousExpected,
-    securityHardCount: securityHardExpected,
-    securityAdjustedPrecisionByMechanism,
-    securityFindingMechanismCounts,
-    securityMechanismAttributionCounts,
+    ...tierRecallTotals(caseResults),
+    ...diffScopeRecallTotals(caseResults),
+    ...securityMechanismRecallTotals(caseResults),
+    ...securityContextDepthRecallTotals(caseResults),
+    ...securityMechanismPrecisionTotals(caseResults),
     inputTokens: sum(measured(caseResults.map((result) => result.inputTokens))),
     cachedInputTokens: sum(
       measured(caseResults.map((result) => result.cachedInputTokens))

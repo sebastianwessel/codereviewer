@@ -19,7 +19,7 @@ import {
 import { createRedactor } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { truncateForContract } from '../../../../shared/text/truncate.js'
-import { type ModelFindingCitation } from '../agent-contracts.js'
+import type { ModelFindingCitation } from '../agent-contracts.js'
 
 // How far a matched line may drift from the citation's own claimed `startLine`,
 // in either direction. Wide enough that a model off by a line or two (an easy

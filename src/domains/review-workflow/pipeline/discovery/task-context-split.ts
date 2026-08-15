@@ -7,9 +7,9 @@
 // admitted against the content that call actually saw.
 
 import { sha256 } from '../../../../shared/hash/hash.js'
-import {
-  type ReviewContextDocument,
-  type WorkflowReviewTask
+import type {
+  ReviewContextDocument,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 
 const isReviewTarget = (document: ReviewContextDocument): boolean =>

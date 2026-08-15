@@ -9,16 +9,20 @@ import { matchEvalFindings } from '../judging/eval-matcher.js'
 import {
   buildRealRepoSlice,
   diffPathsOutsideReviewedSet,
+  gitReviewedDiffArgs,
+  hydrateRealRepoCorpus,
+  realRepoHydrationSource
+} from './real-repo-corpus-hydration.js'
+import {
   gitCheckoutArgs,
   gitFetchArgs,
   gitInitArgs,
-  gitReviewedDiffArgs,
-  hydrateRealRepoCorpus,
-  pruneUnknownCaseDirectories,
-  realRepoHydrationSource,
-  resolveCaseHydrationState,
   type CorpusGitCommandRunner
-} from './real-repo-corpus-hydration.js'
+} from './git-corpus-plumbing.js'
+import {
+  pruneUnknownCaseDirectories,
+  resolveCaseHydrationState
+} from './git-corpus-hydration.js'
 import {
   answerKeyLeakIn,
   parseRealRepoCorpusManifest,

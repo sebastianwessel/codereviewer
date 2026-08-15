@@ -263,8 +263,18 @@ The Ownership Rules give "Git refs" to `repository-intake` and grant
 `evaluation` no git access. Two evaluation modules nevertheless shell out to
 git: `evaluation/report/engine-identity.ts`, which stamps the engine's own
 commit and working-tree cleanliness onto every eval report, and
-`evaluation/corpus/real-repo-corpus-hydration.ts`, whose
-`CorpusGitCommandRunner` checks out upstream corpus slices.
+`evaluation/corpus/git-corpus-plumbing.ts`, whose `CorpusGitCommandRunner`
+checks out upstream corpus slices.
+
+This paragraph said "two" while FOUR modules held a `child_process` import —
+the three corpus hydrators had each grown their own copy of the runner, and the
+divergence record silently understated itself as they multiplied. Consolidating
+those copies on 2026-08-15 made the count true rather than adjusting the number
+to match the drift. A divergence that is allowed to spread is a different
+divergence from the one that was accepted, so the useful invariant is not the
+number but this: **exactly one module per reason.** One engine-identity seam,
+one corpus-checkout seam. A third `child_process` import inside `evaluation` is
+a change to this decision and needs one, not a footnote here.
 
 This is recorded rather than normalised, and it is not the same git.
 `repository-intake` reads the repository **under review** at the refs a run was

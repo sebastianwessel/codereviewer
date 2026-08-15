@@ -2,9 +2,9 @@ import {
   RejectedFindingSchema,
   type RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import {
-  type CandidateFinding,
-  type ReviewedDiffRange
+import type {
+  CandidateFinding,
+  ReviewedDiffRange
 } from '../../../admission/index.js'
 
 export const isModelProposedCandidate = (

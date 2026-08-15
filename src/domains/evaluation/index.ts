@@ -194,10 +194,14 @@ export {
   buildRealRepoSlice,
   diffPathsOutsideReviewedSet,
   hydrateRealRepoCorpus,
-  realRepoHydrationSource,
-  resolveCaseHydrationState,
-  type CorpusGitCommandRunner
+  realRepoHydrationSource
 } from './corpus/real-repo-corpus-hydration.js'
+// From the modules that OWN them, not through the real-repo hydrator. That
+// module used to re-export these purely because callers already addressed them
+// by its name, which is how one corpus's file became the apparent home of
+// plumbing all three share.
+export type { CorpusGitCommandRunner } from './corpus/git-corpus-plumbing.js'
+export { resolveCaseHydrationState } from './corpus/git-corpus-hydration.js'
 export {
   EVAL_SEMANTIC_JUDGE_STAGE,
   matchEvalFindings,

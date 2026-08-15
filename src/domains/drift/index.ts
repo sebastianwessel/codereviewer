@@ -22,6 +22,6 @@ export {
   renderConfigExampleIssues,
   type JsonBlock
 } from './config-example-checker.js'
-export {
-  type TextFile
+export type {
+  TextFile
 } from './markdown-sources.js'

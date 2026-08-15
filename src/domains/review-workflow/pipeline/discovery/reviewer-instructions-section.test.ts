@@ -26,7 +26,7 @@ import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
 } from '../contracts.js'
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { WorkflowReviewTask } from '../agent-contracts.js'
 import { runModelBackedHolisticTaskReview } from './holistic-task-review.js'
 import {
   renderReviewerInstructionsSection,

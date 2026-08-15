@@ -26,7 +26,7 @@ import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
 } from '../../pipeline/contracts.js'
-import { type WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
+import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import { assembleContext } from './context.js'
 
 const configHash =

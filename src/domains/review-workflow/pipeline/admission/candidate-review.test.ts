@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { reviewCandidateForAdmission } from './candidate-review.js'
 import {
   ReviewWorkflowInputSchema,

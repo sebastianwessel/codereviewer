@@ -25,12 +25,12 @@ import {
   type AnalyzerAlert,
   type AnalyzerIdentity
 } from '../contracts.js'
-import {
+import type {
   SarifLogSchema,
-  type SarifLocation,
-  type SarifReportingDescriptor,
-  type SarifResult,
-  type SarifRun
+  SarifLocation,
+  SarifReportingDescriptor,
+  SarifResult,
+  SarifRun
 } from './sarif.schema.js'
 
 // Bounds on what one alert may contribute to a model packet. An artifact can

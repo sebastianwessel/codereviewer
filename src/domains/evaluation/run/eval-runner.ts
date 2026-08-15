@@ -19,9 +19,9 @@ import {
   scorePlausibilityCalibration,
   type EvalPlausibilityCalibrationResult
 } from '../judging/eval-plausibility-calibration.js'
-import {
-  type EvalCaseFileReader,
-  type EvalPlausibilityJudge
+import type {
+  EvalCaseFileReader,
+  EvalPlausibilityJudge
 } from '../judging/eval-plausibility-judge.js'
 import {
   calculateEvalMetrics,

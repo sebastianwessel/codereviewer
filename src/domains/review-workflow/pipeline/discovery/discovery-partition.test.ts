@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { WorkflowReviewTask } from '../agent-contracts.js'
 import { partitionTaskForDiscovery } from './discovery-partition.js'
 
 const document = (

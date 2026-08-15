@@ -11,8 +11,8 @@ import {
   candidateFindingsFromTaskResults,
   sharedTaskEventFromWorkflow
 } from '../admission.js'
-import {
-  type ReviewRunFailedError
+import type {
+  ReviewRunFailedError
 } from '../support/errors.js'
 import { driftWarningsFor } from '../drift.js'
 import { createPartialReviewRunFailedError } from '../results/partial-state.js'

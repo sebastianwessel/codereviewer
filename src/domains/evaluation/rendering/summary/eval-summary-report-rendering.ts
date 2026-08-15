@@ -1,6 +1,6 @@
-import { type EvalCase } from '../../corpus/eval-fixture.schema.js'
+import type { EvalCase } from '../../corpus/eval-fixture.schema.js'
 import { appendMarkdownBulletSection } from '../eval-report-markdown-formatting.js'
-import { type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalReport } from '../../report/eval-report-contracts.js'
 import {
   appendEvalSummaryHeader,
   appendEvalSummaryHeadline,

@@ -26,7 +26,7 @@ import {
   type Claim
 } from '../../shared/contracts/verification/verification.schema.js'
 import { createContextRetriever } from '../context-retrieval/index.js'
-import { type ContextLedgerEntry } from '../review-planning/index.js'
+import type { ContextLedgerEntry } from '../review-planning/index.js'
 import { createBoundedRetrievalTools } from '../context-retrieval/index.js'
 import { runVerificationFlow } from './verification-flow.js'
 import {

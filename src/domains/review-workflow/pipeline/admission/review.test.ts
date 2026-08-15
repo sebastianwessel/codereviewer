@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type FindingRefutationBatchInput,
-  type ModelFindingRefutationBatchResult,
-  type WorkflowReviewTask
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type {
+  FindingRefutationBatchInput,
+  ModelFindingRefutationBatchResult,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import { prepareCandidatesForAdmission } from './review.js'
 import {

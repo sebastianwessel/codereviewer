@@ -1,7 +1,7 @@
-import { type EvalRegressionGateOutcome } from '../report/eval-report-contracts.js'
-import {
-  type PrecisionBracket,
-  type PrecisionBracketBound
+import type { EvalRegressionGateOutcome } from '../report/eval-report-contracts.js'
+import type {
+  PrecisionBracket,
+  PrecisionBracketBound
 } from '../scoring/eval-precision-bracket.js'
 
 export type EvalCostMetricInput = {

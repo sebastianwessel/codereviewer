@@ -140,7 +140,7 @@ raise that cannot work.
 | --- | --- |
 | `repository_error` | Generic filesystem/git failure. |
 | `merge_base_unavailable` | No merge base exists between `baseRef` and `headRef`. |
-| `baseline_source_unavailable` | `baseline write` found no completed report, or could not read the one given via `--report`. |
+| `baseline_source_unavailable` | `baseline write` found no completed report, or could not read the one given via `--report`. The message states WHICH of those happened — missing, permission denied, a directory, or a path refused for resolving outside the repository — and `details.cause` carries the normalized errno (`ENOENT`, `EACCES`, `EPERM`, `EISDIR`) or `path_outside_repository`. |
 | `baseline_source_invalid` | `baseline write` read the source file, but it is not a review report (invalid JSON, or JSON that does not satisfy the report contract). |
 
 ### `provider` (exit 4)
@@ -167,7 +167,7 @@ raise that cannot work.
 | `report_error` | Writing a reporting artifact failed. |
 | `cli_envelope_invalid` | The CLI built a stdout, stderr or `error.json` document that does not satisfy its own contract (`src/shared/contracts/cli/cli-output.schema.ts`). It names a defect in this engine, never in your input, and is the reason the envelopes are validated before they are printed rather than merely typed. |
 | `quality_gate_missing` | A completed run's report carried no quality gate result. Every completed run evaluates its gate, so this is an internal inconsistency; the run fails instead of being reported as passing. The run directory is written and is the evidence for the bug report. |
-| `unknown_error` | Unclassified internal failure. |
+| `unknown_error` | Unclassified internal failure. Also what the CLI's top-level guard reports for a failure that escaped a command's own error handling — for example a run that fails while its artifact directory is unwritable, where the partial-artifact write itself throws from inside the failure path. Such a failure prints this envelope at exit `5` rather than a raw stack trace at exit `1`. |
 
 ## Non-fatal signals
 

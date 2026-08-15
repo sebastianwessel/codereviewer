@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   appendMarkdownTable,
   escapeMarkdownCell
@@ -9,7 +9,7 @@ import {
   contextLedgerKindLabel,
   contextLedgerTruncatedCount
 } from '../eval-report-case-labels.js'
-import { EvalCaseReportSchema, type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalCaseReportSchema, EvalReport } from '../../report/eval-report-contracts.js'
 
 const formatEvalSummaryAgenticStageRow = (
   caseResult: z.infer<typeof EvalCaseReportSchema>

@@ -1,5 +1,5 @@
 import { appendComparisonCountDeltaTable } from './eval-comparison-count-delta-rendering.js'
-import { type EvalComparisonReport } from '../../report/eval-comparison-view.js'
+import type { EvalComparisonReport } from '../../report/eval-comparison-view.js'
 
 export const contextLedgerKindCounts = (
   report: EvalComparisonReport

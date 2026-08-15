@@ -51,6 +51,12 @@ With `reviewComments.enabled`, two files are written per run:
 > The structured run data that DOES exist is `observability.json` in the run
 > directory — see [artifacts.md](../artifacts.md).
 
+A review task that fails is logged at `warn`, naming the task id, the worker and
+the classified error code — so `--log-level warn` is enough to see which task
+failed and why, without the volume of `debug`. When several workers fail at once
+every one of them gets its own line, and the run's terminal failure is logged
+once, at `error`.
+
 OpenTelemetry exporter packages are optional and dependency-isolated. If
 `enabled` is `true` and they are not installed, setup returns a recoverable
 config error (`opentelemetry_dependency_missing`, exit `2`) with installation

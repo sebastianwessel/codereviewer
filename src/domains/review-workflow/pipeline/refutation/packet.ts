@@ -1,5 +1,5 @@
-import { type CandidateFinding } from '../../../admission/index.js'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
 import {
   FindingRefutationBatchInputSchema,
   type FindingRefutationBatchInput,
@@ -9,7 +9,7 @@ import {
   createTaskPacketBudgetExceededError,
   serializedBytes
 } from '../packet-budget.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 import {
   locationEndLine,
   sameRepositoryPath

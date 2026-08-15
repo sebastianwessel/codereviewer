@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { appendEvalComparisonMetricDeltas } from './eval-comparison-aggregate-metric-rendering.js'
 import { metricComparability } from '../../report/versions/eval-metrics-versions.js'
 import { EVAL_METRICS_VERSION } from '../../report/eval-report-contracts.js'
-import { type EvalComparisonMetrics } from '../../report/eval-comparison-view.js'
+import type { EvalComparisonMetrics } from '../../report/eval-comparison-view.js'
 
 const comparability = metricComparability(
   EVAL_METRICS_VERSION,

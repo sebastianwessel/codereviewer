@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest'
-import { type CandidateFinding } from '../../../admission/index.js'
-import { type AdmissionDecisionRecord } from '../../../shared-context/index.js'
-import { type EvidenceRecord, type RejectedFinding } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type { AdmissionDecisionRecord } from '../../../shared-context/index.js'
+import type { EvidenceRecord, RejectedFinding } from '../../../../shared/contracts/index.js'
 import {
   emptyAdmissionCandidateOutcome,
   mergeAdmissionCandidateOutcomes,
   type AdmissionCandidateOutcome
 } from './outcome.js'
-import { type ProviderIssue } from '../provider-issues.js'
+import type { ProviderIssue } from '../provider-issues.js'
 
 const candidate = (id: string): CandidateFinding => ({
   id,

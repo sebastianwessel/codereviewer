@@ -17,8 +17,8 @@ import {
   type SupportSignalFactKind
 } from '../deterministic-signals/index.js'
 import {
-  ChangedFileChangeKindSchema,
-  ChangedSymbolChangeKindSchema,
+  type ChangedFileChangeKindSchema,
+  type ChangedSymbolChangeKindSchema,
   ChangedSymbolKindSchema,
   type RemovalPairing
 } from './impact-report.js'

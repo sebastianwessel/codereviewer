@@ -34,7 +34,7 @@
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { CorpusGitCommandRunner } from '../corpus/real-repo-corpus-hydration.js'
+import type { CorpusGitCommandRunner } from '../corpus/git-corpus-plumbing.js'
 
 const execFileAsync = promisify(execFile)
 

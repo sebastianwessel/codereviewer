@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import type {
   AdmittedFinding,
   ReviewReport
@@ -13,7 +13,7 @@ import {
   resolveExpectedFindingTier,
   type EvalCase
 } from '../corpus/eval-fixture.schema.js'
-import { type EvalMatcherResult } from '../judging/eval-matcher.js'
+import type { EvalMatcherResult } from '../judging/eval-matcher.js'
 import { expectedFindingDiffScopes } from '../scoring/eval-diff-scope.js'
 import {
   emptyDiffScopeCounts,

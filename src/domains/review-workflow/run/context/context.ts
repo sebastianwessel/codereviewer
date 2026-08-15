@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { redactTextWithCount } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
-import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
-import { diffSegmentsForPaths } from '../../../../shared/diff/git-diff-header.js'
 import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import {
   reviewedLineRangeForContent,
@@ -15,24 +12,20 @@ import {
 import {
   discoverDeterministicSignalTestMappings,
   type DeterministicSignalExtraction,
-  type SupportSignalFact,
   type SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
-import {
-  createContextLedgerEntry,
-  type ContextLedgerEntry,
-  type ReviewTask
+import type {
+  ContextLedgerEntry,
+  ReviewTask
 } from '../../../review-planning/index.js'
 import type { DiffMap } from '../../../repository-intake/index.js'
 import type { SkillsConfig } from '@purista/harness'
-import type { ReviewWorkflowInput } from '../../harness/workflow.js'
 import {
   provenanceHashesFromContextLedger,
   type ReviewRunnerProvenanceHashes
 } from '../support/provenance.js'
 import {
   loadStaticReviewContext,
-  selectInstructionsForFiles,
   type InstructionContextDocument,
   type SkillContextDocument
 } from './static-context.js'
@@ -40,18 +33,21 @@ import {
   collectReferencedDefinitions,
   createReferencedDefinitionCache
 } from './referenced-definitions.js'
+import { supportSignalContextsForPaths } from './support-signal-context.js'
+import {
+  createWorkflowTask,
+  type ContextInput,
+  type ReviewContextDocument,
+  type WorkflowReviewTask
+} from './workflow-task.js'
 
 export type {
   InstructionContextDocument,
   SkillContextDocument
 } from './static-context.js'
 
-type ReviewContextDocument = NonNullable<
-  ReviewWorkflowInput['reviewContext']
->[number]
-export type WorkflowReviewTask = NonNullable<
-  ReviewWorkflowInput['tasks']
->[number]
+export type { WorkflowReviewTask } from './workflow-task.js'
+
 export type ContextAssemblyResult = {
   readonly reviewContext: readonly ReviewContextDocument[]
   readonly tasks: readonly WorkflowReviewTask[]
@@ -95,17 +91,6 @@ export type ReviewRunnerContextStateMetrics = {
 export type ReviewRunnerContextState = ReviewRunnerProvenanceHashes & {
   readonly assembledContext: ContextAssemblyResult
   readonly metrics: ReviewRunnerContextStateMetrics
-}
-
-type ContextInput = {
-  readonly content: string
-  readonly kind: ReviewContextDocument['kind']
-  readonly path?: string
-  // Absolute origin of a 'file' chunk in its source file. Present only for source
-  // chunks; support-signal and referenced-definition context has no place in the
-  // reviewed file to point at.
-  readonly startLine?: number
-  readonly endLine?: number
 }
 
 export const readChangedSourceFiles = async (
@@ -184,186 +169,6 @@ export const assembleContext = async (
   // it records what the model was actually given.
   let redactedContextSpans = 0
 
-  const createWorkflowTask = (
-    task: ReviewTask,
-    taskId: string,
-    inputContexts: readonly ContextInput[],
-    paths: readonly string[],
-    // Referenced-definition contexts (R4) are appended to reviewContext but MUST
-    // NOT influence task.paths: they are unchanged dependency files included for
-    // context only, never review targets. They are passed separately so the
-    // caller can derive paths solely from the changed-file/support-signal batch.
-    referencedDefinitionContexts: readonly ContextInput[] = []
-  ): WorkflowReviewTask => {
-    const reviewContext: ReviewContextDocument[] = []
-    const contextEntryIds: string[] = []
-    const pathSet = new Set(paths)
-
-    // The task's own diff segments, accounted for before the documents are. They
-    // are not a reviewContext document — the packet renders them from the same
-    // shared splitter — but they ARE bytes this task sends to the model, and the
-    // ledger's one job is to know that. Recorded per task because that is how
-    // many times they are sent.
-    //
-    // Recorded for the task as PLANNED. A reactive split (spec 26) happens later,
-    // at discovery, when the provider refuses the packet; the halves it produces
-    // are shown the hunks inside their own chunk and nothing else, so the two
-    // together send about what is recorded here rather than twice it. A hunk
-    // straddling the split point is the one thing counted once and sent twice.
-    const taskDiffText = diffSegmentsForPaths(input.reviewedDiffText, paths)
-
-    if (taskDiffText.length > 0) {
-      const diffBytes = utf8ByteLength(taskDiffText)
-
-      contextLedger.push(
-        createContextLedgerEntry({
-          kind: 'diff',
-          taskId,
-          reason: 'task-context-diff-segments',
-          decision: 'included',
-          bytesConsidered: diffBytes,
-          bytesIncluded: diffBytes,
-          content: taskDiffText
-        })
-      )
-    }
-
-    for (const inputContext of [
-      ...inputContexts,
-      ...referencedDefinitionContexts
-    ]) {
-      const contentBytes = utf8ByteLength(inputContext.content)
-      // COUNTED HERE, at the one place a reviewed document's content is altered
-      // between the file on disk and the packet.
-      //
-      // A redaction on a log line or a report artifact hides a secret from a
-      // reader and is finished. A redaction HERE is generative: the model reads
-      // `[REDACTED]` where the file has source, and every candidate it raises or
-      // fails to raise around that span is reasoning about code that does not
-      // exist. Nothing else in the run can reveal it — the ledger entry below
-      // hashes and measures `inputContext.content`, the text BEFORE redaction, so
-      // even a reader comparing hashes is comparing against a string the model
-      // never saw. The count is the only place the alteration becomes a fact the
-      // run can report.
-      const redactedContent = redactTextWithCount(inputContext.content)
-
-      redactedContextSpans += redactedContent.redactionCount
-
-      const ledgerEntry = createContextLedgerEntry({
-        // The context ledger has no dedicated kinds for 'referenced-definition',
-        // 'change-intent', or 'analyzer-signal'; all are recorded as
-        // support-signal-output (derived context, not a reviewed changed file).
-        // 'change-intent' and 'analyzer-signal' are injected by separate stages and
-        // never reach this assembly loop, but the mapping keeps the kind union
-        // exhaustive.
-        kind:
-          inputContext.kind === 'referenced-definition' ||
-          inputContext.kind === 'change-intent' ||
-          inputContext.kind === 'analyzer-signal'
-            ? 'support-signal-output'
-            : inputContext.kind,
-        ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
-        taskId,
-        reason:
-          inputContext.kind === 'file'
-            ? 'task-context-source-chunk'
-            : inputContext.kind === 'referenced-definition'
-              ? 'task-context-referenced-definition'
-              : 'task-context-support-signal-chunk',
-        decision: 'included',
-        bytesConsidered: contentBytes,
-        bytesIncluded: contentBytes,
-        content: inputContext.content
-      })
-      const contextDocument: ReviewContextDocument = {
-        kind: inputContext.kind,
-        ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
-        // The chunk's origin travels with the document because everything
-        // downstream (line-numbered rendering, admission) sees only the document,
-        // never the split that produced it.
-        ...(inputContext.startLine === undefined ||
-        inputContext.endLine === undefined
-          ? {}
-          : {
-              startLine: inputContext.startLine,
-              endLine: inputContext.endLine
-            }),
-        content: redactedContent.text,
-        ledgerEntryId: ledgerEntry.id
-      }
-
-      contextLedger.push(ledgerEntry)
-      reviewContext.push(contextDocument)
-      contextEntryIds.push(ledgerEntry.id)
-    }
-
-    // Spec 04: which instruction documents this task's packets carry, decided
-    // here — once per task, from the task's own reviewed files — so discovery and
-    // refutation read one resolution instead of each computing their own.
-    //
-    // `paths` is derived from assembly's own context documents and the planner's
-    // task, never from anything a reviewed file says: repository content selects
-    // no instruction. An unscoped instruction is in `included` for every task.
-    const instructionSelection = selectInstructionsForFiles(
-      staticContext.instructions,
-      staticContext.instructionScopes,
-      paths
-    )
-
-    // A scoped-out instruction is DISCLOSED, not merely absent. Without this the
-    // ledger for a task showed nothing at all where the instruction would have
-    // been, which reads identically to "no such instruction was ever configured"
-    // — and an operator whose guidance never reached the reviewer would have had
-    // no way to tell the two apart. `bytesConsidered` is the document's full
-    // size against `bytesIncluded: 0`, so the entry states what was withheld.
-    //
-    // Walks the DOCUMENTS and selects with the skipped paths, rather than
-    // walking the skipped paths and looking each document up: the byte count
-    // then always comes from a document that exists, with no absent-document
-    // branch to answer with a fabricated zero.
-    const skippedInstructionPaths = new Set(
-      instructionSelection.skipped.map((entry) => entry.path)
-    )
-
-    for (const instruction of staticContext.instructions) {
-      if (!skippedInstructionPaths.has(instruction.path)) {
-        continue
-      }
-
-      contextLedger.push(
-        createContextLedgerEntry({
-          kind: 'instruction',
-          path: instruction.path,
-          taskId,
-          reason: 'instruction-scope-excluded',
-          decision: 'skipped',
-          bytesConsidered: utf8ByteLength(instruction.content),
-          bytesIncluded: 0
-        })
-      )
-    }
-
-    return {
-      ...task,
-      id: taskId,
-      paths: [...paths],
-      instructions: [...instructionSelection.included],
-      factIds: input.analysis.facts
-        .filter((fact) => pathSet.has(fact.path))
-        .map((fact) => fact.id),
-      evidenceIds: input.analysis.evidence
-        .filter(
-          (record) =>
-            task.evidenceIds.includes(record.id) &&
-            pathSet.has(record.location?.path ?? '')
-        )
-        .map((record) => record.id),
-      candidateIds: [],
-      reviewContext,
-      contextEntryIds
-    }
-  }
-
   // A single-file task carrying only its own source keeps the planner's id, so the
   // common case stays traceable straight back to planning; anything else gets an id
   // derived from what it actually carries.
@@ -400,135 +205,6 @@ export const assembleContext = async (
     input.sourceFiles.map((sourceFile) => sourceFile.path)
   )
 
-  // What a MODEL can use out of a deterministic fact, which is not the same thing
-  // as what the engine stores in one.
-  //
-  // `id` and `contentHash` are internal bookkeeping: no prompt refers to a fact id
-  // (the refuter cites evidence ids, which are a different namespace), and the
-  // content hash is the file's, so every fact for one file repeats the same
-  // 64-character hex string. Serializing the raw record put both in front of the
-  // model, and measurement over the 37-case corpus priced them: the facts document
-  // was 26.0% of ALL model input bytes, and inside it `contentHash` was 25.6% and
-  // `id` 8.7% — 3,244 facts carrying just 44 distinct hashes, or 8.9% of every
-  // byte this engine sends, in opaque hex that tokenizes at roughly one token per
-  // two characters. Projecting here rather than narrowing `SupportSignalFact`
-  // keeps the internal record intact for clustering, evidence and change-impact,
-  // which all need the id.
-  const modelFacingSupportSignalFact = (
-    fact: SupportSignalFact,
-    isPublic: boolean
-  ) => ({
-    language: fact.language,
-    kind: fact.kind,
-    path: fact.path,
-    name: fact.name,
-    ...(fact.moduleSpecifier === undefined
-      ? {}
-      : { moduleSpecifier: fact.moduleSpecifier }),
-    line: fact.line,
-    // Visibility as a FLAG on the declaration rather than a second row about it.
-    ...(isPublic ? { public: true } : {}),
-    summary: fact.summary
-  })
-
-  /**
-   * Collapses the `declaration` / `public-symbol` pair the extractors emit for the
-   * same symbol into one row carrying `public: true`.
-   *
-   * Every polyglot adapter reports a public declaration twice, at the identical
-   * `(path, name, line)` — once as what it is and once as how visible it is. That
-   * is right for the internal fact stream, where change-impact ranks seeds by
-   * visibility and needs both kinds to exist. It is pure duplication in the model
-   * packet: measured across the 37-case corpus, 893 of 893 `public-symbol` rows
-   * duplicated a `declaration` row at the same coordinates and added one bit of
-   * information each, for 4.0% of ALL model input.
-   *
-   * The bit is kept because it is real — whether a caller outside the file can
-   * depend on a symbol is exactly the sort of thing a reviewer reasons about — and
-   * a row is dropped only when the same symbol is already described at the same
-   * line. A `public-symbol` arriving without its declaration is passed through
-   * unchanged rather than assumed impossible; nothing here depends on the pairing
-   * holding, so a future adapter that emits only one kind cannot silently lose it.
-   *
-   * The internal `SupportSignalFact` stream is untouched, exactly as with the
-   * bookkeeping projection above: this shapes what the model is shown, never what
-   * the engine reasons over.
-   */
-  const collapseVisibilityDuplicates = (
-    facts: readonly SupportSignalFact[]
-  ): readonly ReturnType<typeof modelFacingSupportSignalFact>[] => {
-    // Keyed with `JSON.stringify` rather than a NUL-delimited template.
-    // NUL is the ideal separator on paper -- it cannot occur in a path or an
-    // identifier -- but embedding it makes this SOURCE FILE binary, and every
-    // tool that skips binaries then skips the file in silence: `grep -r` finds
-    // no match here, including for this project's own drift checker. That cost
-    // real time on 2026-08-03, when a search for a symbol's callers came back
-    // empty and the code it lives in was very nearly deleted as unused.
-    // `JSON.stringify` is unambiguous for the same reason and stays printable.
-    const coordinate = (fact: SupportSignalFact): string =>
-      JSON.stringify([fact.path, fact.name, fact.line])
-    const publicCoordinates = new Set(
-      facts
-        .filter((fact) => fact.kind === 'public-symbol')
-        .map((fact) => coordinate(fact))
-    )
-    const declaredCoordinates = new Set(
-      facts
-        .filter((fact) => fact.kind === 'declaration')
-        .map((fact) => coordinate(fact))
-    )
-
-    return facts
-      .filter(
-        (fact) =>
-          fact.kind !== 'public-symbol' ||
-          !declaredCoordinates.has(coordinate(fact))
-      )
-      .map((fact) =>
-        modelFacingSupportSignalFact(
-          fact,
-          fact.kind === 'declaration' && publicCoordinates.has(coordinate(fact))
-        )
-      )
-  }
-
-  const supportSignalContextsForPaths = (
-    task: ReviewTask,
-    pathSet: ReadonlySet<string>
-  ): readonly ContextInput[] => {
-    // `deterministicSignalMode: 'disabled'` keeps deterministic facts for free
-    // task clustering (already applied by the planner) but does not inject the
-    // serialized support-signal facts into the model packet, since that structural
-    // summary is largely redundant with the source the model already reads.
-    if (input.config.aiReview.deterministicSignalMode === 'disabled') {
-      return []
-    }
-
-    const supportSignalFacts = input.analysis.facts.filter(
-      (fact) => task.factIds.includes(fact.id) && pathSet.has(fact.path)
-    )
-    const supportSignalTestMappings = testMappings.filter(
-      (mapping) =>
-        pathSet.has(mapping.sourcePath) || pathSet.has(mapping.testPath)
-    )
-    const supportSignalContext =
-      supportSignalFacts.length === 0 && supportSignalTestMappings.length === 0
-        ? ''
-        : JSON.stringify({
-            facts: collapseVisibilityDuplicates(supportSignalFacts),
-            testMappings: supportSignalTestMappings
-          })
-
-    return utf8ByteLength(supportSignalContext) === 0
-      ? []
-      : [
-          {
-            kind: 'support-signal-output' as const,
-            content: supportSignalContext
-          }
-        ]
-  }
-
   for (const task of input.tasks) {
     const taskPathSet = new Set(task.paths)
     const taskSourceFiles = input.sourceFiles.filter((sourceFile) =>
@@ -557,12 +233,16 @@ export const assembleContext = async (
     // byte-sized batches.
     const taskContexts: ContextInput[] = [
       ...sourceContexts,
-      ...supportSignalContextsForPaths(
-        task,
-        sourceContexts.length === 0
-          ? taskPathSet
-          : new Set(workflowTaskPaths(sourceContexts, task.paths))
-      )
+      ...supportSignalContextsForPaths({
+        factIds: task.factIds,
+        pathSet:
+          sourceContexts.length === 0
+            ? taskPathSet
+            : new Set(workflowTaskPaths(sourceContexts, task.paths)),
+        deterministicSignalMode: input.config.aiReview.deterministicSignalMode,
+        facts: input.analysis.facts,
+        testMappings
+      })
     ]
 
     // R4: collect bounded referenced-definition digests for unchanged files the
@@ -606,15 +286,25 @@ export const assembleContext = async (
 
     // A task with nothing to show the reviewer produces no workflow task at all.
     if (taskContexts.length > 0) {
-      tasks.push(
-        createWorkflowTask(
-          task,
-          workflowTaskId(task, taskContexts),
-          taskContexts,
-          workflowTaskPaths(taskContexts, task.paths),
-          referencedDefinitionContexts
-        )
-      )
+      const created = createWorkflowTask({
+        task,
+        taskId: workflowTaskId(task, taskContexts),
+        inputContexts: taskContexts,
+        paths: workflowTaskPaths(taskContexts, task.paths),
+        referencedDefinitionContexts,
+        reviewedDiffText: input.reviewedDiffText,
+        instructions: staticContext.instructions,
+        instructionScopes: staticContext.instructionScopes,
+        facts: input.analysis.facts,
+        evidence: input.analysis.evidence
+      })
+
+      // Appended here, in task order, rather than inside the creation above: the
+      // ledger's order is the loop's, and it stays a property a reader can check
+      // by reading this loop.
+      contextLedger.push(...created.ledgerEntries)
+      redactedContextSpans += created.redactedSpanCount
+      tasks.push(created.task)
     }
   }
   const reviewContextById = new Map<string, ReviewContextDocument>()

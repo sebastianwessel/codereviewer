@@ -1,21 +1,20 @@
-import { execFile } from 'node:child_process'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import {
   resolveExistingPathInsideRoot,
   resolveWritePathInsideRoot
 } from '../../../platform/path-service.js'
 import { selectCorpusCases } from '../corpus/real-repo-corpus.schema.js'
+import { pruneUnknownCaseDirectories } from '../corpus/git-corpus-hydration.js'
 import {
+  defaultCorpusGitRunner,
   gitCheckoutArgs,
   gitDisableAutoCrlfArgs,
   gitFetchArgs,
   gitInitArgs,
   gitRemoteArgs,
-  pruneUnknownCaseDirectories,
   type CorpusGitCommandRunner
-} from '../corpus/real-repo-corpus-hydration.js'
+} from '../corpus/git-corpus-plumbing.js'
 import {
   countOutstandingExpectationsByArm,
   parseIntentCorpusManifestJson,
@@ -54,8 +53,6 @@ import {
 // messages and the exact thing this corpus exists to avoid. Hydration throws rather
 // than materialise one.
 
-const execFileAsync = promisify(execFile)
-
 export const defaultIntentManifestPath =
   'eval/corpora/intent-fulfilment/manifest.json'
 
@@ -76,18 +73,6 @@ export const INTENT_CASE_WORK_TREE = 'repo'
 // twice.
 export const INTENT_CASE_CONTEXT_DIRECTORY = '.codereviewer/intent-case'
 export const INTENT_CASE_INTENT_DOCUMENT = 'intent.md'
-
-const gitOutputByteCap = 64 * 1024 * 1024
-
-const defaultGitRunner: CorpusGitCommandRunner = async ({ args, cwd }) => {
-  const { stdout } = await execFileAsync('git', [...args], {
-    cwd,
-    maxBuffer: gitOutputByteCap,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-  })
-
-  return stdout
-}
 
 /**
  * One assembled-intent line and the source-document line it was taken from.
@@ -243,7 +228,7 @@ const storedCaseIsCurrent = (input: {
 export const hydrateIntentCorpus = async (
   options: HydrateIntentCorpusOptions
 ): Promise<HydrateIntentCorpusResult> => {
-  const runGit = options.runGit ?? defaultGitRunner
+  const runGit = options.runGit ?? defaultCorpusGitRunner
   const manifestPath = options.manifestPath ?? defaultIntentManifestPath
   const outputRoot = options.outputRoot ?? defaultIntentOutputRoot
   const manifest: IntentCorpusManifest = parseIntentCorpusManifestJson(

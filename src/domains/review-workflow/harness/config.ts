@@ -1,4 +1,4 @@
-import { type BuiltinToolName } from '@purista/harness'
+import type { BuiltinToolName } from '@purista/harness'
 import { REPO_TOOL_IDS } from '../../context-retrieval/index.js'
 import { MAX_PATHS_PER_REVIEW_TASK } from '../../review-planning/index.js'
 import {
@@ -6,7 +6,7 @@ import {
   SECURITY_MAX_CANDIDATES
 } from '../pipeline/discovery/holistic-task-review.js'
 import { MAX_REACTIVE_SPLIT_DEPTH } from '../pipeline/discovery/reactive-split.js'
-import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
+import type { CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0

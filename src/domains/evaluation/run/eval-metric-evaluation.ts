@@ -1,9 +1,9 @@
-import { z } from 'zod'
+import type { z } from 'zod'
 import { uniqueSorted } from '../../../shared/text/unique-sorted.js'
-import { type EvalCase } from '../corpus/eval-fixture.schema.js'
+import type { EvalCase } from '../corpus/eval-fixture.schema.js'
 import {
   calculateEvalMetrics,
-  EvalMetricsSchema,
+  type EvalMetricsSchema,
   type EvalJudgeReliability,
   type EvalMetricCaseResult,
   type EvalMetrics,

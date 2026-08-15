@@ -4,7 +4,7 @@ import {
   type MetricsVersionDivergenceOf,
   type MetricsVersionEntry
 } from './metrics-version-history.js'
-import { type EvalMetrics } from '../../scoring/metrics.js'
+import type { EvalMetrics } from '../../scoring/metrics.js'
 
 // WHICH METRICS SURVIVE A SCORING-RULE CHANGE.
 //

@@ -25,11 +25,11 @@ import {
 // Sibling modules by path rather than through `evaluation`'s own barrel: a module
 // inside a domain that imports its domain's barrel makes the barrel depend on
 // itself through every other entry on it.
-import {
-  type ChangeImpactCaseInput,
-  type ChangeImpactCaseOutcome
+import type {
+  ChangeImpactCaseInput,
+  ChangeImpactCaseOutcome
 } from './change-impact-scoring.js'
-import { type ChangeImpactCorpusCase } from './change-impact-corpus.schema.js'
+import type { ChangeImpactCorpusCase } from './change-impact-corpus.schema.js'
 import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
 import { createRunContext } from '../../run-context/index.js'
 import { normalizeError } from '../../../shared/errors/error-normalizer.js'

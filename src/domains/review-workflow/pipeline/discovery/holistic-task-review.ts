@@ -15,8 +15,8 @@ import {
   type TaskReviewResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
-import { type DebugLogger } from '../debug-logger.js'
-import { type ProviderIssue } from '../provider-issues.js'
+import type { DebugLogger } from '../debug-logger.js'
+import type { ProviderIssue } from '../provider-issues.js'
 import { citationEvidenceFor } from './citation-evidence.js'
 import { hasActiveCrossFileDiscoveryScope } from './cross-file-tools.js'
 import { runDiscoveryCall, type DiscoveryCallResult } from './discovery-call.js'
@@ -27,8 +27,8 @@ import {
   numberedFileContentLookupFor
 } from './review-packet.js'
 import { runSemanticFindingMerge } from './semantic-merge.js'
-import { type SemanticMergeRunner } from '../agent-contracts.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { SemanticMergeRunner } from '../agent-contracts.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 
 // Spec 15, Mechanism 1: the dedicated additive security pass. A generic, public-
 // derived OWASP/CWE checklist that frames a SECOND, security-only discovery call

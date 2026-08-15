@@ -1,11 +1,11 @@
-import { type EvidenceRecord } from '../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../admission/index.js'
+import type { EvidenceRecord } from '../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../admission/index.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import {
   WorkflowReviewTaskSchema,
   type WorkflowReviewTask
 } from './agent-contracts.js'
-import { type ReviewWorkflowInput } from './contracts.js'
+import type { ReviewWorkflowInput } from './contracts.js'
 
 const taskIdForPath = (path: string): string =>
   `task_${sha256(path).slice(0, 16)}`

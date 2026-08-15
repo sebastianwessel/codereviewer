@@ -12,7 +12,7 @@ import {
   type ChangeImpactCaseResult
 } from './change-impact-corpus-hydration.js'
 import { ChangeImpactCorpusCaseSchema } from './change-impact-corpus.schema.js'
-import type { CorpusGitCommandRunner } from '../corpus/real-repo-corpus-hydration.js'
+import type { CorpusGitCommandRunner } from '../corpus/git-corpus-plumbing.js'
 
 const introducingCommit = 'a'.repeat(40)
 const parentCommit = 'b'.repeat(40)

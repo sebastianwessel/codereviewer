@@ -419,6 +419,35 @@ describe('context retrieval', () => {
     }
   })
 
+  // One entry the filesystem cannot describe used to reject the whole listing:
+  // `stat` follows symlinks, so a link to a deleted target throws `ENOENT`, and
+  // the unguarded `Promise.all` turned that into "this directory is unreadable"
+  // for a directory the model can read perfectly well. The search traversal
+  // already skips this class deliberately.
+  test('one un-stat-able entry does not fail the whole directory listing', async () => {
+    const root = await createTempRepo()
+
+    try {
+      await symlink(
+        join(root, 'src', 'deleted-target.ts'),
+        join(root, 'src', 'dangling.ts')
+      )
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const listed = await retriever.listRepositoryDirectory({ path: 'src' })
+
+      // The other entries are still served...
+      expect(listed.content).toContain('file src/app.ts')
+      expect(listed.content).toContain('file src/other.ts')
+      // ...and the entry that could not be described is REPORTED, with its kind
+      // stated as unknown, rather than dropped. A silent omission would let a
+      // reader conclude the name is not in the directory.
+      expect(listed.content).toContain('unknown src/dangling.ts')
+      expect(listed.summary).toContain('3 of 3 eligible entries returned')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('rejects a path that does not exist with an actionable not-found error', async () => {
     const root = await createTempRepo()
 

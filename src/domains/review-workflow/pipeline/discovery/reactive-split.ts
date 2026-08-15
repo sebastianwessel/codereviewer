@@ -7,10 +7,10 @@
 // authority and no value has to be chosen correctly in advance.
 
 import { splitContentInHalf } from '../../../../shared/text/line-chunks.js'
-import {
-  type ReviewContextDocument,
-  type TaskReviewInput,
-  type WorkflowReviewTask
+import type {
+  ReviewContextDocument,
+  TaskReviewInput,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import { partitionReviewContext, subTaskFrom } from './task-context-split.js'
 

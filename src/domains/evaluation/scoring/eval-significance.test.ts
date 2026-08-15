@@ -5,7 +5,7 @@ import {
   expectationKey,
   type ArmOutcomes
 } from './eval-significance.js'
-import { type EvalReport } from '../report/eval-report-contracts.js'
+import type { EvalReport } from '../report/eval-report-contracts.js'
 
 // A report carrying only the fields the paired comparison reads. The comparison
 // deliberately depends on the per-expectation outcome and nothing else, so a

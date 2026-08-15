@@ -8,7 +8,7 @@ import {
   resolvePathInsideRoot,
   type FileSystemFlavor
 } from '../../platform/path-service.js'
-import { type SkippedFile } from '../../shared/contracts/index.js'
+import type { SkippedFile } from '../../shared/contracts/index.js'
 import {
   createStructuredError,
   normalizeError

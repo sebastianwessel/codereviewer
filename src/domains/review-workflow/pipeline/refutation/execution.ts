@@ -1,17 +1,17 @@
 import { ModelError, ValidationError } from '@purista/harness'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import {
   refutationVerdictsByCandidateId,
   type FindingRefutationResult,
   type FindingRefutationRunner,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
-import { type DebugLogger } from '../debug-logger.js'
+import type { DebugLogger } from '../debug-logger.js'
 import { isTaskPacketBudgetExceededError } from '../packet-budget.js'
 import { findingRefutationBatchInput } from './packet.js'
-import { type RefutationProviderErrorStage } from '../admission/provider-error-outcome.js'
-import { type ReviewWorkflowInput } from '../contracts.js'
+import type { RefutationProviderErrorStage } from '../admission/provider-error-outcome.js'
+import type { ReviewWorkflowInput } from '../contracts.js'
 
 // A refutation call can fail two structurally different ways, and only one of
 // them is ours to retry. A hard provider failure - auth, rate limiting, a

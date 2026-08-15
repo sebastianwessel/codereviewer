@@ -20,9 +20,9 @@ import {
   writeReportingArtifacts,
   type RunIndexEntry
 } from '../domains/reporting/index.js'
-import {
+import type {
   runReview as runReviewPipeline,
-  type PartialReviewRunState
+  PartialReviewRunState
 } from '../domains/review-workflow/index.js'
 import {
   createNoContentStepEvent,

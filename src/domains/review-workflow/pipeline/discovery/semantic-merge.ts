@@ -27,7 +27,7 @@ import {
   type CodeLocation,
   type RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import {
   ModelSemanticMergeResultSchema,
   SemanticMergeInputSchema,

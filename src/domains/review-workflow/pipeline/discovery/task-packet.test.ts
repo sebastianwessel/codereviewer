@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
 import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
 } from '../contracts.js'
 import { taskReviewInputFor } from './task-packet.js'
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { WorkflowReviewTask } from '../agent-contracts.js'
 import {
   isTaskPacketBudgetExceededError,
   serializedBytes

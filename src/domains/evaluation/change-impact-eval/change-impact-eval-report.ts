@@ -23,7 +23,7 @@ import {
 import { CHANGE_IMPACT_METRICS_VERSION } from './change-impact-metrics-versions.js'
 import { ImpactReachabilitySchema } from './change-impact-corpus.schema.js'
 import { CorpusSplitSchema } from '../corpus/real-repo-corpus.schema.js'
-import { type ChangeImpactScore } from './change-impact-scoring.js'
+import type { ChangeImpactScore } from './change-impact-scoring.js'
 
 export const CHANGE_IMPACT_EVAL_REPORT_ARTIFACT_NAME =
   'change-impact-eval-report.json'

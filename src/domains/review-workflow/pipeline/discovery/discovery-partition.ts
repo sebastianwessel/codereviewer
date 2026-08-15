@@ -25,7 +25,7 @@
 // because a second look at identical material re-derives the same findings.
 // Partitioned calls see DIFFERENT material, which is why the spec 26 arms diverged.
 
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { WorkflowReviewTask } from '../agent-contracts.js'
 import { partitionReviewContext, subTaskFrom } from './task-context-split.js'
 
 /**

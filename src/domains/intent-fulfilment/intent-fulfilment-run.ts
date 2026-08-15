@@ -17,10 +17,19 @@
 // This domain performs no filesystem access, no git access and no provider call of
 // its own: the caller supplies a mediated reader and the model runners, which is
 // what the import-boundary test in this folder enforces.
+//
+// The run is ONE SEQUENCE OF STAGES, each written below as its own function
+// returning the value it produced together with the warnings it produced. The
+// warnings are order-sensitive output — tests assert them and reports render them
+// — so the composing `runIntentFulfilment` at the bottom is the single place that
+// concatenates them, in stage order, and no stage can reach into another's list.
 
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
-import { gatherContextFragments } from '../context-ingestion/index.js'
+import {
+  gatherContextFragments,
+  type ContextFragment
+} from '../context-ingestion/index.js'
 import type { LaneUsage } from '../costs/index.js'
 import {
   collectRepositoryIntake,
@@ -46,6 +55,7 @@ import {
 import {
   IntentFulfilmentReportSchema,
   type ExtraScopeEntry,
+  type IntentCitation,
   type IntentFulfilmentReport,
   type Obligation
 } from './intent-fulfilment-report.js'
@@ -57,9 +67,14 @@ import {
 } from './judgement.js'
 import {
   obligationExtractionInputFor,
+  type ExtractedObligation,
   type ObligationExtractionRunner
 } from './obligation-extraction.js'
-import { resolveIntentCitation, toIntentSources } from './intent-sources.js'
+import {
+  resolveIntentCitation,
+  toIntentSources,
+  type IntentSource
+} from './intent-sources.js'
 
 export type IntentFulfilmentAgents = {
   readonly extractObligations: ObligationExtractionRunner
@@ -124,10 +139,48 @@ const providerCutIntentWarning = (origins: readonly string[]): string =>
   `supplied them (up to 1000000) and re-run to check the change against the whole ` +
   `of it.`
 
+// What one stage produced, and the warnings it produced producing it.
+//
+// Every stage returns its warnings rather than appending to a run-wide array,
+// because the ORDER of that array is observable output. With one accumulator
+// passed around, warning order is a property of where each stage happens to push;
+// with this, it is a property of the composition, which is stated in one place and
+// can be read at a glance.
+type StageResult<T> = {
+  readonly value: T
+  readonly warnings: readonly string[]
+}
+
+// The change under review, read through the intake domain, which owns and
+// validates every git invocation.
+const collectIntake = async (
+  input: RunIntentFulfilmentInput,
+  baseRef: string,
+  headRef: string
+): Promise<RepositoryIntake> =>
+  collectRepositoryIntake({
+    repositoryRoot: input.repositoryRoot,
+    baseRef,
+    headRef,
+    includePatterns: input.config.paths.include,
+    excludePatterns: input.config.paths.exclude,
+    maxFiles: input.config.review.maxFiles,
+    maxFileBytes: input.config.review.maxFileBytes,
+    ...(input.runGit === undefined ? {} : { runGit: input.runGit }),
+    ...(input.signal === undefined ? {} : { signal: input.signal })
+  })
+
 const diffMapsByPath = (
   intake: RepositoryIntake
 ): ReadonlyMap<string, DiffMap> =>
   new Map(intake.diffMaps.map((diffMap) => [diffMap.path, diffMap] as const))
+
+/** The changed files the obligations will be checked against. */
+type ChangeSourceFiles = {
+  readonly files: readonly ChangeSurfaceSourceFile[]
+  readonly unreadableFileCount: number
+  readonly unmappedFileCount: number
+}
 
 // Reads the head side of every changed file through the caller's mediated reader,
 // and pairs it with the lines the change REMOVED.
@@ -140,11 +193,7 @@ const diffMapsByPath = (
 const collectSourceFiles = async (
   intake: RepositoryIntake,
   readChangedFile: RunIntentFulfilmentInput['readChangedFile']
-): Promise<{
-  readonly files: readonly ChangeSurfaceSourceFile[]
-  readonly unreadableFileCount: number
-  readonly unmappedFileCount: number
-}> => {
+): Promise<StageResult<ChangeSourceFiles>> => {
   const byPath = diffMapsByPath(intake)
   const removedByPath = parseRemovedLines(intake.rawDiff)
   const files: ChangeSurfaceSourceFile[] = []
@@ -200,7 +249,292 @@ const collectSourceFiles = async (
     })
   }
 
-  return { files, unreadableFileCount, unmappedFileCount }
+  const warnings: string[] = []
+
+  if (unreadableFileCount > 0) {
+    warnings.push(
+      `${unreadableFileCount} changed file(s) could not be read and were left out of the change the obligations are checked against.`
+    )
+  }
+
+  // Worded apart from the unreadable case above because the causes differ: that
+  // one is a file the filesystem would not give up, this one is a file the diff
+  // parser produced no hunks for. Both leave the file out of every list in the
+  // report, which is the part a reader needs told.
+  if (unmappedFileCount > 0) {
+    warnings.push(
+      `${unmappedFileCount} changed file(s) had no mapped diff hunks and were left out of the change the obligations are checked against. They appear in no obligation's evidence and in no extra-scope row.`
+    )
+  }
+
+  return {
+    value: { files, unreadableFileCount, unmappedFileCount },
+    warnings
+  }
+}
+
+// Spec 11's ingestion, called once for the stated intent. A provider that failed
+// is reported rather than absorbed: the run continues on what the others gathered,
+// and a reader is told which source is missing from it.
+const gatherIntentFragments = async (input: {
+  readonly config: CodeReviewerConfig
+  readonly repositoryRoot: string
+  readonly files: readonly ChangeSurfaceSourceFile[]
+  readonly signal: AbortSignal | undefined
+}): Promise<StageResult<readonly ContextFragment[]>> => {
+  const contextSources = input.config.contextSources
+  const { fragments, providerMetrics } = await gatherContextFragments({
+    // A disabled `contextSources` block runs no provider at all rather than
+    // running the configured ones anyway: the block is the user's statement about
+    // whether external context may be read, and this command does not get its own
+    // opinion about that.
+    providers: contextSources.enabled ? contextSources.providers : [],
+    repositoryRoot: input.repositoryRoot,
+    changedFiles: input.files.map((file) => ({
+      path: file.path,
+      content: file.content
+    })),
+    redact: createRedactor().redact,
+    ...(input.signal === undefined ? {} : { signal: input.signal })
+  })
+
+  return {
+    value: fragments,
+    warnings: providerMetrics
+      .filter((candidate) => candidate.failed)
+      .map(
+        (metric) =>
+          `External change-intent provider "${metric.id}" failed and was skipped.`
+      )
+  }
+}
+
+/** The line-addressed intent, and whether somebody else had already cut it. */
+type GatheredIntent = {
+  readonly sources: readonly IntentSource[]
+  readonly intentCutByProvider: boolean
+}
+
+// The truncation policy, in the one place that can apply it.
+const resolveIntentSources = (
+  fragments: readonly ContextFragment[],
+  maxIntentBytes: number
+): StageResult<GatheredIntent> => {
+  const {
+    sources,
+    truncated: intentTruncated,
+    providerTruncatedOrigins
+  } = toIntentSources(fragments, maxIntentBytes)
+  // The OTHER way the stated intent can be partial, and the only one that can reach
+  // a report: a `contextSources` provider cut the body at its own `maxFileBytes`
+  // before this domain was handed it. Nothing here can measure that — the cut is
+  // what makes the body fit every budget downstream — so it is read off the
+  // fragment. Disclosed rather than refused, because that cap defaults BELOW
+  // `maxIntentBytes` and is not this capability's to set; see `intent-limits.ts`.
+  const intentCutByProvider = providerTruncatedOrigins.length > 0
+
+  // REFUSE rather than extract obligations from part of a ticket: the checklist
+  // would silently omit requirements the intent states. See `intent-limits.ts`.
+  if (intentTruncated) {
+    throw intentTooLargeError({
+      intentBytes: fragments.reduce(
+        (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
+        0
+      ),
+      maxIntentBytes,
+      // The sum above is taken over the bodies that arrived, and a body a provider
+      // already cut is smaller than the intent it stands for.
+      intentBytesIsLowerBound: intentCutByProvider
+    })
+  }
+
+  const warnings: string[] = []
+
+  if (intentCutByProvider) {
+    warnings.push(providerCutIntentWarning(providerTruncatedOrigins))
+  }
+
+  return { value: { sources, intentCutByProvider }, warnings }
+}
+
+// The extraction call. Returns `undefined` when it did not complete, which the
+// composition reports as unusable intent with its own warning: an extraction
+// failure is not an empty intent, and it is never fatal — spec 23's command exits
+// 0 whatever happens to it.
+const extractObligations = async (
+  extract: ObligationExtractionRunner,
+  sources: readonly IntentSource[],
+  maxObligations: number,
+  signal: AbortSignal | undefined
+): Promise<readonly ExtractedObligation[] | undefined> => {
+  try {
+    return await extract(
+      obligationExtractionInputFor(sources, maxObligations),
+      signal
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/** An obligation whose citation resolved to a line of the stated intent. */
+type CitedObligation = {
+  readonly statement: string
+  readonly source: IntentCitation
+}
+
+type CitedObligations = {
+  readonly cited: readonly CitedObligation[]
+  readonly uncitedObligationCount: number
+}
+
+// Citation resolution is the gate spec 23's "every obligation MUST cite where in
+// the stated intent it came from" is enforced at: an obligation whose origin and
+// line do not resolve to a line of a gathered fragment is DROPPED, not reported
+// with a weaker citation. The resolved text comes from the fragment, never from
+// the model's answer, so a reported source line is the author's own words.
+const resolveCitedObligations = (
+  sources: readonly IntentSource[],
+  extracted: readonly ExtractedObligation[],
+  maxObligations: number
+): StageResult<CitedObligations> => {
+  const cited = extracted.flatMap((obligation) => {
+    const source = resolveIntentCitation(
+      sources,
+      obligation.origin,
+      obligation.line
+    )
+
+    return source === undefined ? [] : [{ statement: obligation.statement, source }]
+  })
+  const uncitedObligationCount = extracted.length - cited.length
+  // REFUSE rather than report a short checklist. Reporting the first
+  // `maxObligations` under-reports what is left, which is the one direction this
+  // command must not err in — see `intent-limits.ts`.
+  if (cited.length >= maxObligations) {
+    throw tooManyObligationsError({
+      obligationCount: cited.length,
+      maxObligations
+    })
+  }
+
+  const warnings: string[] = []
+
+  if (uncitedObligationCount > 0) {
+    warnings.push(
+      `${uncitedObligationCount} proposed obligation(s) did not cite a line of the stated intent and were not reported.`
+    )
+  }
+
+  return { value: { cited, uncitedObligationCount }, warnings }
+}
+
+const buildChangeSurface = (
+  files: readonly ChangeSurfaceSourceFile[],
+  maxChangeLines: number
+): ChangeSurface => {
+  const surface = collectChangeSurface({ files, maxChangeLines })
+
+  // REFUSE rather than judge against part of the change. A judgement that cannot
+  // see the evidence reports the obligation not-evidenced, which is a wrong answer
+  // on this command's only question — see `intent-limits.ts`.
+  if (surface.truncated) {
+    throw intentChangeTooLargeError({
+      changedLineCount: surface.changedLineCount,
+      maxChangeLines
+    })
+  }
+
+  return surface
+}
+
+type JudgedObligations = {
+  readonly obligations: readonly Obligation[]
+  readonly unverifiedEvidenceClaimCount: number
+}
+
+// Sequential, one call per obligation. Each call is its own session, so no
+// judgement opens holding the answer of the one before it: a verdict must follow
+// from the obligation in front of the model, and a conversation carrying six
+// previous "not-evidenced" answers is a reason to give a seventh.
+const judgeObligations = async (input: {
+  readonly judge: FulfilmentJudgementRunner
+  readonly surface: ChangeSurface
+  readonly cited: readonly CitedObligation[]
+  readonly wholeChangeVisible: boolean
+  readonly signal: AbortSignal | undefined
+}): Promise<StageResult<JudgedObligations>> => {
+  const obligations: Obligation[] = []
+  let unverifiedEvidenceClaimCount = 0
+  let unsupportedAbsenceClaimCount = 0
+  let failedJudgementCount = 0
+
+  for (const [index, entry] of input.cited.entries()) {
+    let judged: FulfilmentJudgement
+
+    try {
+      judged = await input.judge(
+        fulfilmentJudgementInputFor(input.surface, entry.statement),
+        input.signal
+      )
+    } catch {
+      // A provider failure is not a verdict. The obligation is still reported, as
+      // undetermined: dropping it would hide an obligation the intent does state.
+      failedJudgementCount += 1
+      judged = { status: 'undetermined' }
+    }
+
+    const verified = verifyJudgement(judged, input.surface, {
+      wholeChangeVisible: input.wholeChangeVisible
+    })
+
+    // The false-satisfied guard firing: the model said `evidenced` and not one of
+    // its citations was a line the change touched. Spec 23 makes the rate of
+    // wrongly-certified obligations the metric that decides whether this
+    // capability is safe to show anyone, so the downgrade is counted rather than
+    // absorbed into the undetermined total without trace.
+    if (judged.status === 'evidenced' && verified.status !== 'evidenced') {
+      unverifiedEvidenceClaimCount += 1
+    }
+
+    // The same guard for the other answer that claims something about the change:
+    // "nothing here goes against it" over a change part of which was never read is
+    // a reassurance drawn from material nobody saw.
+    if (
+      judged.status === 'not-contradicted' &&
+      verified.status !== 'not-contradicted'
+    ) {
+      unsupportedAbsenceClaimCount += 1
+    }
+
+    // ONE CALL PER OBLIGATION, and no second one. A citation-aptness stage used to
+    // run here on every `evidenced` verdict; it was measured and removed. See spec
+    // 23's rejected-design record for the numbers.
+    obligations.push({
+      id: `obl_${index + 1}`,
+      source: entry.source,
+      statement: entry.statement,
+      ...(verified.status === 'evidenced'
+        ? { status: 'evidenced' as const, evidence: [...verified.evidence] }
+        : { status: verified.status })
+    })
+  }
+
+  const warnings: string[] = []
+
+  if (failedJudgementCount > 0) {
+    warnings.push(
+      `${failedJudgementCount} judgement call(s) did not complete; those obligations are reported as undetermined.`
+    )
+  }
+
+  if (unsupportedAbsenceClaimCount > 0) {
+    warnings.push(
+      `${unsupportedAbsenceClaimCount} obligation(s) answered as not contradicted by this change are reported as undetermined instead, because part of the change was left out of the lines the judgement saw. Nothing can conclude that a change contains no violation of an obligation while part of it was never read.`
+    )
+  }
+
+  return { value: { obligations, unverifiedEvidenceClaimCount }, warnings }
 }
 
 // Changed files no obligation's evidence cites.
@@ -227,6 +561,31 @@ const collectExtraScope = (
       path: file.path,
       changedLineCount: file.changedLines.length
     }))
+}
+
+// A failure here costs the prose and nothing else.
+const explainFulfilment = async (
+  explain: FulfilmentExplanationRunner,
+  obligations: readonly Obligation[],
+  extraScope: readonly ExtraScopeEntry[],
+  signal: AbortSignal | undefined
+): Promise<StageResult<string | undefined>> => {
+  try {
+    return {
+      value: await explain(
+        fulfilmentExplanationInputFor(obligations, extraScope),
+        signal
+      ),
+      warnings: []
+    }
+  } catch {
+    return {
+      value: undefined,
+      warnings: [
+        'The explanation call did not complete; the mapping is reported without it.'
+      ]
+    }
+  }
 }
 
 type EmptyReportInput = {
@@ -291,6 +650,87 @@ const withUsage = (
 ): { readonly usage?: LaneUsage } =>
   usage === undefined ? {} : { usage }
 
+type CompletedReportInput = {
+  readonly baseRef: string
+  readonly headRef: string
+  readonly generatedAt: Date
+  readonly mergeBaseRef: string | undefined
+  readonly changedFileCount: number
+  readonly changedLineCount: number
+  readonly intentOrigins: readonly string[]
+  readonly intentCutByProvider: boolean
+  readonly intentFragmentCount: number
+  readonly obligations: readonly Obligation[]
+  readonly extraScope: readonly ExtraScopeEntry[]
+  readonly uncitedObligationCount: number
+  readonly unverifiedEvidenceClaimCount: number
+  readonly explanation: string | undefined
+  readonly warnings: readonly string[]
+  readonly usage: LaneUsage | undefined
+}
+
+// The one outcome that produces a mapping.
+const completedReport = (input: CompletedReportInput): IntentFulfilmentReport => {
+  const countOf = (status: Obligation['status']): number =>
+    input.obligations.filter((obligation) => obligation.status === status).length
+
+  return IntentFulfilmentReportSchema.parse({
+    schemaVersion: '1.0',
+    status: 'completed',
+    generatedAt: input.generatedAt.toISOString(),
+    scope: {
+      baseRef: input.baseRef,
+      headRef: input.headRef,
+      ...(input.mergeBaseRef === undefined
+        ? {}
+        : { mergeBaseRef: input.mergeBaseRef }),
+      changedFileCount: input.changedFileCount,
+      changedLineCount: input.changedLineCount,
+      intentOrigins: input.intentOrigins,
+      // The value reaching a report is always the provider's cut: the
+      // `maxIntentBytes` cause refuses in `resolveIntentSources` and produces no
+      // report at all. Before the fragment carried its own flag this field could
+      // only ever be written `false`, so a ticket clipped to 64 KB was published as
+      // intent read whole — a denied loss rather than a disclosed one.
+      intentTruncated: input.intentCutByProvider
+    },
+    summary: {
+      intentFragmentCount: input.intentFragmentCount,
+      obligationCount: input.obligations.length,
+      evidencedCount: countOf('evidenced'),
+      notEvidencedStatusCount: countOf('not-evidenced'),
+      // Counted apart and kept OFF the headline below. An obligation honoured by
+      // changing nothing has no line to cite however completely it is honoured, so
+      // while it was counted as unevidenced the report raised the same false alarm
+      // on every run — 39.8% of this lane's classified false positives.
+      notContradictedCount: countOf('not-contradicted'),
+      undeterminedCount: countOf('undetermined'),
+      // ALWAYS FALSE: a run the cap would have bound throws in
+      // `resolveCitedObligations` rather than reporting a short checklist. The flag
+      // previously fired on a condition that essentially cannot occur — the cap is
+      // passed INTO the extraction prompt, so a compliant model never overruns it —
+      // and 24 of 28 runs on the 2026-08-01 corpus returned exactly the cap while
+      // every one reported no truncation.
+      obligationsTruncated: false,
+      uncitedObligationCount: input.uncitedObligationCount,
+      unverifiedEvidenceClaimCount: input.unverifiedEvidenceClaimCount,
+      // Everything the run found no evidence for: `not-evidenced` plus
+      // `undetermined`, and nothing else. Neither an `evidenced` nor a
+      // `not-contradicted` obligation is ever on this list — the third term that
+      // once put doubted-evidence verdicts here went with the aptness stage, and
+      // 18.1% of this lane's false positives were that term firing on verdicts that
+      // were already correct.
+      notEvidencedCount: countOf('not-evidenced') + countOf('undetermined'),
+      extraScopeFileCount: input.extraScope.length
+    },
+    obligations: input.obligations,
+    extraScope: input.extraScope,
+    ...(input.explanation === undefined ? {} : { explanation: input.explanation }),
+    warnings: input.warnings,
+    ...withUsage(input.usage)
+  })
+}
+
 export const runIntentFulfilment = async (
   input: RunIntentFulfilmentInput
 ): Promise<IntentFulfilmentReport> => {
@@ -308,62 +748,25 @@ export const runIntentFulfilment = async (
     })
   }
 
-  const intake = await collectRepositoryIntake({
+  const intake = await collectIntake(input, baseRef, headRef)
+  const sourceFiles = await collectSourceFiles(intake, input.readChangedFile)
+  // The run's warnings, concatenated in stage order and never written by a stage.
+  const warnings: string[] = [...sourceFiles.warnings]
+  const { files, unreadableFileCount, unmappedFileCount } = sourceFiles.value
+  const gathered = await gatherIntentFragments({
+    config: input.config,
     repositoryRoot: input.repositoryRoot,
-    baseRef,
-    headRef,
-    includePatterns: input.config.paths.include,
-    excludePatterns: input.config.paths.exclude,
-    maxFiles: input.config.review.maxFiles,
-    maxFileBytes: input.config.review.maxFileBytes,
-    ...(input.runGit === undefined ? {} : { runGit: input.runGit }),
-    ...(input.signal === undefined ? {} : { signal: input.signal })
-  })
-  const { files, unreadableFileCount, unmappedFileCount } = await collectSourceFiles(
-    intake,
-    input.readChangedFile
-  )
-  const warnings: string[] = []
-
-  if (unreadableFileCount > 0) {
-    warnings.push(
-      `${unreadableFileCount} changed file(s) could not be read and were left out of the change the obligations are checked against.`
-    )
-  }
-
-  // Worded apart from the unreadable case above because the causes differ: that
-  // one is a file the filesystem would not give up, this one is a file the diff
-  // parser produced no hunks for. Both leave the file out of every list in the
-  // report, which is the part a reader needs told.
-  if (unmappedFileCount > 0) {
-    warnings.push(
-      `${unmappedFileCount} changed file(s) had no mapped diff hunks and were left out of the change the obligations are checked against. They appear in no obligation's evidence and in no extra-scope row.`
-    )
-  }
-
-  const contextSources = input.config.contextSources
-  const { fragments, providerMetrics } = await gatherContextFragments({
-    // A disabled `contextSources` block runs no provider at all rather than
-    // running the configured ones anyway: the block is the user's statement about
-    // whether external context may be read, and this command does not get its own
-    // opinion about that.
-    providers: contextSources.enabled ? contextSources.providers : [],
-    repositoryRoot: input.repositoryRoot,
-    changedFiles: files.map((file) => ({
-      path: file.path,
-      content: file.content
-    })),
-    redact: createRedactor().redact,
-    ...(input.signal === undefined ? {} : { signal: input.signal })
+    files,
+    signal: input.signal
   })
 
-  for (const metric of providerMetrics.filter((candidate) => candidate.failed)) {
-    warnings.push(
-      `External change-intent provider "${metric.id}" failed and was skipped.`
-    )
-  }
+  warnings.push(...gathered.warnings)
+
+  const fragments = gathered.value
 
   if (fragments.length === 0) {
+    const contextSources = input.config.contextSources
+
     return emptyReport({
       status: 'no-intent',
       baseRef,
@@ -380,48 +783,31 @@ export const runIntentFulfilment = async (
   }
 
   const intentOrigins = fragments.map((fragment) => fragment.origin)
-  const {
-    sources,
-    truncated: intentTruncated,
-    providerTruncatedOrigins
-  } = toIntentSources(fragments, input.config.intentFulfilment.maxIntentBytes)
-  // The OTHER way the stated intent can be partial, and the only one that can reach
-  // a report: a `contextSources` provider cut the body at its own `maxFileBytes`
-  // before this domain was handed it. Nothing here can measure that — the cut is
-  // what makes the body fit every budget downstream — so it is read off the
-  // fragment. Disclosed rather than refused, because that cap defaults BELOW
-  // `maxIntentBytes` and is not this capability's to set; see `intent-limits.ts`.
-  const intentCutByProvider = providerTruncatedOrigins.length > 0
+  const gatheredIntent = resolveIntentSources(
+    fragments,
+    input.config.intentFulfilment.maxIntentBytes
+  )
 
-  // REFUSE rather than extract obligations from part of a ticket: the checklist
-  // would silently omit requirements the intent states. See `intent-limits.ts`.
-  if (intentTruncated) {
-    throw intentTooLargeError({
-      intentBytes: fragments.reduce(
-        (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
-        0
-      ),
-      maxIntentBytes: input.config.intentFulfilment.maxIntentBytes,
-      // The sum above is taken over the bodies that arrived, and a body a provider
-      // already cut is smaller than the intent it stands for.
-      intentBytesIsLowerBound: intentCutByProvider
-    })
-  }
+  warnings.push(...gatheredIntent.warnings)
 
-  if (intentCutByProvider) {
-    warnings.push(providerCutIntentWarning(providerTruncatedOrigins))
+  const { sources, intentCutByProvider } = gatheredIntent.value
+  // What every empty report from here on says about the intent it did gather. The
+  // run got far enough to know all four, and an empty report that omitted them
+  // would describe a run that never read the ticket.
+  const gatheredScope = {
+    baseRef,
+    headRef,
+    generatedAt,
+    changedFileCount: intake.changedFiles.length,
+    intentFragmentCount: fragments.length,
+    intentOrigins,
+    intentTruncated: intentCutByProvider
   }
 
   if (input.agents === undefined || sources.length === 0) {
     return emptyReport({
+      ...gatheredScope,
       status: input.agents === undefined ? 'provider-unavailable' : 'unusable-intent',
-      baseRef,
-      headRef,
-      generatedAt,
-      changedFileCount: intake.changedFiles.length,
-      intentFragmentCount: fragments.length,
-      intentOrigins,
-      intentTruncated: intentCutByProvider,
       warnings: [
         ...warnings,
         input.agents === undefined ? NO_PROVIDER_WARNING : UNUSABLE_INTENT_WARNING
@@ -431,171 +817,63 @@ export const runIntentFulfilment = async (
 
   const agents = input.agents
   const maxObligations = input.config.intentFulfilment.maxObligations
-  let extracted
+  const extracted = await extractObligations(
+    agents.extractObligations,
+    sources,
+    maxObligations,
+    input.signal
+  )
 
-  try {
-    extracted = await agents.extractObligations(
-      obligationExtractionInputFor(sources, maxObligations),
-      input.signal
-    )
-  } catch {
-    // An extraction failure is not an empty intent. Reported as unusable with its
-    // own warning, and never fatal: spec 23's command exits 0 whatever happens to
-    // it.
+  if (extracted === undefined) {
     return emptyReport({
+      ...gatheredScope,
       status: 'unusable-intent',
-      baseRef,
-      headRef,
-      generatedAt,
-      changedFileCount: intake.changedFiles.length,
-      intentFragmentCount: fragments.length,
-      intentOrigins,
-      intentTruncated: intentCutByProvider,
       warnings: [...warnings, EXTRACTION_FAILED_WARNING],
       usage: input.usage?.()
     })
   }
 
-  // Citation resolution is the gate spec 23's "every obligation MUST cite where in
-  // the stated intent it came from" is enforced at: an obligation whose origin and
-  // line do not resolve to a line of a gathered fragment is DROPPED, not reported
-  // with a weaker citation. The resolved text comes from the fragment, never from
-  // the model's answer, so a reported source line is the author's own words.
-  const cited = extracted.flatMap((obligation) => {
-    const source = resolveIntentCitation(
-      sources,
-      obligation.origin,
-      obligation.line
-    )
+  const citedObligations = resolveCitedObligations(
+    sources,
+    extracted,
+    maxObligations
+  )
 
-    return source === undefined ? [] : [{ statement: obligation.statement, source }]
-  })
-  const uncitedObligationCount = extracted.length - cited.length
-  // REFUSE rather than report a short checklist. Reporting the first
-  // `maxObligations` under-reports what is left, which is the one direction this
-  // command must not err in — see `intent-limits.ts`.
-  if (cited.length >= maxObligations) {
-    throw tooManyObligationsError({
-      obligationCount: cited.length,
-      maxObligations
-    })
-  }
+  warnings.push(...citedObligations.warnings)
 
-  if (uncitedObligationCount > 0) {
-    warnings.push(
-      `${uncitedObligationCount} proposed obligation(s) did not cite a line of the stated intent and were not reported.`
-    )
-  }
+  const { cited, uncitedObligationCount } = citedObligations.value
 
   if (cited.length === 0) {
     return emptyReport({
+      ...gatheredScope,
       status: 'unusable-intent',
-      baseRef,
-      headRef,
-      generatedAt,
-      changedFileCount: intake.changedFiles.length,
-      intentFragmentCount: fragments.length,
-      intentOrigins,
-      intentTruncated: intentCutByProvider,
       uncitedObligationCount,
       warnings: [...warnings, UNUSABLE_INTENT_WARNING],
       usage: input.usage?.()
     })
   }
 
-  const surface = collectChangeSurface({
+  const surface = buildChangeSurface(
     files,
-    maxChangeLines: input.config.intentFulfilment.maxChangeLines
+    input.config.intentFulfilment.maxChangeLines
+  )
+  const judged = await judgeObligations({
+    judge: agents.judge,
+    surface,
+    cited,
+    // A `not-contradicted` verdict is a search for a violation that came back
+    // empty, so it is worth exactly what the searched surface was worth. Both
+    // counts here are files that never reached it. `maxChangeLines` cannot
+    // contribute — it refuses the run — so a complete file list is a complete
+    // change.
+    wholeChangeVisible: unreadableFileCount === 0 && unmappedFileCount === 0,
+    signal: input.signal
   })
 
-  // REFUSE rather than judge against part of the change. A judgement that cannot
-  // see the evidence reports the obligation not-evidenced, which is a wrong answer
-  // on this command's only question — see `intent-limits.ts`.
-  if (surface.truncated) {
-    throw intentChangeTooLargeError({
-      changedLineCount: surface.changedLineCount,
-      maxChangeLines: input.config.intentFulfilment.maxChangeLines
-    })
-  }
-  const obligations: Obligation[] = []
-  let unverifiedEvidenceClaimCount = 0
-  let unsupportedAbsenceClaimCount = 0
-  let failedJudgementCount = 0
-  // A `not-contradicted` verdict is a search for a violation that came back empty,
-  // so it is worth exactly what the searched surface was worth. Both counts above
-  // are files that never reached it. `maxChangeLines` cannot contribute — it
-  // refuses the run — so a complete file list is a complete change.
-  const wholeChangeVisible =
-    unreadableFileCount === 0 && unmappedFileCount === 0
+  warnings.push(...judged.warnings)
 
-  // Sequential, one call per obligation. Each call is its own session, so no
-  // judgement opens holding the answer of the one before it: a verdict must follow
-  // from the obligation in front of the model, and a conversation carrying six
-  // previous "not-evidenced" answers is a reason to give a seventh.
-  for (const [index, entry] of cited.entries()) {
-    let judged: FulfilmentJudgement
-
-    try {
-      judged = await agents.judge(
-        fulfilmentJudgementInputFor(surface, entry.statement),
-        input.signal
-      )
-    } catch {
-      // A provider failure is not a verdict. The obligation is still reported, as
-      // undetermined: dropping it would hide an obligation the intent does state.
-      failedJudgementCount += 1
-      judged = { status: 'undetermined' }
-    }
-
-    const verified = verifyJudgement(judged, surface, { wholeChangeVisible })
-
-    // The false-satisfied guard firing: the model said `evidenced` and not one of
-    // its citations was a line the change touched. Spec 23 makes the rate of
-    // wrongly-certified obligations the metric that decides whether this
-    // capability is safe to show anyone, so the downgrade is counted rather than
-    // absorbed into the undetermined total without trace.
-    if (judged.status === 'evidenced' && verified.status !== 'evidenced') {
-      unverifiedEvidenceClaimCount += 1
-    }
-
-    // The same guard for the other answer that claims something about the change:
-    // "nothing here goes against it" over a change part of which was never read is
-    // a reassurance drawn from material nobody saw.
-    if (
-      judged.status === 'not-contradicted' &&
-      verified.status !== 'not-contradicted'
-    ) {
-      unsupportedAbsenceClaimCount += 1
-    }
-
-    // ONE CALL PER OBLIGATION, and no second one. A citation-aptness stage used to
-    // run here on every `evidenced` verdict; it was measured and removed. See spec
-    // 23's rejected-design record for the numbers.
-    obligations.push({
-      id: `obl_${index + 1}`,
-      source: entry.source,
-      statement: entry.statement,
-      ...(verified.status === 'evidenced'
-        ? { status: 'evidenced' as const, evidence: [...verified.evidence] }
-        : { status: verified.status })
-    })
-  }
-
+  const { obligations, unverifiedEvidenceClaimCount } = judged.value
   const extraScope = collectExtraScope(surface, obligations)
-  const countOf = (status: Obligation['status']): number =>
-    obligations.filter((obligation) => obligation.status === status).length
-
-  if (failedJudgementCount > 0) {
-    warnings.push(
-      `${failedJudgementCount} judgement call(s) did not complete; those obligations are reported as undetermined.`
-    )
-  }
-
-  if (unsupportedAbsenceClaimCount > 0) {
-    warnings.push(
-      `${unsupportedAbsenceClaimCount} obligation(s) answered as not contradicted by this change are reported as undetermined instead, because part of the change was left out of the lines the judgement saw. Nothing can conclude that a change contains no violation of an obligation while part of it was never read.`
-    )
-  }
 
   // NO "a limit of OURS bound this run" WARNING EXISTS HERE, DELIBERATELY. All three
   // of this capability's limits refuse above rather than truncate, so a run that
@@ -609,73 +887,32 @@ export const runIntentFulfilment = async (
 
   // The explanation is a SEPARATE call over the frozen mapping above, and it runs
   // last for that reason: everything it reads is already decided and it has no
-  // field through which to change any of it. A failure here costs the prose and
-  // nothing else.
-  let explanation: string | undefined
-
-  try {
-    explanation = await agents.explain(
-      fulfilmentExplanationInputFor(obligations, extraScope),
-      input.signal
-    )
-  } catch {
-    warnings.push(
-      'The explanation call did not complete; the mapping is reported without it.'
-    )
-  }
-
-  return IntentFulfilmentReportSchema.parse({
-    schemaVersion: '1.0',
-    status: 'completed',
-    generatedAt: generatedAt.toISOString(),
-    scope: {
-      baseRef,
-      headRef,
-      ...(intake.repositorySnapshot.mergeBaseRef === undefined
-        ? {}
-        : { mergeBaseRef: intake.repositorySnapshot.mergeBaseRef }),
-      changedFileCount: intake.changedFiles.length,
-      changedLineCount: surface.changedLineCount,
-      intentOrigins,
-      // The value reaching a report is always the provider's cut: the
-      // `maxIntentBytes` cause refuses ~200 lines above and produces no report at
-      // all. Before the fragment carried its own flag this field could only ever be
-      // written `false`, so a ticket clipped to 64 KB was published as intent read
-      // whole — a denied loss rather than a disclosed one.
-      intentTruncated: intentCutByProvider
-    },
-    summary: {
-      intentFragmentCount: fragments.length,
-      obligationCount: obligations.length,
-      evidencedCount: countOf('evidenced'),
-      notEvidencedStatusCount: countOf('not-evidenced'),
-      // Counted apart and kept OFF the headline below. An obligation honoured by
-      // changing nothing has no line to cite however completely it is honoured, so
-      // while it was counted as unevidenced the report raised the same false alarm
-      // on every run — 39.8% of this lane's classified false positives.
-      notContradictedCount: countOf('not-contradicted'),
-      undeterminedCount: countOf('undetermined'),
-      // ALWAYS FALSE: a run the cap would have bound throws above rather than
-      // reporting a short checklist. The flag previously fired on a condition that
-      // essentially cannot occur — the cap is passed INTO the extraction prompt, so
-      // a compliant model never overruns it — and 24 of 28 runs on the 2026-08-01
-      // corpus returned exactly the cap while every one reported no truncation.
-      obligationsTruncated: false,
-      uncitedObligationCount,
-      unverifiedEvidenceClaimCount,
-      // Everything the run found no evidence for: `not-evidenced` plus
-      // `undetermined`, and nothing else. Neither an `evidenced` nor a
-      // `not-contradicted` obligation is ever on this list — the third term that
-      // once put doubted-evidence verdicts here went with the aptness stage, and
-      // 18.1% of this lane's false positives were that term firing on verdicts that
-      // were already correct.
-      notEvidencedCount: countOf('not-evidenced') + countOf('undetermined'),
-      extraScopeFileCount: extraScope.length
-    },
+  // field through which to change any of it.
+  const explained = await explainFulfilment(
+    agents.explain,
     obligations,
     extraScope,
-    ...(explanation === undefined ? {} : { explanation }),
+    input.signal
+  )
+
+  warnings.push(...explained.warnings)
+
+  return completedReport({
+    baseRef,
+    headRef,
+    generatedAt,
+    mergeBaseRef: intake.repositorySnapshot.mergeBaseRef,
+    changedFileCount: intake.changedFiles.length,
+    changedLineCount: surface.changedLineCount,
+    intentOrigins,
+    intentCutByProvider,
+    intentFragmentCount: fragments.length,
+    obligations,
+    extraScope,
+    uncitedObligationCount,
+    unverifiedEvidenceClaimCount,
+    explanation: explained.value,
     warnings,
-    ...withUsage(input.usage?.())
+    usage: input.usage?.()
   })
 }

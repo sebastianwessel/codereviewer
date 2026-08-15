@@ -1,11 +1,11 @@
-import { z } from 'zod'
-import { type EvalCase } from '../../corpus/eval-fixture.schema.js'
+import type { z } from 'zod'
+import type { EvalCase } from '../../corpus/eval-fixture.schema.js'
 import {
   appendMarkdownTable,
   escapeMarkdownCell
 } from '../eval-report-markdown-formatting.js'
 import { caseStatus, noteForCase, providerIssueLabel } from '../eval-report-case-labels.js'
-import { EvalCaseReportSchema, type EvalReport } from '../../report/eval-report-contracts.js'
+import type { EvalCaseReportSchema, EvalReport } from '../../report/eval-report-contracts.js'
 
 export const findCase = (
   cases: readonly EvalCase[],

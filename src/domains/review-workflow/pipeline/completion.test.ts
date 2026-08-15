@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import {
-  type EvidenceRecord,
-  type RefutationResult
+import type {
+  EvidenceRecord,
+  RefutationResult
 } from '../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../admission/index.js'
-import { type ContextLedgerEntry } from '../../review-planning/index.js'
+import type { CandidateFinding } from '../../admission/index.js'
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
 import { completeReviewWorkflow } from './completion.js'
 import { ReviewWorkflowInputSchema } from './contracts.js'
 

@@ -5,7 +5,7 @@ import type {
   ObjectRequest,
   ObjectResponse
 } from '@purista/harness'
-import { type RunTokenUsage } from './token-cost.js'
+import type { RunTokenUsage } from './token-cost.js'
 
 export type ProviderUsageRecorder = {
   readonly modelAlias: ModelAlias

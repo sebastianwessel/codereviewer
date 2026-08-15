@@ -3,10 +3,10 @@ import {
   CandidateFindingSchema,
   type CandidateFinding
 } from '../../../admission/index.js'
-import {
-  type ModelSemanticMergeResult,
-  type SemanticMergeInput,
-  type WorkflowReviewTask
+import type {
+  ModelSemanticMergeResult,
+  SemanticMergeInput,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import { runSemanticFindingMerge } from './semantic-merge.js'
 

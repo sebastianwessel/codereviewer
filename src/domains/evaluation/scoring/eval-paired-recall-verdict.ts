@@ -7,8 +7,8 @@ import {
   type PairedScoredRun
 } from './eval-significance.js'
 import { allDiffScopes } from './eval-diff-scope.js'
-import { type EvalComparisonRun } from '../report/eval-comparison-view.js'
-import { type MetricComparability } from '../report/versions/eval-metrics-versions.js'
+import type { EvalComparisonRun } from '../report/eval-comparison-view.js'
+import type { MetricComparability } from '../report/versions/eval-metrics-versions.js'
 
 // THE PRIMARY VERDICT FOR A RECALL DIFFERENCE.
 //
