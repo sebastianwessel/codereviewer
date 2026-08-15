@@ -61,8 +61,8 @@ flowchart TB
 | Every read and write path resolves under the repository root | `src/platform/path-service.ts` |
 | Absolute paths, `..`, NUL bytes, drive letters, and symlink escapes are rejected before IO | same |
 | Repository source is never modified by review, eval, signals, admission, reporting or drift | No write path exists outside the artifact directory |
-| Git is limited to three read-only argument shapes | `src/domains/repository-intake/intake-service.ts` |
-| No shell string is ever built; git runs through `execFile` argument arrays | same |
+| Git is limited to three read-only argument shapes | `src/domains/repository-intake/git-command-safety.ts` |
+| No shell string is ever built; git runs through `execFile` argument arrays | `src/domains/repository-intake/intake-service.ts` |
 | Network is off unless a provider is explicitly configured | `src/domains/provider-resolution/` |
 | Model output cannot publish, fail a gate, execute a command, or read a file without mediation | Admission, reporting and gate are pure functions over parsed data |
 | Secrets are redacted before logs, errors, reports and provider-bound context | `src/shared/redaction/redactor.ts` |

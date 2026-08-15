@@ -257,37 +257,43 @@ spec, because consolidating those reads behind `context-retrieval` is a real
 improvement that nobody has done, and deleting the requirement would erase the
 reason to do it. It is not a security defect and should not be described as one.
 
-### Known Divergence: The Evaluation Harness's Git Seam
+### Known Divergence: Git Seams Outside `repository-intake`
 
-The Ownership Rules give "Git refs" to `repository-intake` and grant
-`evaluation` no git access. Two evaluation modules nevertheless shell out to
-git: `evaluation/report/engine-identity.ts`, which stamps the engine's own
-commit and working-tree cleanliness onto every eval report, and
-`evaluation/corpus/git-corpus-plumbing.ts`, whose `CorpusGitCommandRunner`
-checks out upstream corpus slices.
+The Ownership Rules give "Git refs" to `repository-intake`. Three other modules
+nevertheless spawn git, each for a different reason:
 
-This paragraph said "two" while FOUR modules held a `child_process` import —
-the three corpus hydrators had each grown their own copy of the runner, and the
-divergence record silently understated itself as they multiplied. Consolidating
-those copies on 2026-08-15 made the count true rather than adjusting the number
-to match the drift. A divergence that is allowed to spread is a different
-divergence from the one that was accepted, so the useful invariant is not the
-number but this: **exactly one module per reason.** One engine-identity seam,
-one corpus-checkout seam. A third `child_process` import inside `evaluation` is
-a change to this decision and needs one, not a footnote here.
+| Module | Reads | Why not `repository-intake` |
+| --- | --- | --- |
+| `evaluation/report/engine-identity.ts` | the ENGINE's own checkout | stamps our commit and working-tree cleanliness onto every eval report |
+| `evaluation/corpus/git-corpus-plumbing.ts` | UPSTREAM corpus repositories | checks out corpus slices for all three git-backed corpora |
+| `reporting/review-comment-platform.ts` | `remote.origin.url` | picks the comment platform from a constant argument array; no ref and no interpolation reach git |
+
+**The invariant is not the count. It is exactly one module per reason**, and it
+is enforced by `src/git-seam-boundary.test.ts` rather than by this paragraph,
+because this paragraph has already failed at the job twice.
+
+It first said "two" while FOUR modules held a `child_process` import: each corpus
+hydrator had grown its own copy of the runner, and the record silently
+understated itself as the copies multiplied. Consolidating them on 2026-08-15
+made the count true rather than adjusting the number to match the drift. The test
+written that same day was then scoped to `domains/evaluation/` — and so was
+structurally blind to `reporting/review-comment-platform.ts`, which had been
+spawning git the whole time and appeared in no list. A guard that only looks
+where the last problem was found keeps finding only that problem. It is now
+scoped to all of `src/`.
 
 This is recorded rather than normalised, and it is not the same git.
 `repository-intake` reads the repository **under review** at the refs a run was
-pointed at. These two read the engine's **own** checkout and **upstream** corpus
-repositories — neither is the subject of a review. Routing them through
-`repository-intake` would widen that domain from "the repository we are
-reviewing" to "any repository", a larger change to the ownership model than the
-problem warrants.
+pointed at, behind the read-only argument allowlist in `git-command-safety.ts`.
+The three above read the engine's own checkout, upstream corpus repositories, and
+one local config value. Routing them through `repository-intake` would widen that
+domain from "the repository we are reviewing" to "any repository", a larger
+change to the ownership model than the problem warrants.
 
-What is owed is a decision, not a refactor: either grant `evaluation` a bounded
-git seam in the Ownership Rules and say what it may and may not read, or name
-another owner. Until then the divergence is not permission for other evaluation
-modules to shell out; these two are the whole list.
+What is owed is a decision, not a refactor: either grant these callers a bounded
+git seam in the Ownership Rules and say what each may and may not read, or name
+another owner. Until then the divergence is not permission for a fourth; the
+table above is the whole list, and the test is what keeps it that way.
 
 - Deterministic signal extractors must be removable without changing core
   finding/report schemas. They can improve evidence quality but cannot be a

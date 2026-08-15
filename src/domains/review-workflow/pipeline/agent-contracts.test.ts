@@ -3,9 +3,13 @@ import {
   ModelHolisticFindingSchema,
   ModelHolisticReviewResultSchema,
   ModelSemanticMergeResultSchema,
-  modelCategoryAliases,
   semanticMergeGroups
 } from './agent-contracts.js'
+// From the module that OWNS the table. This test asserts every alias resolves
+// THROUGH the schema above, so it deliberately reaches across both modules —
+// that is the assertion, not an accident to be smoothed over by having the
+// contracts module re-export a table it does not define.
+import { modelCategoryAliases } from './model-output-normalization.js'
 
 describe('ModelHolisticReviewResultSchema', () => {
   // A response truncated by the output-token budget arrives as an empty body and

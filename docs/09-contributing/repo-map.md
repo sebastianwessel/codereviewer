@@ -17,7 +17,7 @@ for the conventions that govern how code inside these folders is written.
 | `scripts/` | Operator scripts: schema generation, corpus hydration, pricing refresh | yes |
 | `schema/` | Generated JSON Schema for the configuration contract | yes (generated) |
 | `.github/workflows/` | Pull-request gate, publish-on-version-bump, Scorecard — see [releasing.md](releasing.md) | yes |
-| `plans/` | Implementation plans, tickets and status tracking | yes |
+| `plans/` | Local planning notes, tickets and status tracking. **Not implementation authority** — `specs/` is | ignored |
 | `.agent/IMPLEMENTATION.md` | Implementation conventions | yes |
 | `AGENTS.md` / `CLAUDE.md` | Agent instructions and repository rules | yes |
 | `concept/` | Local research notes | **ignored — never commit** |
@@ -72,6 +72,11 @@ barrel is not published by being there (spec 01, *Public Surface*).
 | `eval-regression-gate-policy.ts` | Which thresholds `eval run` is judged against, and what the gate's outcome means as an exit code |
 | `eval-report-files.ts` | Reading an eval report back off disk, against the producer contract or the tolerant comparison view |
 | `eval-run-archive-id.ts` | Naming the per-run archive directory both eval commands write to |
+| `eval-run-options.ts` | The argv half of `eval run`: the options it accepts and the typed values it reads off them, including the CLI-only config overlay |
+| `eval-run-effective-config.ts` | The configuration one `eval run` measures under: the capability pins applied last, and the no-provider contradiction this command records rather than refuses |
+| `eval-run-judges.ts` | The scorers a run measures WITH — semantic-match judge, plausibility judge, and the one usage recorder that prices their combined spend against the judge's model |
+| `eval-run-finding-source.ts` | The memoized fixture-file reader the plausibility judge sees whole files through |
+| `eval-run-artifacts.ts` | The six writes one `eval run` lands: report, summary and recall report, to the eval root and to the per-run archive |
 
 `main.ts` is intentionally thin; everything testable lives in `index.ts` and
 below, and `runCli` takes its cwd, environment and provider import as injected

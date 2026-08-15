@@ -2,83 +2,47 @@
 // slice, scores the outcome with the model-backed judges, and writes the eval
 // report, summary and recall report both to the eval root and to a per-run
 // archive. Its exit code is the regression gate's, never the review's.
-import { readFile, writeFile } from 'node:fs/promises'
+//
+// The stages it composes live beside it in `src/cli/`: `eval-run-options.ts`
+// (argv), `eval-run-effective-config.ts` (the configuration a run measures
+// under), `eval-run-judges.ts` (the scorers), `eval-run-finding-source.ts` (the
+// fixture reader the plausibility judge uses) and `eval-run-artifacts.ts` (the
+// six writes). This file is the sequence, not the detail.
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { stableJsonDigest } from '../../shared/json/stable-json-digest.js'
 import {
-  createProviderUsageRecorder,
-  summarizeRunCost
-} from '../../domains/costs/index.js'
-import {
-  EVAL_RECALL_REPORT_ARTIFACT_NAME,
-  EVAL_SUMMARY_ARTIFACT_NAME,
-  applyEvalCapabilityPins,
   assertBenchmarkSlicesHydrated,
-  createModelPlausibilityJudge,
-  createModelSemanticJudge,
   loadEvalCasesFromFixtures,
-  renderEvalRecallReport,
-  renderEvalSummary,
-  runEvaluation,
-  type EvalCaseFileReader
+  runEvaluation
 } from '../../domains/evaluation/index.js'
 // By path rather than through the barrel above, deliberately: `runEvalCase`
 // imports `review-workflow`, and re-exporting it from `evaluation/index.ts`
 // would close an import cycle back through `drift`. Its own header says so.
 import { runEvalCase } from '../../domains/evaluation/run/eval-case-runner.js'
-import { resolveProviderModelAlias } from '../../domains/provider-resolution/index.js'
-import {
-  resolveExistingPathInsideRoot,
-  resolvePathInsideRoot
-} from '../../platform/path-service.js'
-import {
-  EvalRegressionGateProfileSchema,
-  ReviewDepthSchema,
-  ReviewModeSchema,
-  maxConcurrentTasksBounds
-} from '../../shared/contracts/index.js'
-import {
-  loggingCliOptions,
-  parseEnumOption,
-  parseIntegerOption,
-  parseLogFileOverride,
-  parseLogLevelOverride,
-  parseOptionValue,
-  parseOptionValues,
-  unknownCliOption
-} from '../args.js'
+import { unknownCliOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import { evalReportCapabilityFlags } from '../eval-capability-flags.js'
-import { parseEvalCapabilityOverrides } from '../eval-capability-overrides.js'
 import {
   evalGateExitCode,
   resolveEvalRegressionGateThresholds
 } from '../eval-regression-gate-policy.js'
+import { writeEvalRunArtifacts } from '../eval-run-artifacts.js'
 import { createEvalRunArchiveId } from '../eval-run-archive-id.js'
-import {
-  ensureDirectory,
-  jsonResult,
-  resolveArtifactWritePath
-} from '../run-artifacts.js'
+import { resolveEvalRunEffectiveConfig } from '../eval-run-effective-config.js'
+import { createEvalFindingSourceReader } from '../eval-run-finding-source.js'
+import { resolveEvalRunJudges } from '../eval-run-judges.js'
+import { evalRunCliOptions, parseEvalRunOptions } from '../eval-run-options.js'
+import { resolveArtifactWritePath } from '../run-artifacts.js'
 
 export const runEval = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, [
-    ...loggingCliOptions,
-    '--capability',
-    '--case',
-    '--gate-profile',
-    '--max-concurrent-tasks',
-    '--review-depth',
-    '--review-mode',
-    '--slice-root'
-  ])
+  const unrecognized = unknownCliOption(args, evalRunCliOptions)
 
   if (unrecognized !== undefined) {
     return usageError(`Unknown option ${unrecognized}`)
@@ -97,118 +61,26 @@ export const runEval = async (
   // `evaluationElapsedMs` thunk that its own tests pin to a fixed value.
   const evaluationStartedAtMs = performance.now()
   try {
-    const logLevelOverride = parseLogLevelOverride(args)
-    const logFileOverride = parseLogFileOverride(logLevelOverride.args)
-    const evalArgs = logFileOverride.args
-    const sliceRoot = parseOptionValue(evalArgs, '--slice-root')
-    const caseFilters = parseOptionValues(evalArgs, '--case')
-    // Every accepted value below comes from the config schema that will validate
-    // it moments later, so a flag can never accept a value the config rejects.
-    const reviewMode = parseEnumOption(
-      evalArgs,
-      '--review-mode',
-      ReviewModeSchema.options
-    )
-    const reviewDepth = parseEnumOption(
-      evalArgs,
-      '--review-depth',
-      ReviewDepthSchema.options
-    )
-    const maxConcurrentTasks = parseIntegerOption(
-      evalArgs,
-      '--max-concurrent-tasks',
-      maxConcurrentTasksBounds
-    )
-    // Overrides `evaluation.regressionGate.profile` for this run only, without
-    // touching the committed config's default. See the `stable`/`strict`
-    // rationale in `eval-regression-gate-policy.ts`.
-    const gateProfile = parseEnumOption(
-      evalArgs,
-      '--gate-profile',
-      EvalRegressionGateProfileSchema.options
-    )
-    const cliConfig = {
-      ...(logLevelOverride.level === undefined
-        ? {}
-        : {
-            observability: {
-              logging: {
-                level: logLevelOverride.level
-              }
-            }
-          }),
-      ...(reviewMode === undefined &&
-      reviewDepth === undefined &&
-      maxConcurrentTasks === undefined
-        ? {}
-        : {
-            review: {
-              ...(reviewMode === undefined ? {} : { mode: reviewMode }),
-              ...(reviewDepth === undefined ? {} : { depth: reviewDepth }),
-              ...(maxConcurrentTasks === undefined
-                ? {}
-                : { maxConcurrentTasks })
-            }
-          }),
-      ...(gateProfile === undefined
-        ? {}
-        : { evaluation: { regressionGate: { profile: gateProfile } } })
-    }
-    const capabilityOverrides = parseEvalCapabilityOverrides(evalArgs)
-    const loadedConfig = await loadConfigForCommand(evalArgs, options, {
+    const evalOptions = parseEvalRunOptions(args)
+    const loadedConfig = await loadConfigForCommand(evalOptions.args, options, {
       loadDotEnv: false,
-      ...(Object.keys(cliConfig).length === 0 ? {} : { cliConfig })
+      ...(Object.keys(evalOptions.cliConfig).length === 0
+        ? {}
+        : { cliConfig: evalOptions.cliConfig })
     })
-    // The committed evaluation configuration, applied AFTER everything the
-    // loader merged, so the pinned capability set holds against the discovered
-    // config file, the environment and `--config` alike. `config` -- not
-    // `loadedConfig.config` -- is what the cases run under, what `configHash` is
-    // taken over, and what the capability provenance is read from: a pin nobody
-    // can read back out of the report would be a belief rather than a fact.
-    const pinnedCapabilities = applyEvalCapabilityPins({
-      config: loadedConfig.config,
-      overrides: capabilityOverrides
+    // The pins and the no-provider contradiction, resolved together: `config`
+    // -- not `loadedConfig.config` -- is what every case runs under and what the
+    // report's provenance is read from.
+    const effectiveConfig = resolveEvalRunEffectiveConfig({
+      loadedConfig: loadedConfig.config,
+      capabilityOverrides: evalOptions.capabilityOverrides
     })
-    // AN EVAL RUN WITH NO PROVIDER STATES THAT, INSTEAD OF ASKING FOR A MODEL IT
-    // HAS NOT GOT.
-    //
-    // `aiReview.enabled` is pinned ON above so a repository config cannot turn an
-    // eval into a zero-recall report; a missing provider produces that same
-    // report and no pin can repair it, because there is no model to enable. The
-    // review runner refuses the contradiction outright
-    // (`model_review_provider_missing`) — right for a review whose report a human
-    // reads as a verdict on their change, and wrong for the offline eval this
-    // command still supports, where the fixtures are the audience: a corpus whose
-    // cases expect no finding is scoreable without a model, and any case that
-    // DOES expect one already fails loudly at `eval_semantic_judge_missing`,
-    // because the judge is missing for exactly the same reason.
-    //
-    // So the contradiction is resolved once, here, and it is RECORDED rather than
-    // quietly applied: `configHash` and `provenance.capabilities` are both read
-    // from this config, so the saved report says `aiReview.enabled: false` and no
-    // reader can mistake the run for one a model took part in. The warning below
-    // says the same thing to the operator.
-    const pinnedConfig = pinnedCapabilities.config
-    const modelReviewHasNoModel =
-      pinnedConfig.aiReview.enabled && pinnedConfig.provider === undefined
-    const config = modelReviewHasNoModel
-      ? {
-          ...pinnedConfig,
-          aiReview: { ...pinnedConfig.aiReview, enabled: false }
-        }
-      : pinnedConfig
-    const runWarnings = [
-      ...pinnedCapabilities.warnings,
-      ...(modelReviewHasNoModel
-        ? [
-            'No provider is configured, so no model reviewed any eval case and this run measures nothing about the reviewer. The report records aiReview.enabled: false. Configure `provider` to measure a model; a case with expected findings fails with eval_semantic_judge_missing regardless, because the judge needs the same provider.'
-          ]
-        : [])
-    ]
+    const config = effectiveConfig.config
+    const runWarnings = effectiveConfig.warnings
     const logger = createCliLogger({
       config,
       command: 'eval',
-      sink: await resolveLogSink(options, logFileOverride.logFile)
+      sink: await resolveLogSink(options, evalOptions.logFile)
     })
 
     // Logged AND carried to stderr below. The default logging level is `silent`,
@@ -219,12 +91,16 @@ export const runEval = async (
     }
 
     const loadedEvalCases = await loadEvalCasesFromFixtures(options.cwd, {
-      ...(sliceRoot === undefined ? {} : { sliceRoot })
+      ...(evalOptions.sliceRoot === undefined
+        ? {}
+        : { sliceRoot: evalOptions.sliceRoot })
     })
     const evalCases =
-      caseFilters.length === 0
+      evalOptions.caseFilters.length === 0
         ? loadedEvalCases
-        : loadedEvalCases.filter((evalCase) => caseFilters.includes(evalCase.id))
+        : loadedEvalCases.filter((evalCase) =>
+            evalOptions.caseFilters.includes(evalCase.id)
+          )
 
     if (evalCases.length === 0) {
       return usageError('eval run selected no cases')
@@ -240,147 +116,29 @@ export const runEval = async (
       }))
     )
 
-    // The reviewer's own provider config. Every case's review resolves its model
-    // from this, inside `runEvalCase`, and nothing below changes that: pinning
-    // the judge moves the SCORER only.
-    const providerConfig = config.provider
-    // The judge model, pinnable independently of the reviewer's
-    // (`evaluation.judgeModel`, `CODEREVIEWER_JUDGE_MODEL`). Unset resolves to
-    // `providerConfig` UNCHANGED -- the same object, so an unpinned run performs
-    // exactly the resolution it always did.
-    //
-    // Why it exists: the judges used to be built from the reviewer's model, so
-    // varying `CODEREVIEWER_PROVIDER_MODEL` to compare two reviewers swapped the
-    // ruler along with the thing being measured, and a recall difference could
-    // no longer be attributed to either. See "The Judge Must Be Pinnable
-    // Independently Of The Reviewer" in
-    // specs/06-evaluation-and-quality-gates.md.
-    //
-    // Only `model` is overridden. Provider id, credentials, base URL, retry and
-    // timeout stay the run's own, because the setting names a model and a second
-    // provider account is not what it promises.
-    const judgeModelOverride = config.evaluation.judgeModel
-    const judgeProviderConfig =
-      providerConfig === undefined || judgeModelOverride === undefined
-        ? providerConfig
-        : { ...providerConfig, model: judgeModelOverride }
-    // The semantic judge is the only matcher, and the plausibility judge is the
-    // independent second opinion on unmatched findings. Both are constructed
-    // whenever a provider is available, from the same resolved judge model
-    // alias; scoring a case with expected findings without the match judge fails
-    // loudly inside the eval runner instead of falling back to a heuristic.
-    const modelAlias =
-      judgeProviderConfig === undefined
-        ? undefined
-        : (
-            await resolveProviderModelAlias({
-              provider: judgeProviderConfig,
-              environment: loadedConfig.environment,
-              logger,
-              ...(options.providerImport === undefined
-                ? {}
-                : { importProvider: options.providerImport })
-            })
-          ).modelAlias
-    // Wraps the judge model alias in the SAME usage-recorder mechanism the
-    // review path uses (`createProviderUsageRecorder`; see
-    // `run/provider/provider-workflow.ts`), so every provider call the
-    // semantic-match judge and the plausibility judge make -- both matching
-    // AND their calibration passes inside `runEvaluation` -- is captured. This
-    // spend used to be counted nowhere: judge calls are real provider calls,
-    // but neither judge factory reads `response.usage`. One recorder is shared
-    // by both judges (they are the same model), so `scoringUsageRecorder`
-    // below reports their COMBINED spend rather than inventing a second,
-    // per-judge accounting path.
-    const scoringUsageRecorder =
-      modelAlias === undefined
-        ? undefined
-        : createProviderUsageRecorder(modelAlias)
-    const semanticJudge =
-      scoringUsageRecorder === undefined
-        ? undefined
-        : createModelSemanticJudge({ modelAlias: scoringUsageRecorder.modelAlias })
-    const plausibilityJudge =
-      scoringUsageRecorder === undefined
-        ? undefined
-        : createModelPlausibilityJudge({
-            modelAlias: scoringUsageRecorder.modelAlias
-          })
-    // Reads the FINAL judge + plausibility-judge spend, priced with the SAME
-    // `summarizeRunCost` helper that prices review cost. A thunk (not called
-    // here) because the recorder keeps accumulating until `runEvaluation`
-    // finishes matching and calibration; `runEvaluation` calls this only once,
-    // at the very end.
-    // Priced against the JUDGE's model, not the reviewer's: these tokens were
-    // spent by the judges, and a pinned judge on a differently-priced model
-    // would otherwise be billed at the reviewer's rate. Identical to the
-    // reviewer's model whenever the judge is unpinned.
-    const evaluationScoringCost =
-      scoringUsageRecorder === undefined || judgeProviderConfig === undefined
-        ? undefined
-        : () =>
-            summarizeRunCost({
-              providerConfigured: true,
-              providerId: judgeProviderConfig.id,
-              modelName: judgeProviderConfig.model,
-              prices: config.costs,
-              usage: scoringUsageRecorder.usage()
-            })
-    // Reads the new-side content of a finding's file from the case's fixture
-    // repo, so the plausibility judge sees the same file the reviewer saw.
-    // Returns undefined on any read failure; the judge then fails closed.
-    //
-    // Memoized for the run because the judge asks once per UNMATCHED FINDING and
-    // several findings routinely land in one file: without this, four findings in
-    // a file cost four reads and eight `realpath` syscalls over identical bytes.
-    // A failure is cached alongside a success — the fixture repository does not
-    // change during an eval run, so a second attempt would fail the same way, and
-    // caching it keeps the judge's fail-closed verdict consistent across the
-    // findings in that file.
-    const findingSourceByKey = new Map<string, string | undefined>()
-    const readFindingSource: EvalCaseFileReader = async ({
-      evalCase,
-      path: findingPath
-    }) => {
-      // The fixture root, not the case id: two cases pointing at one fixture read
-      // the same file. A NUL separator cannot occur in a path, so no two
-      // different pairs can ever collapse onto one key.
-      const cacheKey = `${evalCase.repositoryFixture}\u0000${findingPath}`
-
-      if (findingSourceByKey.has(cacheKey)) {
-        return findingSourceByKey.get(cacheKey)
-      }
-
-      let content: string | undefined
-
-      try {
-        const fixtureRoot = await resolveExistingPathInsideRoot(
-          options.cwd,
-          evalCase.repositoryFixture
-        )
-
-        content = await readFile(
-          resolvePathInsideRoot(fixtureRoot, findingPath),
-          'utf8'
-        )
-      } catch {
-        content = undefined
-      }
-
-      findingSourceByKey.set(cacheKey, content)
-
-      return content
-    }
+    // The scorers, built from the judge model rather than the reviewer's, and
+    // the fixture reader the plausibility judge sees whole files through.
+    const judges = await resolveEvalRunJudges({
+      config,
+      environment: loadedConfig.environment,
+      logger,
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport })
+    })
+    const readFindingSource = createEvalFindingSourceReader(options.cwd)
 
     logger.info('Eval run started.', {
-      fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
+      fixture_source: evalOptions.sliceRoot === undefined ? 'default' : 'slice-root',
       selected_case_count: evalCases.length,
-      semantic_judge_available: semanticJudge !== undefined,
-      plausibility_judge_available: plausibilityJudge !== undefined,
-      judge_model_pinned: judgeModelOverride !== undefined
+      semantic_judge_available: judges.semanticJudge !== undefined,
+      plausibility_judge_available: judges.plausibilityJudge !== undefined,
+      judge_model_pinned: judges.judgeModelPinned
     })
 
     const evalArtifactRoot = path.posix.join('.codereviewer', 'eval')
+    // Resolved before the cases run, so an eval root that cannot be written to
+    // refuses the run before it spends anything on a model.
     const evalDirectory = await resolveArtifactWritePath(options.cwd, evalArtifactRoot)
     const outputs = await Promise.all(
       evalCases.map((evalCase) =>
@@ -403,19 +161,23 @@ export const runEval = async (
     const evaluationInput = {
       cases: evalCases,
       outputs,
-      ...(semanticJudge === undefined ? {} : { judge: semanticJudge }),
-      ...(plausibilityJudge === undefined
+      ...(judges.semanticJudge === undefined
         ? {}
-        : { plausibilityJudge, readFindingSource }),
+        : { judge: judges.semanticJudge }),
+      ...(judges.plausibilityJudge === undefined
+        ? {}
+        : { plausibilityJudge: judges.plausibilityJudge, readFindingSource }),
       judgeAgreementMinimum: config.evaluation.minJudgeAgreement,
       logger,
       selection: {
         fixtureSource:
-          sliceRoot === undefined
+          evalOptions.sliceRoot === undefined
             ? 'default' as const
             : 'slice-root' as const,
-        ...(sliceRoot === undefined ? {} : { sliceRoot }),
-        caseFilters,
+        ...(evalOptions.sliceRoot === undefined
+          ? {}
+          : { sliceRoot: evalOptions.sliceRoot }),
+        caseFilters: evalOptions.caseFilters,
         selectedCaseIds: evalCases.map((evalCase) => evalCase.id)
       },
       thresholds: resolveEvalRegressionGateThresholds(config),
@@ -423,9 +185,9 @@ export const runEval = async (
       // keep a saved report byte-for-byte reproducible (fix for the eval
       // report's `generatedAt` being frozen to a literal committed timestamp).
       generatedAt: (options.now ?? ((): Date => new Date()))().toISOString(),
-      ...(evaluationScoringCost === undefined
+      ...(judges.evaluationScoringCost === undefined
         ? {}
-        : { evaluationScoringCost }),
+        : { evaluationScoringCost: judges.evaluationScoringCost }),
       // A thunk closed over the monotonic start captured before this function
       // did anything, so `runEvaluation` measures the WHOLE run (case review
       // execution above, plus its own judge/plausibility scoring) instead of
@@ -441,17 +203,15 @@ export const runEval = async (
       // selected cases, so it is not supplied here.
       provenance: {
         configHash: stableJsonDigest(config),
-        ...(providerConfig === undefined
+        // The reviewer's own model: what this run is a measurement OF, as
+        // opposed to the judge model below, which measured it.
+        ...(config.provider === undefined
           ? {}
-          : { providerId: providerConfig.id, modelName: providerConfig.model }
+          : { providerId: config.provider.id, modelName: config.provider.model }
         ),
-        // Recorded next to the reviewer's model, and equal to it on an unpinned
-        // run. A saved report that cannot name the judge that scored it leaves a
-        // model comparison unreadable after the fact, which is the whole point
-        // of making the judge pinnable.
-        ...(judgeProviderConfig === undefined
+        ...(judges.judgeModelName === undefined
           ? {}
-          : { judgeModelName: judgeProviderConfig.model }),
+          : { judgeModelName: judges.judgeModelName }),
         // The same effective config, read as VALUES rather than hashed. The
         // hash proves two runs shared a configuration; it cannot answer "was
         // the fix lane on?", because nothing can be read back out of a digest.
@@ -465,72 +225,15 @@ export const runEval = async (
       'runs',
       createEvalRunArchiveId()
     )
-    await ensureDirectory(evalDirectory)
-    await ensureDirectory(
-      await resolveArtifactWritePath(options.cwd, evalRunArchiveRoot)
-    )
-    const reportJson = jsonResult(result.report)
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalArtifactRoot, result.artifactName)
-      ),
-      reportJson
-    )
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalRunArchiveRoot, result.artifactName)
-      ),
-      reportJson
-    )
-    const summary = renderEvalSummary({
+    const summary = await writeEvalRunArtifacts({
+      repositoryRoot: options.cwd,
+      artifactRoot: evalArtifactRoot,
+      artifactDirectory: evalDirectory,
+      archiveRoot: evalRunArchiveRoot,
       cases: evalCases,
-      report: result.report,
-      artifactRoot: evalArtifactRoot
+      artifactName: result.artifactName,
+      report: result.report
     })
-
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalArtifactRoot, EVAL_SUMMARY_ARTIFACT_NAME)
-      ),
-      summary
-    )
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalRunArchiveRoot, EVAL_SUMMARY_ARTIFACT_NAME)
-      ),
-      renderEvalSummary({
-        cases: evalCases,
-        report: result.report,
-        artifactRoot: evalRunArchiveRoot
-      })
-    )
-    const recallReport = renderEvalRecallReport({
-      reports: [
-        {
-          label: result.artifactName,
-          report: result.report
-        }
-      ]
-    })
-
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalArtifactRoot, EVAL_RECALL_REPORT_ARTIFACT_NAME)
-      ),
-      recallReport
-    )
-    await writeFile(
-      await resolveArtifactWritePath(
-        options.cwd,
-        path.posix.join(evalRunArchiveRoot, EVAL_RECALL_REPORT_ARTIFACT_NAME)
-      ),
-      recallReport
-    )
 
     logger.info('Eval run completed.', {
       fixture_count: result.report.fixtureCount,

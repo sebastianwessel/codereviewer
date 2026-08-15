@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import {
   currentFileSystemFlavor,
@@ -14,13 +13,20 @@ import {
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
-import { compileGlobMatchers, matchesAnyGlob } from '../../shared/glob/glob-matcher.js'
+import { compileGlobMatchers } from '../../shared/glob/glob-matcher.js'
 import { sha256 } from '../../shared/hash/hash.js'
+import {
+  isBinaryContent,
+  isExcluded,
+  isIncluded
+} from './file-classification.js'
+import { assertReadOnlyGitArgs, assertSafeGitRef } from './git-command-safety.js'
 import {
   parseDeletedFileContents,
   parseGitDiffMaps,
   type DiffMap
 } from './git-diff.js'
+import { parseGitNameStatus, type GitChangedPath } from './git-name-status.js'
 
 const execFileAsync = promisify(execFile)
 const defaultMaxFileBytes = 500_000
@@ -108,11 +114,6 @@ type CollectRepositoryIntakeOptions = {
   readonly includeDeletedPaths?: boolean
 }
 
-type GitChangedPath = {
-  readonly path: string
-  readonly status: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied'
-}
-
 const createGitRunnerOptions = (
   cwd: string,
   signal: AbortSignal | undefined
@@ -137,146 +138,6 @@ export const defaultGitRunner: GitCommandRunner = async (args, options) => {
 
   return stdout
 }
-
-export const assertReadOnlyGitArgs = (args: readonly string[]): void => {
-  const [command, ...rest] = args
-
-  // `merge-base` resolves the divergence commit of two refs. It is a distinct
-  // subcommand from `merge`: it only prints a commit id and never touches the
-  // repository, index, or working tree.
-  if (command === 'merge-base') {
-    if (rest.length !== 2) {
-      throw new TypeError('Git merge-base command shape is not allowlisted.')
-    }
-
-    assertSafeGitRef(rest[0], 'baseRef')
-    assertSafeGitRef(rest[1], 'headRef')
-
-    return
-  }
-
-  if (command !== 'diff') {
-    throw new TypeError('Only read-only git diff and merge-base commands are allowed.')
-  }
-
-  const [mode, baseRef, headRef, separator] = rest
-
-  if (mode === '--name-status' && rest.length === 3) {
-    assertSafeGitRef(baseRef, 'baseRef')
-    assertSafeGitRef(headRef, 'headRef')
-    return
-  }
-
-  if (mode === '--unified=0' && separator === '--' && rest.length >= 4) {
-    assertSafeGitRef(baseRef, 'baseRef')
-    assertSafeGitRef(headRef, 'headRef')
-
-    for (const filePath of rest.slice(4)) {
-      normalizeRepositoryRelativePath(filePath)
-    }
-
-    return
-  }
-
-  throw new TypeError('Git diff command shape is not allowlisted.')
-}
-
-const assertSafeGitRef = (ref: string | undefined, fieldName: string): string => {
-  if (ref === undefined || ref.trim().length === 0 || ref.startsWith('-')) {
-    throw createStructuredError({
-      code: 'invalid_git_ref',
-      message: 'Git refs must be non-empty and must not start with "-".',
-      category: 'config',
-      details: { field: fieldName }
-    })
-  }
-
-  return ref
-}
-
-const textSourceExtensions = new Set([
-  '.cjs',
-  '.cts',
-  '.go',
-  '.java',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.mts',
-  '.py',
-  '.rb',
-  '.rs',
-  '.ts',
-  '.tsx'
-])
-
-const hasTextSourceExtension = (portablePath: string): boolean =>
-  textSourceExtensions.has(path.posix.extname(portablePath).toLowerCase())
-
-const isUtf8Text = (content: Buffer): boolean =>
-  Buffer.from(content.toString('utf8'), 'utf8').equals(content)
-
-const isBinaryContent = (portablePath: string, content: Buffer): boolean => {
-  if (!content.includes(0)) {
-    return false
-  }
-
-  return !(hasTextSourceExtension(portablePath) && isUtf8Text(content))
-}
-
-const isExcluded = (
-  portablePath: string,
-  matchers: readonly RegExp[]
-): boolean => matchesAnyGlob(portablePath, matchers)
-
-// A file is in scope when it matches an `include` glob (an empty include set
-// means "include everything", matching the `['**/*']` default). Combined with
-// the exclude check, this lets `paths.include` actually narrow the review set.
-const isIncluded = (
-  portablePath: string,
-  matchers: readonly RegExp[]
-): boolean => matchers.length === 0 || matchesAnyGlob(portablePath, matchers)
-
-const statusFromGitCode = (statusCode: string): GitChangedPath['status'] => {
-  const normalizedStatus = statusCode[0]
-
-  if (normalizedStatus === 'A') {
-    return 'added'
-  }
-
-  if (normalizedStatus === 'D') {
-    return 'deleted'
-  }
-
-  if (normalizedStatus === 'R') {
-    return 'renamed'
-  }
-
-  if (normalizedStatus === 'C') {
-    return 'copied'
-  }
-
-  return 'modified'
-}
-
-const parseGitNameStatus = (output: string): readonly GitChangedPath[] =>
-  output
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const [statusCode, firstPath, secondPath] = line.split('\t')
-      const status = statusFromGitCode(statusCode ?? 'M')
-      const rawPath = status === 'renamed' || status === 'copied' ? secondPath : firstPath
-
-      if (rawPath === undefined) {
-        throw new TypeError('Git name-status output is missing a path.')
-      }
-
-      return {
-        path: rawPath,
-        status
-      }
-    })
 
 const resolveExistingRepositoryPath = (
   repositoryRoot: string,

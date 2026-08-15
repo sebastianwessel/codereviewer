@@ -7,6 +7,14 @@ export type LoadedCodeReviewerConfig = Awaited<
   ReturnType<typeof loadCodeReviewerConfig>
 >
 
+// The CLI-only configuration overlay a command folds into its load (`eval run`
+// builds one out of `--review-mode`, `--gate-profile` and friends). Derived from
+// the loader's own parameter rather than restated, so an overlay cannot describe
+// a shape the loader does not merge.
+export type CommandCliConfigOverlay = NonNullable<
+  NonNullable<Parameters<typeof loadConfigForCommand>[2]>['cliConfig']
+>
+
 // Every command resolves configuration identically: `--config` when given, the
 // discovered file otherwise, always against the process environment. `overrides`
 // carries the few command-specific inputs (`cliConfig`, `loadDotEnv`); it is
