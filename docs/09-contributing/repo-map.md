@@ -74,8 +74,10 @@ barrel is not published by being there (spec 01, *Public Surface*).
 | `eval-run-archive-id.ts` | Naming the per-run archive directory both eval commands write to |
 | `eval-run-options.ts` | The argv half of `eval run`: the options it accepts and the typed values it reads off them, including the CLI-only config overlay |
 | `eval-run-effective-config.ts` | The configuration one `eval run` measures under: the capability pins applied last, and the no-provider contradiction this command records rather than refuses |
+| `eval-run-cases.ts` | Which cases a run scores, and running them — the one place `runEvalCase` is imported by module path rather than through the evaluation barrel it would form a cycle through |
 | `eval-run-judges.ts` | The scorers a run measures WITH — semantic-match judge, plausibility judge, and the one usage recorder that prices their combined spend against the judge's model |
 | `eval-run-finding-source.ts` | The memoized fixture-file reader the plausibility judge sees whole files through |
+| `eval-run-request.ts` | What the eval runner is asked to do: cases, outputs, judges, selection, gate thresholds, and the provenance the evaluation domain cannot derive on its own |
 | `eval-run-artifacts.ts` | The six writes one `eval run` lands: report, summary and recall report, to the eval root and to the per-run archive |
 
 `main.ts` is intentionally thin; everything testable lives in `index.ts` and
