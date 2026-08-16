@@ -60,6 +60,11 @@ export type CreateWorkflowTaskInput = {
   readonly instructionScopes: readonly InstructionScope[]
   readonly facts: DeterministicSignalExtraction['facts']
   readonly evidence: DeterministicSignalExtraction['evidence']
+  // `review.signalFacts.enabled`. Needed HERE, where the support-signal document is
+  // ledgered, because it decides which STAGE those bytes reach — see the reason
+  // string below. Threaded from the caller rather than re-read from config: this
+  // module takes no configuration, and one flag is not a reason to give it one.
+  readonly signalFactsEnabled: boolean
 }
 
 export type CreatedWorkflowTask = {
@@ -145,12 +150,32 @@ export const createWorkflowTask = (
           : inputContext.kind,
       ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
       taskId: input.taskId,
+      // The reason NAMES THE CONSUMING STAGE for the support-signal document,
+      // because that document does not reach both of them.
+      //
+      // The ledger's stated job is "which bytes reached the model, and which were
+      // held back" (`context-ledger.ts`). The support-signal bytes are ledgered
+      // `included`, with `bytesIncluded === bytesConsidered`, on EVERY run — and
+      // that is true of refutation, whose packet carries every reviewContext kind
+      // but `change-intent`, and false of discovery unless
+      // `review.signalFacts.enabled` (default false) renders the section into the
+      // packet (`review-packet.ts`). So the entry was not a lie, and could not be
+      // read correctly either: a reader checking whether the reviewer was shown the
+      // symbol map found an `included` entry that meant a different stage. That is
+      // the exact shape that hid the reviewer-instructions defect — ledgered,
+      // hashed, and never delivered to discovery.
+      //
+      // A reason string rather than a per-stage ledger: the entry's bytes, hash and
+      // decision are all still true as written, and the one thing missing was WHO
+      // read them.
       reason:
         inputContext.kind === 'file'
           ? 'task-context-source-chunk'
           : inputContext.kind === 'referenced-definition'
             ? 'task-context-referenced-definition'
-            : 'task-context-support-signal-chunk',
+            : input.signalFactsEnabled
+              ? 'task-context-support-signal-chunk-discovery-and-refutation'
+              : 'task-context-support-signal-chunk-refutation-only',
       decision: 'included',
       bytesConsidered: contentBytes,
       bytesIncluded: contentBytes,

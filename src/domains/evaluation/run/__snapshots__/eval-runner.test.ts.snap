@@ -1807,7 +1807,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "unlistedRealFindingCount": 0,
     "usageUnavailableCount": 0,
   },
-  "metricsVersion": "2026-08-11.security-recall-null-on-empty-denominator",
+  "metricsVersion": "2026-08-16.hunk-aware-changed-line-count",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {

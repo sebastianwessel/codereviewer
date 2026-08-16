@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import { FINDING_DESCRIPTION_MAX } from '../../../shared/contracts/index.js'
+import { FixOutcomeSchema } from '../../verification/verification-report.js'
 import {
   EvalAgenticStageReportSchema,
   EvalContextLedgerEntrySchema,
   EvalExpectedFindingReportSchema,
   EvalFindingSummaryReportSchema,
+  EvalFixOutcomeReportSchema,
   EvalProviderIssueReportSchema,
   EvalReportProvenanceSchema,
   EvalReportSchema
@@ -196,5 +198,79 @@ describe('eval report contracts', () => {
         })
       )
     ).toContain('description')
+  })
+})
+
+// Fields of the lane's own `FixOutcome` that the eval mirror deliberately does not
+// carry. Empty, and it took a real defect to get there: the mirror carried
+// `applyCheck` and not `fixDeclinedReason`, so a fix the agent PROPOSED and the
+// lane refused recorded identically to a finding it proposed nothing for
+// (`fixProduced: false`, `applyCheck: 'not-attempted'`) — the exact confusion the
+// reason field was added to the producer to end, reintroduced one contract over.
+//
+// A field added to `FixOutcomeSchema` and neither mirrored nor listed here fails
+// the test below. Listing one is a decision: say why the eval cannot use it.
+const FIX_OUTCOME_FIELDS_DELIBERATELY_NOT_MIRRORED: readonly string[] = []
+
+describe('the eval fix-outcome mirror', () => {
+  test('mirrors or explicitly declines every field the lane records', () => {
+    const mirrored = new Set(Object.keys(EvalFixOutcomeReportSchema.shape))
+    const declined = new Set(FIX_OUTCOME_FIELDS_DELIBERATELY_NOT_MIRRORED)
+    const unaccounted = Object.keys(FixOutcomeSchema.shape).filter(
+      (field) => !mirrored.has(field) && !declined.has(field)
+    )
+
+    expect(unaccounted).toEqual([])
+  })
+
+  test('mirrors nothing the lane no longer records', () => {
+    const recorded = new Set(Object.keys(FixOutcomeSchema.shape))
+    const stale = [
+      ...Object.keys(EvalFixOutcomeReportSchema.shape),
+      ...FIX_OUTCOME_FIELDS_DELIBERATELY_NOT_MIRRORED
+    ].filter((field) => !recorded.has(field))
+
+    expect(stale).toEqual([])
+  })
+
+  // The distinction itself, stated as a round trip: two outcomes that were one
+  // record before the reason was carried.
+  test('tells a refused fix from a fix nobody proposed', () => {
+    const refused = EvalFixOutcomeReportSchema.parse({
+      findingId: 'find_a',
+      findingJudgment: 'real',
+      fixProduced: false,
+      applyCheck: 'not-attempted',
+      fixDeclinedReason: 'edits-outside-finding-file'
+    })
+    const nothingProposed = EvalFixOutcomeReportSchema.parse({
+      findingId: 'find_b',
+      findingJudgment: 'real',
+      fixProduced: false,
+      applyCheck: 'not-attempted'
+    })
+
+    expect(refused.fixDeclinedReason).toBe('edits-outside-finding-file')
+    expect(nothingProposed.fixDeclinedReason).toBeUndefined()
+  })
+
+  // The vocabularies are the lane's, not restatements of them: a reason or an
+  // apply-check outcome the producer does not define is refused here too.
+  test('refuses a decline reason and an apply check the lane does not define', () => {
+    expect(
+      EvalFixOutcomeReportSchema.safeParse({
+        findingId: 'find_a',
+        fixProduced: false,
+        applyCheck: 'not-attempted',
+        fixDeclinedReason: 'too-large'
+      }).success
+    ).toBe(false)
+    expect(
+      EvalFixOutcomeReportSchema.safeParse({
+        findingId: 'find_a',
+        fixProduced: false,
+        applyCheck: 'skipped'
+      }).success
+    ).toBe(false)
   })
 })

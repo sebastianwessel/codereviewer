@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { parseEvalRecallView } from './eval-recall-view.js'
+import { parseEvalRecallView, recallViewReadModels } from './eval-recall-view.js'
+import {
+  EvalCaseReportSchema,
+  EvalExpectedFindingReportSchema,
+  EvalReportSchema
+} from './eval-report-contracts.js'
 
 // The exact payload shape that stopped opening on 2026-08-11: four
 // per-classification finding arrays on the case result, no `producedFindings`,
@@ -99,4 +104,145 @@ describe('the recall view', () => {
   test('refuses something that is not an eval report', () => {
     expect(() => parseEvalRecallView({ hello: 'world' })).toThrow()
   })
+})
+
+// Fields the producer records that this view deliberately does not read.
+//
+// TOLERANCE HAS A BLIND SPOT, and it is the mirror image of the one this view was
+// written to fix. A loose schema accepts an archive whose shape moved — the point
+// of the module — but it also accepts a field the producer ADDED and reads it
+// never, with no parse error, no warning, and a recall report that is simply
+// missing a fact it could have used. That is the same class of silence as an eval
+// metric that renders as "unknown" in every comparison forever, which is why
+// `eval-comparison-view.test.ts` carries this guard already; the recall view is the
+// second hand-maintained view of the same producer and had none.
+//
+// Adding a key here is a decision: say what recall analysis loses by not reading
+// it. The rule that decides is stated in the module header — this view reads the
+// fields recall is COMPUTED FROM, and nothing else.
+const REPORT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
+  // Version and scoring identity. Reading either would mean deciding what to do
+  // per version, which is exactly the coupling to today's producer that made every
+  // archive unopenable here; the fields recall is computed from are identical
+  // across every version this view accepts.
+  'schemaVersion',
+  'metricsVersion',
+  // The scoring configuration and the aggregate metrics block. This report
+  // RECOMPUTES recall per expectation across the reports it was handed, rather
+  // than restating a stored rate, which is the whole reason it can span archives.
+  'scoring',
+  'metrics',
+  'metricGroups',
+  // The regression gate's verdict on ONE run. This report is a per-expectation
+  // cross-run view and adjudicates nothing.
+  'regressionGate',
+  // Engine, model and capability provenance. NOT read here, and unlike the
+  // entries above that is a bound worth stating plainly: `eval compare` reads
+  // provenance and refuses to pool runs whose capabilities or judge disagree,
+  // while `eval recall-report` pools whatever reports the caller names and labels
+  // each column by its file path. Reading provenance to refuse a mixed pool would
+  // be a new refusal, not a new read.
+  'provenance'
+]
+
+const CASE_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
+  // How the RUN went. Parse validity, provider failures, agentic stages, discovery
+  // telemetry, the context ledger, warnings and per-case spend all describe the
+  // conditions a case ran under; recall is a property of the expectations, and a
+  // case that errored contributes its expectations as misses either way.
+  'parseValid',
+  'providerErrored',
+  'providerIssues',
+  'agenticStages',
+  'discovery',
+  'contextLedger',
+  'warnings',
+  'inlineFindingCount',
+  'refutationResults',
+  'fixOutcomes',
+  'durationMs',
+  'inputTokens',
+  'cachedInputTokens',
+  'outputTokens',
+  'usageUnavailable',
+  'costUnavailable',
+  'costUsd',
+  // THE PRECISION SIDE. Every produced finding and every classification of one —
+  // duplicates, false positives and their plausibility split, no-finding-zone
+  // hits, and the artifact-only population's own copy of all of it — answers "what
+  // did the engine say that nothing asked for?". Recall answers the opposite
+  // question and its denominator is `expectedFindings`, so none of these can move
+  // it.
+  'producedFindings',
+  'duplicateFindingIds',
+  'falsePositiveFindingIds',
+  'unlistedRealFindingIds',
+  'genuineFalsePositiveFindingIds',
+  'noFindingZoneFalsePositiveIds',
+  'artifactOnlyFindingIds',
+  'artifactOnlyMatchedFindings',
+  'artifactOnlyFalsePositiveFindingIds',
+  'artifactOnlyUnlistedRealFindingIds',
+  'artifactOnlyGenuineFalsePositiveFindingIds',
+  // The misses and the undecided pairs, as the producer recorded them. This view
+  // derives a miss as "an expectation with no match", which is the same fact from
+  // the two fields it already requires — deliberately, because those two have
+  // never changed shape while these arrived later and default to empty. Reading a
+  // defaulted-empty list from an older archive would read as "nothing was
+  // inconclusive" rather than "nobody recorded it".
+  'unmatchedExpectedIndexes',
+  'inconclusiveExpectedIndexes',
+  'inconclusiveFindingIds',
+  'inconclusiveMatches'
+]
+
+// Empty, and worth keeping as a list rather than skipping the level: the recall
+// report renders an expectation whole — its location, mode, severity and summary
+// — so a field added to the producer's expectation is a field this view should
+// almost certainly carry. An empty exclusion list is the strongest form of this
+// guard, not a missing one.
+const EXPECTED_FINDING_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = []
+
+const recallViewCoverage = [
+  {
+    label: 'report',
+    producer: EvalReportSchema,
+    readModel: recallViewReadModels.report,
+    notRead: REPORT_FIELDS_DELIBERATELY_NOT_READ
+  },
+  {
+    label: 'case result',
+    producer: EvalCaseReportSchema,
+    readModel: recallViewReadModels.caseResult,
+    notRead: CASE_FIELDS_DELIBERATELY_NOT_READ
+  },
+  {
+    label: 'expected finding',
+    producer: EvalExpectedFindingReportSchema,
+    readModel: recallViewReadModels.expectedFinding,
+    notRead: EXPECTED_FINDING_FIELDS_DELIBERATELY_NOT_READ
+  }
+] as const
+
+describe('the recall view accounts for every field the producer writes', () => {
+  for (const { label, producer, readModel, notRead } of recallViewCoverage) {
+    test(`reads or explicitly declines every ${label} field`, () => {
+      const read = new Set(Object.keys(readModel.shape))
+      const declined = new Set(notRead)
+      const unaccounted = Object.keys(producer.shape).filter(
+        (field) => !read.has(field) && !declined.has(field)
+      )
+
+      expect(unaccounted).toEqual([])
+    })
+
+    test(`declines nothing the ${label} no longer carries`, () => {
+      const produced = new Set(Object.keys(producer.shape))
+      const stale = [...Object.keys(readModel.shape), ...notRead].filter(
+        (field) => !produced.has(field)
+      )
+
+      expect(stale).toEqual([])
+    })
+  }
 })

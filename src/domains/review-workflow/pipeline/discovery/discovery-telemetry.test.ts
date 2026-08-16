@@ -14,6 +14,7 @@ const telemetry = (
   suppressedByLocationCount: 0,
   cappedByLimitCount: 0,
   contextOverflowSplitCount: 0,
+  readBudgetReductionCount: 0,
   mergeCallCount: 0,
   mergeGroupCount: 0,
   mergedAwayCount: 0,
@@ -32,6 +33,7 @@ describe('summarizeDiscoveryTelemetry', () => {
         droppedCount: 1,
         suppressedByIdCount: 1,
         contextOverflowSplitCount: 1,
+        readBudgetReductionCount: 2,
         mergeCallCount: 1,
         mergeGroupCount: 1,
         mergedAwayCount: 1
@@ -42,7 +44,8 @@ describe('summarizeDiscoveryTelemetry', () => {
         rawFindingCount: 4,
         rawFindingsPerCall: [4],
         candidateCount: 4,
-        suppressedByLocationCount: 2
+        suppressedByLocationCount: 2,
+        readBudgetReductionCount: 1
       })
     ])
 
@@ -57,6 +60,11 @@ describe('summarizeDiscoveryTelemetry', () => {
       suppressedByLocationCount: 2,
       cappedByLimitCount: 0,
       contextOverflowSplitCount: 1,
+      // Sums like every other counter, and separately from the split count: an
+      // overflow answered by narrowing the reads and one answered by halving the
+      // task are different events with different consequences for the rest of the
+      // run, and one counter for both would hide which happened.
+      readBudgetReductionCount: 3,
       mergeCallCount: 1,
       mergeGroupCount: 1,
       mergedAwayCount: 1

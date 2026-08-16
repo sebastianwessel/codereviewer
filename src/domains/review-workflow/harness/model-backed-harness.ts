@@ -76,7 +76,14 @@ export const createModelBackedReviewHarness = (
         tools: bounded.tools,
         // Spec 28: nothing caps a read in advance, so an overflow is discovered by
         // hitting the provider's real limit. This is what makes the retry smaller.
-        reduceReadBudget: contextRetriever.reduceReadBudget
+        reduceReadBudget: contextRetriever.reduceReadBudget,
+        // Read by the task's own telemetry while this scope is still open, so a
+        // reviewer that stopped looking because it ran out of lookups says so in
+        // the report. The debug line below stays — it is free and useful at debug
+        // level — but it could never reach a reader: `observability.logging.level`
+        // defaults to `silent`, and the reviewer's exhausted budget is exactly the
+        // fact that explains a quiet review of a change spread across files.
+        budgetExhausted: bounded.budgetExhausted
       },
       runTask
     )

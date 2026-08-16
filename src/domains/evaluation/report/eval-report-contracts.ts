@@ -1,10 +1,16 @@
 import { z } from 'zod'
 import {
   FINDING_DESCRIPTION_MAX,
+  FindingJudgmentSchema,
   RefutationVerdictSchema,
   ReviewReportSchema
 } from '../../../shared/contracts/index.js'
 import { ContextLedgerKindSchema } from '../../review-planning/index.js'
+import {
+  ApplyCheckOutcomeSchema,
+  FixDeclinedReasonSchema
+} from '../../verification/index.js'
+import { EvalMatchModeSchema } from '../corpus/eval-fixture.schema.js'
 import { DiffScopeSchema } from '../scoring/eval-diff-scope.js'
 import { EvalMetricsSchema } from '../scoring/metrics.js'
 
@@ -30,14 +36,27 @@ const SuccessfulEvalOutputSchema = z.strictObject({
 
 // Per-finding outcome of the finding investigation-and-fix lane (spec 12),
 // mirrored into the eval contract so the runner can score the lane's judgment
-// and fix quality against the match result. The eval domain owns this mirror
-// (as it mirrors provider-issue and refutation shapes) rather than importing the
-// verification domain's internal contract.
+// and fix quality against the match result. The eval domain owns the SHAPE of
+// this mirror (as it does for provider-issue and refutation shapes) but not the
+// vocabularies, which are imported for the reason stated on the refutation mirror
+// below: a judgment or an apply-check outcome added to the lane must land here
+// rather than being silently unrepresentable.
+//
+// `fixDeclinedReason` is carried, and its omission was not a shape decision but
+// the exact confusion `FixDeclinedReasonSchema` was written to end. Without it, a
+// fix the agent PROPOSED and this lane refused to carry records here as
+// `fixProduced: false, applyCheck: 'not-attempted'` — byte-identical to a finding
+// the agent proposed nothing for. Those are opposite facts about the lane, and
+// the eval was scoring them as one.
 export const EvalFixOutcomeReportSchema = z.strictObject({
   findingId: z.string().min(1),
-  findingJudgment: z.enum(['real', 'false-positive']).optional(),
+  findingJudgment: FindingJudgmentSchema.optional(),
   fixProduced: z.boolean(),
-  applyCheck: z.enum(['passed', 'failed', 'not-attempted'])
+  applyCheck: ApplyCheckOutcomeSchema,
+  // Optional exactly as the producer makes it: present only when a proposed fix
+  // was refused before the apply-check ran, so its absence means the check ran or
+  // there was nothing to check — never "declined for a reason nobody recorded".
+  fixDeclinedReason: FixDeclinedReasonSchema.optional()
 })
 
 export const EvalCaseOutputSchema = z.strictObject({
@@ -174,7 +193,13 @@ export const EvalExpectedFindingReportSchema = z.strictObject({
   severity: z.string().min(1),
   path: z.string().min(1).optional(),
   lineRange: z.tuple([z.int().min(1), z.int().min(1)]).optional(),
-  matchMode: z.enum(['path-line', 'path-semantic', 'semantic-only']),
+  // The corpus fixture's own vocabulary, on the same rule as the refutation
+  // verdict and the diff scope above: the eval domain owns the SHAPE of this
+  // record, not the vocabulary. `EvalMatchModeSchema` decides how an expectation
+  // is matched, and a mode added there and not here would make every expectation
+  // using it unrepresentable in the saved report — a run that scored fine and an
+  // artifact that refuses to be written.
+  matchMode: EvalMatchModeSchema,
   // Whether this expectation lies inside the reviewed diff (spec 17). Derived
   // by the eval domain from the case's own diff under the hunk-span rule and
   // STORED here so the split is auditable per expectation and cannot drift:

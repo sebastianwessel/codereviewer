@@ -212,6 +212,102 @@ describe('SARIF normalization', () => {
     expect(flow?.label).toContain('12 of 30 steps shown')
   })
 
+  test('the flows an alert could not carry are stated on the last one it kept', () => {
+    // The step cut labelled itself; the FLOW cut was a bare `break`, so an alert
+    // whose analyzer traced five taint paths arrived carrying two and asserting two.
+    // The module's own rule is that nothing is dropped silently, and this was the
+    // larger of the two omissions: a whole path, source and sink together.
+    const flowThrough = (line: number) => ({
+      threadFlows: [{ locations: [{ location: locationAt('src/a.ts', line) }] }]
+    })
+    const result = normalize(
+      logWith({
+        results: [
+          {
+            ruleId: 'r1',
+            message: { text: 'x' },
+            locations: [locationAt('src/a.ts', 1)],
+            codeFlows: [
+              flowThrough(1),
+              flowThrough(2),
+              flowThrough(3),
+              // Every location outside the repository: not a flow the cap withheld,
+              // so it must not inflate the denominator.
+              { threadFlows: [{ locations: [{ location: locationAt('vendor/x.ts', 4) }] }] },
+              flowThrough(5)
+            ]
+          }
+        ]
+      })
+    )
+    const flows = result.alerts[0]?.dataFlow ?? []
+
+    expect(flows).toHaveLength(2)
+    expect(flows.at(-1)?.label).toContain('2 of 4 reported flows shown')
+    // The bound itself is unchanged — only whether its effect is visible.
+    expect(flows[0]?.label).not.toContain('reported flows shown')
+  })
+
+  test('the related locations an alert could not carry are stated too', () => {
+    // `MAX_RELATED_LOCATIONS_PER_ALERT` was a bare `.slice` beside a sibling cut
+    // that labels itself. Related locations are the OTHER places the same defect
+    // reaches, so a reviewer reading six of fourteen is reading a sample and had no
+    // way to know it.
+    const result = normalize(
+      logWith({
+        results: [
+          {
+            ruleId: 'r1',
+            message: { text: 'x' },
+            locations: [locationAt('src/a.ts', 1)],
+            relatedLocations: Array.from({ length: 14 }, (_unused, index) => ({
+              ...locationAt('src/a.ts', index + 1),
+              message: { text: `Also reaches line ${index + 1}.` }
+            }))
+          }
+        ]
+      })
+    )
+    const related = result.alerts[0]?.relatedLocations ?? []
+
+    expect(related).toHaveLength(6)
+    expect(related.at(-1)?.message).toContain('Also reaches line 6.')
+    expect(related.at(-1)?.message).toContain('6 of 14 related locations shown')
+    expect(related[0]?.message).not.toContain('related locations shown')
+  })
+
+  test('a cut disclosure survives a message that fills the whole field', () => {
+    // The notice is appended AFTER redaction and after the field's own bound, so it
+    // cannot be the part that gets sliced off. Redaction can make a message longer
+    // than the text it replaced, which is why the order is not academic.
+    const result = normalizeSarifLog({
+      log: SarifLogSchema.parse(
+        logWith({
+          results: [
+            {
+              ruleId: 'r1',
+              message: { text: 'x' },
+              locations: [locationAt('src/a.ts', 1)],
+              relatedLocations: Array.from({ length: 8 }, (_unused, index) => ({
+                ...locationAt('src/a.ts', index + 1),
+                message: { text: 'y'.repeat(500) }
+              }))
+            }
+          ]
+        })
+      ),
+      artifactPath: 'reports/analyzer.sarif.json',
+      artifactContentHash: 'f'.repeat(64),
+      resolvePath: (uri) => (uri.startsWith('src/') ? uri : undefined),
+      // A redactor that LENGTHENS what it replaces, as the real one does.
+      redact: (value) => value.replaceAll('y', 'yy')
+    })
+    const last = result.alerts[0]?.relatedLocations.at(-1)
+
+    expect(last?.message).toContain('6 of 8 related locations shown')
+    expect(last?.message.length).toBeLessThanOrEqual(300)
+  })
+
   test('a result with no message text states that instead of describing a defect', () => {
     const result = normalize(
       logWith({

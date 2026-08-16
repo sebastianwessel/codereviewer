@@ -10,6 +10,7 @@ import {
   createDigestSummarizer,
   createModelSummarizer,
   runContextIngestion,
+  type ChangeIntentBrief,
   type ContextIngestionResult,
   type ContextSummarizer
 } from '../../../context-ingestion/index.js'
@@ -108,6 +109,39 @@ const warningsForBoundedProviders = (
         : [])
     ]
   })
+
+// The third bound on the same path, and until now the only one that was mute.
+//
+// The two warnings above disclose what the PROVIDERS dropped and cut. What neither
+// covers is the summarizer's own total cap, `contextSources.summary.maxBytes`,
+// which defaults to 4 000 bytes — one medium Markdown file, against a
+// `changed-files` provider that defaults to `include: ['**/*.md']`, so it binds on
+// an ordinary change rather than an exotic one. The digest keeps whole fragments in
+// gather order, truncates the first that overflows, and DROPS every fragment after
+// it; the model summarizer cuts its input the same way and cuts its own output at
+// the same cap. In every one of those cases the reviewer is handed the beginning of
+// the change intent and nothing marks it as a beginning.
+//
+// Driven by `cutBySummaryCap`, not by `brief.truncated`: the latter is also true
+// when a provider had already cut a body at `maxFileBytes`, which the warning above
+// reports and names the right cap for. One warning per cause, each naming the
+// setting that relieves it.
+//
+// Silent when the cap did not bind, like its siblings: a warning that fires on
+// every run is one nobody reads.
+const warningsForCutBrief = (input: {
+  readonly brief: ChangeIntentBrief | undefined
+  readonly gatheredFragmentCount: number
+  readonly maxBytes: number
+}): readonly string[] => {
+  if (input.brief?.cutBySummaryCap !== true) {
+    return []
+  }
+
+  return [
+    `External change-intent brief was cut at the contextSources.summary.maxBytes cap of ${input.maxBytes} bytes; it carries ${input.brief.origins.length} of ${input.gatheredFragmentCount} gathered sources and the review sees the beginning of the intent, not all of it. Raise contextSources.summary.maxBytes if the intent is stated further down.`
+  ]
+}
 
 // Why the run fell back to the deterministic digest instead of the requested
 // model summarizer. Absent (not just "false") whenever the digest was the
@@ -431,7 +465,12 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...providerWarnings,
     // Deliberately not folded into `providerWarnings`: `unusedProviders` counts
     // providers that gave nothing, and a bounded provider gave something.
-    ...warningsForBoundedProviders(result.providerMetrics)
+    ...warningsForBoundedProviders(result.providerMetrics),
+    ...warningsForCutBrief({
+      brief: result.brief,
+      gatheredFragmentCount: result.fragmentCount,
+      maxBytes: contextSources.summary.maxBytes
+    })
   ]
 
   // What the summarizer was handed, measured before it ran. Spec 11 requires it

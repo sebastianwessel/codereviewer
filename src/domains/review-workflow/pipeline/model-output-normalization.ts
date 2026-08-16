@@ -16,6 +16,7 @@
 // optional field must not discard a whole real finding.
 
 import { CandidateFindingSchema } from '../../admission/index.js'
+import { truncateForContract } from '../../../shared/text/truncate.js'
 
 // Normalize a model-authored category/severity string to a comparison key:
 // lowercase, non-alphanumerics collapsed to single dashes, no leading/trailing
@@ -264,7 +265,39 @@ export const normalizeModelLineValue = (value: unknown): unknown => {
 export const normalizeModelEvidenceIds = (value: unknown): unknown =>
   typeof value === 'string' ? [value] : value
 
+/**
+ * Cut model-authored prose to a contract bound, MARKED.
+ *
+ * Routed through the shared `truncateForContract`, which exists for exactly this
+ * and documents why: an unmarked cut reads as a complete statement that happens to
+ * end abruptly, and every consumer of these fields is a reader who cannot tell.
+ * A finding `description` cut at 3 000 characters is a defect explanation whose
+ * conclusion is gone with nothing saying so; a `rationaleSummary` cut at 1 200 is
+ * the reason a finding was suppressed. The mark is spent out of the destination's
+ * own budget, so the result still satisfies the field's `.max(n)`.
+ *
+ * Non-strings pass through untouched: the Zod schema behind each preprocessor is
+ * what rejects them, and coercing here would hide a wrong-typed field.
+ */
 export const truncateModelString = (value: unknown, maxLength: number): unknown =>
+  typeof value === 'string' ? truncateForContract(value, maxLength) : value
+
+/**
+ * The same cut, deliberately UNMARKED, for a verbatim quote.
+ *
+ * The one caller is `ModelFindingCitationSchema.quote`, and the mark would cost it
+ * the thing it exists for. A citation is verified deterministically by looking for
+ * the quote inside the cited source line (`discovery/citation-evidence.ts`), and an
+ * unverified citation mints no evidence at all. A quote cut at 300 characters is
+ * still a PREFIX of the source line and still verifies; the same quote with `…`
+ * glued on matches nothing, so appending the mark would silently delete the
+ * evidence of every finding whose cited line is long.
+ *
+ * That trade is only acceptable because a quote is not prose: nobody reads it as a
+ * statement that ends, and the finding's own text — which IS marked — is where the
+ * argument lives.
+ */
+export const truncateModelQuote = (value: unknown, maxLength: number): unknown =>
   typeof value === 'string' && value.length > maxLength
     ? value.slice(0, maxLength)
     : value

@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { ChangeImpactReferenceReportSchema } from '../../src/domains/change-impact/impact-report.js'
+import {
+  IntentFulfilmentReportSchema,
+  ObligationStatusSchema,
+  type ObligationStatus
+} from '../../src/domains/intent-fulfilment/index.js'
+import {
+  BaselineStatusSchema,
+  ReporterEligibilitySchema,
+  ReviewReportSchema
+} from '../../src/shared/contracts/index.js'
 import {
   digestImpactReport,
   digestIntentReport,
+  digestReadModels,
   digestReviewReport,
   ReportShapeError
 } from './report-digest.js'
@@ -395,4 +407,252 @@ describe('digestImpactReport', () => {
       referenceCount: 1
     })
   })
+})
+
+// A finding as the fixture writes it, with one field replaced by a value the
+// producer's contract does not admit. The fixtures themselves cannot carry such a
+// value — `fixtures.ts` parses each one through the producer's own schema on
+// import — which is precisely the half of the problem those imports already close.
+const reviewReportWithFindingField = (
+  field: 'reporterEligibility' | 'baselineStatus',
+  value: string
+): unknown => ({
+  ...reviewReportFixture,
+  admittedFindings: [
+    { ...reviewReportFixture.admittedFindings[0]!, [field]: value },
+    ...reviewReportFixture.admittedFindings.slice(1)
+  ]
+})
+
+const intentReportWithObligationStatuses = (
+  statuses: readonly string[]
+): unknown => ({
+  ...intentReportFixture,
+  obligations: statuses.map((status, index) => ({
+    id: `o${index + 1}`,
+    source: {
+      origin: 'inbox:pull-request/42',
+      line: index + 1,
+      text: `Obligation ${index + 1}`
+    },
+    statement: `Obligation ${index + 1}`,
+    status
+  }))
+})
+
+// How the comment treats each obligation status. `unevidenced` is the list a
+// reviewer reads as "nothing in this change does these", so a status landing on it
+// is a claim about the change, and a status kept off it is a decision that a claim
+// would be false or unactionable.
+//
+// A status added to `ObligationStatusSchema` and not classified here fails this
+// test in the commit that adds it. Before the digest imported the vocabulary it
+// could not: a new status parsed as a plain string, fell through both exclusions
+// below, and joined the outstanding list on every pull request — which is exactly
+// the false-alarm mode `not-contradicted` was introduced to remove.
+const OBLIGATION_STATUS_TREATMENT: Readonly<
+  Record<ObligationStatus, 'listed-as-unevidenced' | 'not-listed'>
+> = {
+  // The change does what the obligation asks and cites the lines that do it.
+  evidenced: 'not-listed',
+  'not-evidenced': 'listed-as-unevidenced',
+  // A prohibition the change never went against. It produces no citation by its
+  // nature, so listing it would put an obligation nobody can act on in front of a
+  // reviewer on every run.
+  'not-contradicted': 'not-listed',
+  // The material did not settle it, which is a real answer and one a human still
+  // has to look at.
+  undetermined: 'listed-as-unevidenced'
+}
+
+describe('the digest reads its producers closed vocabularies', () => {
+  it('refuses a reporter eligibility the finding contract does not define', () => {
+    expect(() =>
+      digestReviewReport(
+        json(reviewReportWithFindingField('reporterEligibility', 'needs-triage'))
+      )
+    ).toThrow(ReportShapeError)
+  })
+
+  it('refuses a baseline status the finding contract does not define', () => {
+    expect(() =>
+      digestReviewReport(
+        json(reviewReportWithFindingField('baselineStatus', 'reopened'))
+      )
+    ).toThrow(ReportShapeError)
+  })
+
+  it('refuses an obligation status the intent contract does not define', () => {
+    expect(() =>
+      digestIntentReport(json(intentReportWithObligationStatuses(['deferred'])))
+    ).toThrow(ReportShapeError)
+  })
+
+  // Refusing what the producer cannot write is only half of it: every value the
+  // producer CAN write has to be readable, or pinning the vocabulary would trade a
+  // silent miscount for a comment that refuses to render at all.
+  it('reads every eligibility and baseline status the contract admits', () => {
+    for (const eligibility of ReporterEligibilitySchema.options) {
+      expect(() =>
+        digestReviewReport(
+          json(reviewReportWithFindingField('reporterEligibility', eligibility))
+        )
+      ).not.toThrow()
+    }
+
+    for (const baselineStatus of BaselineStatusSchema.options) {
+      expect(() =>
+        digestReviewReport(
+          json(reviewReportWithFindingField('baselineStatus', baselineStatus))
+        )
+      ).not.toThrow()
+    }
+  })
+
+  it('classifies every obligation status the intent contract admits', () => {
+    const classified = new Set(Object.keys(OBLIGATION_STATUS_TREATMENT))
+
+    expect(
+      ObligationStatusSchema.options.filter((status) => !classified.has(status))
+    ).toEqual([])
+    // The mirror failure: an entry outliving the status it names would leave the
+    // table looking complete while the new spelling went unclassified.
+    const admitted = new Set<string>(ObligationStatusSchema.options)
+    expect(
+      Object.keys(OBLIGATION_STATUS_TREATMENT).filter(
+        (status) => !admitted.has(status)
+      )
+    ).toEqual([])
+  })
+
+  it('lists exactly the statuses classified as unevidenced', () => {
+    const statuses = ObligationStatusSchema.options
+    const digest = digestIntentReport(
+      json(intentReportWithObligationStatuses(statuses))
+    )
+    const listed = new Set(digest.unevidenced.map((obligation) => obligation.status))
+
+    expect([...statuses].filter((status) => listed.has(status)).sort()).toEqual(
+      [...statuses]
+        .filter(
+          (status) =>
+            OBLIGATION_STATUS_TREATMENT[status] === 'listed-as-unevidenced'
+        )
+        .sort()
+    )
+  })
+})
+
+// Fields each producer writes that the digest deliberately does not read.
+//
+// The rule is `eval-comparison-view.test.ts`'s, for the same reason and against
+// the same failure: a hand-maintained narrow view has no failure mode when the
+// producer GAINS a field. It parses, it renders, and the new fact is simply never
+// in the comment — which is how `changedSymbols` stayed unread for months while
+// every test here passed. Refusing an unreadable shape catches a field that MOVED;
+// only this list catches one that arrived.
+//
+// Adding a key here is a decision, not a formality: state what the comment loses
+// by not rendering it. If the answer is "nothing a reader needs", it belongs here;
+// if it is "we never got to it", model it instead.
+const REVIEW_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
+  // The evidence records every finding cites. The comment shows a finding's
+  // location and what refutation could not do to it, and links to the artifacts
+  // for the rest; inlining evidence bodies would put untrusted model-adjacent text
+  // into a pull request comment for no decision a reader makes there.
+  'evidence',
+  // The test-adequacy signal. It has no section in this comment (it is rendered by
+  // the markdown report), and adding one is a product decision, not a read.
+  'testAdequacy',
+  // Verification cross-witnesses of general-review findings. A confidence signal
+  // that never changes a finding's severity, admission or the gate, and the comment
+  // states no per-finding confidence.
+  'corroborations',
+  // The list of artifacts the run wrote. `pipeline.ts` reads the run directory it
+  // spawned by artifact NAME, so this list is bookkeeping the comment never
+  // resolves.
+  'artifacts'
+]
+
+const INTENT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
+  // When the report was written. The comment is about the run it was posted from,
+  // and a timestamp beside it would only invite reading a stale comment as fresh.
+  'generatedAt',
+  // The refs and counts the lane ran over. The pull request already states its own
+  // base and head, above the comment.
+  'scope',
+  // The changed files no stated obligation covers. The COUNT is rendered, from
+  // `summary.extraScopeFileCount`; the file list itself is left to the artifact
+  // rather than spent on comment length.
+  'extraScope',
+  // Tokens and cost for this lane. The comment publishes one run-level cost, from
+  // the review report.
+  'usage'
+]
+
+const IMPACT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
+  // THE ADJUDICATED LAYER, and the one entry here that is a live product question
+  // rather than a settled decision. The comment renders the REFERENCE table only —
+  // what changed and which files reach it — which is the layer spec 22 calls the
+  // floor and the falsifier. Publishing adjudicated findings in a pull-request
+  // comment would put a second, model-authored finding list beside the review's
+  // own, and nothing has decided how the two are to be read together.
+  'impactFindings',
+  // Why adjudication produced what it did. It qualifies `impactFindings`, so it is
+  // unreadable without them and follows them here.
+  'adjudicationStatus',
+  'generatedAt',
+  'scope',
+  'usage'
+]
+
+// One producer contract, one read model, and the two lists that must account for
+// every key the producer writes.
+const readModelCoverage = [
+  {
+    label: 'review report',
+    producer: ReviewReportSchema,
+    readModel: digestReadModels.review,
+    notRead: REVIEW_FIELDS_DELIBERATELY_NOT_READ
+  },
+  {
+    label: 'intent report',
+    producer: IntentFulfilmentReportSchema,
+    readModel: digestReadModels.intent,
+    notRead: INTENT_FIELDS_DELIBERATELY_NOT_READ
+  },
+  {
+    label: 'impact report',
+    producer: ChangeImpactReferenceReportSchema,
+    readModel: digestReadModels.impact,
+    notRead: IMPACT_FIELDS_DELIBERATELY_NOT_READ
+  }
+] as const
+
+// The guard is on the TOP LEVEL of each report, which is where the shape change
+// that motivated it happened (`symbols` → `changedSymbols`/`impactedFiles`) and
+// where a producer change removes or adds a whole SECTION of the comment. It does
+// not enumerate nested shapes; the refusal rule in `report-digest.ts` is what
+// covers a nested field that moves.
+describe('the digest accounts for every field its producers write', () => {
+  for (const { label, producer, readModel, notRead } of readModelCoverage) {
+    it(`reads or explicitly declines every ${label} field`, () => {
+      const read = new Set(Object.keys(readModel.shape))
+      const declined = new Set(notRead)
+      const unaccounted = Object.keys(producer.shape).filter(
+        (field) => !read.has(field) && !declined.has(field)
+      )
+
+      expect(unaccounted).toEqual([])
+    })
+
+    it(`declines nothing the ${label} no longer carries`, () => {
+      const produced = new Set(Object.keys(producer.shape))
+      const stale = [...Object.keys(readModel.shape), ...notRead].filter(
+        (field) => !produced.has(field)
+      )
+
+      expect(stale).toEqual([])
+    })
+  }
 })

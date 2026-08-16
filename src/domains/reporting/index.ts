@@ -1,5 +1,7 @@
 export {
   renderJsonReport,
+  REVIEW_JSON_ARTIFACT_NAME,
+  reviewCommentsArtifactName,
   writeReportingArtifacts,
   type ReportArtifactWriter,
   type WrittenReportArtifact

@@ -1,5 +1,25 @@
 import type { EvidenceRecord } from '../../../shared/contracts/index.js'
 
+// THE ONE LIST. Every other statement of "which languages does this engine
+// support" is derived from this union or checked against it, and none of them may
+// be a fourth independent copy:
+//
+// - the extension table (`deterministic-signal-utils.ts`) is checked against it by
+//   `EverySignalLanguageCovered` below;
+// - the adapter registry (`deterministic-signal-registry.ts`) is a mapped type over
+//   it, so it is checked structurally;
+// - the fact-extractor dispatch (`polyglot/polyglot-signal-extractor.ts`) is a
+//   `Record` over it, so it is checked structurally;
+// - the ast-grep grammar registration (`ast-grep/ast-grep-parser.ts`) is a `Record`
+//   over it minus the two grammars ast-grep ships built in.
+//
+// The reason this is written down rather than left to be rediscovered: the
+// extractor dispatch used to be an if-chain that ENDED in an unguarded
+// `return extractJavaFacts(...)`. An eighth member added to this union would have
+// compiled, parsed with its own grammar, and then been read by Java's extractor —
+// producing confidently wrong facts for a file that is not Java, rather than no
+// facts or an error. That is the silent-optimism failure this repository keeps
+// re-finding, and adding a language is exactly the moment it would fire.
 export type SupportedSignalLanguage =
   | 'typescript'
   | 'javascript'
@@ -8,6 +28,26 @@ export type SupportedSignalLanguage =
   | 'rust'
   | 'java'
   | 'ruby'
+
+/**
+ * Compile-time assertion that some other list covers every
+ * `SupportedSignalLanguage`.
+ *
+ * Instantiate it with what that list LEAVES OUT — `Exclude<SupportedSignalLanguage,
+ * …the ids the list actually contains…>`. The instantiation compiles only when the
+ * leftover is `never`, and when it is not, the compiler error names the language
+ * that was left out rather than reporting a generic mismatch.
+ *
+ * Needed only where the list's shape hides its coverage from the type system. A
+ * `Record<SupportedSignalLanguage, …>` is already checked by construction and must
+ * NOT be wrapped in this; an array of `{ id }` objects is not, because nothing in
+ * an array type requires a particular `id` to be present.
+ *
+ * Exported rather than left as a file-local alias only because `noUnusedLocals`
+ * reports an unreferenced local type, and the assertion's whole value is that it is
+ * never referenced again.
+ */
+export type EverySignalLanguageCovered<TUncovered extends never> = TUncovered
 
 export type SupportSignalFile = {
   readonly path: string

@@ -21,6 +21,7 @@
 // of a comment body for deduplication, and spec 30 requires reusing it rather than
 // writing a second one.
 import { z } from 'zod'
+import { isArtifactOnlyFinding } from '../../src/shared/contracts/index.js'
 import { extractFindingMarkers } from './inline-review.js'
 import type { FindingDigest } from './report-digest.js'
 
@@ -137,10 +138,12 @@ export const resolveReviewConversationOutcomes = (input: {
 
     return {
       fingerprint,
-      status:
-        finding.reporterEligibility === 'artifact-only'
-          ? ('undecided' as const)
-          : ('held' as const),
+      // The engine's own predicate: `undecided` must mean exactly what the
+      // report artifacts and the summary comment mean by an open question, or a
+      // reply would be answered with a status no other surface agrees with.
+      status: isArtifactOnlyFinding(finding)
+        ? ('undecided' as const)
+        : ('held' as const),
       finding
     }
   })

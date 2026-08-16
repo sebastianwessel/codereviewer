@@ -4,6 +4,7 @@ import { ObligationStatusSchema } from '../../intent-fulfilment/index.js'
 import { IntentArmSchema } from './intent-corpus.schema.js'
 import { INTENT_METRICS_VERSION } from './intent-metrics-versions.js'
 import {
+  ExpectationOutcomeSchema,
   intentUnmeasuredReasons,
   type IntentScore
 } from './intent-eval-scoring.js'
@@ -74,12 +75,6 @@ const ArmMetricsSchema = z.strictObject({
   // denominator, and a fixed count rather than the run's own obligation count.
   humanObligationCount: z.int().min(0)
 })
-
-const ExpectationOutcomeSchema = z.enum([
-  'reported-outstanding',
-  'false-satisfied',
-  'not-reported'
-])
 
 const ScoredExpectationSchema = z.strictObject({
   caseId: z.string().min(1),

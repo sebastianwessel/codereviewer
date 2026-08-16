@@ -120,8 +120,15 @@ describe('model provider call adapters', () => {
     const normalized = normalizeFindingRefutationResult(parsed)
 
     expect(normalized.verdict).toBe('refuted')
-    expect(normalized.rationaleSummary).toHaveLength(1200)
-    expect(normalized.fixSummary).toHaveLength(1200)
+    // Cut to the contract bound and MARKED. The exact length is 1200 or one less —
+    // the mark is reserved inside the bound and the text before it is trimmed of
+    // trailing space — so the bound is asserted as a bound and the disclosure is
+    // asserted directly. A reader of a suppressed finding's reason must be able to
+    // see that the reason does not simply end.
+    expect(normalized.rationaleSummary.length).toBeLessThanOrEqual(1200)
+    expect(normalized.rationaleSummary.endsWith('…')).toBe(true)
+    expect(normalized.fixSummary?.length ?? 0).toBeLessThanOrEqual(1200)
+    expect(normalized.fixSummary?.endsWith('…')).toBe(true)
   })
 
   test('ignores the retired suggestedFix spelling', () => {

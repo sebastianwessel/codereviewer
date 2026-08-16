@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type {
   IntentFulfilmentReport,
   Obligation,
@@ -146,17 +147,31 @@ const rate = (matched: number, total: number, reason: string): IntentRate =>
     ? { status: 'not-measured', reason }
     : { status: 'measured', matched, total, rate: matched / total }
 
-/** How the run treated one enumerated outstanding obligation. */
-export type ExpectationOutcome =
+/**
+ * How the run treated one enumerated outstanding obligation.
+ *
+ * THE SCHEMA IS THE DEFINITION and the union is inferred from it, on the rule
+ * `ObligationStatusSchema` already follows for the vocabulary this module reads
+ * beside this one (`intent-fulfilment-report.ts`). This was a hand-written
+ * union here and a `z.enum` in `intent-eval-report.ts`, which is two definitions of
+ * one closed vocabulary: an outcome added to the union type-checks at every
+ * producer and then fails to VALIDATE at the end of a scored run, after the model
+ * calls have been paid for. It is declared here rather than in the report because
+ * the report already imports this module and the scorer is what mints the value.
+ */
+export const ExpectationOutcomeSchema = z.enum([
   // At least one obligation citing this clause stayed on the list a human reads.
-  | 'reported-outstanding'
+  'reported-outstanding',
   // Obligations cited this clause and EVERY one of them was off the list. This is
   // the claim spec 23 calls the expensive error.
-  | 'false-satisfied'
+  'false-satisfied',
   // No obligation cited this clause at all. A recall miss, and deliberately NOT a
   // false-satisfied claim: the run asserted nothing about it, so nobody was
   // invited to stop looking.
-  | 'not-reported'
+  'not-reported'
+])
+
+export type ExpectationOutcome = z.infer<typeof ExpectationOutcomeSchema>
 
 export type ScoredIntentExpectation = {
   readonly caseId: string

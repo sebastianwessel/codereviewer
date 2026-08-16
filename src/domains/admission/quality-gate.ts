@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isActionableFinding } from '../../shared/contracts/index.js'
 import type {
   AdmittedFinding,
   QualityGateResult,
@@ -63,9 +64,7 @@ export const evaluateQualityGate = (
   const baselineFilteringApplied = input.thresholds.failOnNewOnly === true
   // `unknown` (baseline configured but missing) is treated as new so a missing
   // baseline never silently suppresses a gate failure.
-  const gateEligibleFindings = input.admittedFindings.filter(
-    (finding) => finding.reporterEligibility !== 'artifact-only'
-  )
+  const gateEligibleFindings = input.admittedFindings.filter(isActionableFinding)
   const relevantFindings = baselineFilteringApplied
     ? gateEligibleFindings.filter(
         (finding) =>

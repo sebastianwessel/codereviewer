@@ -12,6 +12,10 @@
 // untrusted text later in the body cannot forge a marker because `sanitizeText`
 // escapes every `<`.
 import {
+  isActionableFinding,
+  isArtifactOnlyFinding
+} from '../../src/shared/contracts/index.js'
+import {
   adjustedPrecisionInTwenty,
   NO_MODEL_SEARCH,
   NOTHING_PROVED,
@@ -107,11 +111,13 @@ const MAX_WHY_SURVIVED = 400
 // mixed into the actionable findings list — that read it as a proved defect —
 // and must never silently vanish either, which is what happened before this
 // field was carried into the digest at all.
-const isUnresolvedFinding = (finding: FindingDigest): boolean =>
-  finding.reporterEligibility === 'artifact-only'
-
+//
+// The split is the engine's own predicate, not a copy of it: the two lists this
+// comment publishes have to hold exactly what the quality gate and the report
+// artifacts hold, and a locally spelled-out `!== 'artifact-only'` is a second
+// definition that a value added to the vocabulary can silently divide.
 const actionableFindings = (review: ReviewDigest): readonly FindingDigest[] =>
-  review.findings.filter((finding) => !isUnresolvedFinding(finding))
+  review.findings.filter(isActionableFinding)
 
 // Whether this comment may say anything about a model search. Only an explicit
 // `not-performed` withholds the rates: a report that does not carry the field has
@@ -143,7 +149,7 @@ const hasNoSearchToDescribe = (input: SummaryCommentInput): boolean =>
   input.review === undefined
 
 const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
-  review.findings.filter(isUnresolvedFinding)
+  review.findings.filter(isArtifactOnlyFinding)
 
 // `report-digest.ts` composes `whySurvived` as `<verdict>: <summary>`, and the
 // verdict is the refuter's closed vocabulary — `needs-more-evidence:` in front of

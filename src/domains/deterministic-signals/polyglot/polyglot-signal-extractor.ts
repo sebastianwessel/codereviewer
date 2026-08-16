@@ -47,33 +47,64 @@ const astParseEvidence = (
     redactionApplied: true
   })
 
+type SupportSignalFactExtractor = (
+  path: string,
+  root: AstNode,
+  contentHash: string
+) => readonly SupportSignalFact[]
+
+// WHICH EXTRACTOR READS WHICH GRAMMAR. A `Record` over the language union, not an
+// if-chain, and the difference is the whole point of this declaration.
+//
+// This was a chain of `if (language === …)` tests that ENDED in a bare
+// `return extractJavaFacts(path, root, contentHash)`. Java was not chosen there; it
+// was simply last, so every language without a branch inherited it. An eighth
+// member added to `SupportedSignalLanguage` would have type-checked, parsed with
+// its own grammar, and then had that tree read by Java's extractor — which would
+// find Java's node kinds absent and emit a plausible, small, WRONG set of facts.
+// Not an error, not silence: confident wrong facts, attributed to the new language,
+// flowing into changed-symbol resolution and the review packet. That is the
+// silent-optimism class this repository keeps re-finding, armed to fire on the one
+// change most likely to trip it.
+//
+// As a `Record` keyed by the union, `satisfies` refuses to compile until the new
+// language has an extractor, and there is no last branch to fall into.
+const factExtractorsByLanguage = {
+  // ECMAScript is one extractor serving two languages, so it takes the language as
+  // an argument; every other extractor serves exactly one and does not need it.
+  typescript: (path, root, contentHash) =>
+    extractEcmascriptFacts('typescript', path, root, contentHash),
+  javascript: (path, root, contentHash) =>
+    extractEcmascriptFacts('javascript', path, root, contentHash),
+  python: extractPythonFacts,
+  go: extractGoFacts,
+  rust: extractRustFacts,
+  java: extractJavaFacts,
+  ruby: extractRubyFacts
+} satisfies Record<SupportedSignalLanguage, SupportSignalFactExtractor>
+
 const extractFacts = (
   language: PolyglotLanguage,
   path: string,
   root: AstNode,
   contentHash: string
 ): readonly SupportSignalFact[] => {
-  if (language === 'typescript' || language === 'javascript') {
-    return extractEcmascriptFacts(language, path, root, contentHash)
+  // Typed through `| undefined` deliberately. The record is exhaustive over the
+  // union, so this branch is unreachable for any value the type system vouched
+  // for — and unreachable is not the same as impossible. A language string that
+  // arrives from parsed configuration, a fixture, or a cast has never been checked
+  // by anything, and the branch it would otherwise fall into is what produced the
+  // wrong-facts defect above. It fails loudly instead.
+  const extractor: SupportSignalFactExtractor | undefined =
+    factExtractorsByLanguage[language]
+
+  if (extractor === undefined) {
+    throw new TypeError(
+      `No support signal fact extractor is registered for language "${language}".`
+    )
   }
 
-  if (language === 'python') {
-    return extractPythonFacts(path, root, contentHash)
-  }
-
-  if (language === 'go') {
-    return extractGoFacts(path, root, contentHash)
-  }
-
-  if (language === 'rust') {
-    return extractRustFacts(path, root, contentHash)
-  }
-
-  if (language === 'ruby') {
-    return extractRubyFacts(path, root, contentHash)
-  }
-
-  return extractJavaFacts(path, root, contentHash)
+  return extractor(path, root, contentHash)
 }
 
 export const extractPolyglotSignals = (

@@ -23,6 +23,7 @@ import {
   normalizeModelEvidenceIds,
   normalizeModelLineValue,
   resolveModelCategory,
+  truncateModelQuote,
   truncateModelString
 } from './model-output-normalization.js'
 
@@ -160,8 +161,13 @@ export const ModelFindingCitationSchema = z.preprocess(
     // quote one character over the cap is still a real quote, and a citation must
     // fail toward "absent" only when it cannot be trusted at all, never on a
     // length technicality.
+    //
+    // The ONLY unmarked cut in this file, and the mark is what would break it: the
+    // cut quote is still a prefix of the source line and still verifies, while `…`
+    // appended to it matches nothing and would cost the finding its evidence. See
+    // `truncateModelQuote`.
     quote: z.preprocess(
-      (value) => truncateModelString(value, 300),
+      (value) => truncateModelQuote(value, 300),
       z.string().min(1).max(300)
     )
   })

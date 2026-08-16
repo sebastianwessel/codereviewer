@@ -1,3 +1,4 @@
+import { isActionableFinding } from '../../shared/contracts/index.js'
 import type {
   AdmittedFinding,
   FindingFingerprint,
@@ -503,9 +504,7 @@ export const renderSarifReport = (
 ): string => {
   const report: ReviewReport = validateReviewReport(input)
   const eligibleFindings = sortAdmittedFindings(
-    report.admittedFindings.filter(
-      (finding) => finding.reporterEligibility !== 'artifact-only'
-    )
+    report.admittedFindings.filter(isActionableFinding)
   )
   const includedFindings = eligibleFindings.slice(0, options.maxResults)
   const withheld = eligibleFindings.length - includedFindings.length

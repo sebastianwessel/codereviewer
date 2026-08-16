@@ -30,12 +30,15 @@ export {
   type ClaimAgentRunner
 } from './verification-flow.js'
 export {
+  ApplyCheckOutcomeSchema,
   CLAIM_PROVIDER_FAILED_WARNING_PREFIX,
+  FixDeclinedReasonSchema,
   ModelVerdictSchema,
   VerificationReportSchema,
   emptyVerificationReport,
   runWarningsForVerificationReport,
   type ApplyCheckOutcome,
+  type FixDeclinedReason,
   type ClaimObservation,
   type FixOutcome,
   type ModelVerdict,

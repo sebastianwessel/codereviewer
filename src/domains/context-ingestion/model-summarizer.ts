@@ -50,6 +50,7 @@ const fragmentsToPrompt = (
   readonly prompt: string
   readonly origins: readonly string[]
   readonly truncated: boolean
+  readonly cutBySummaryCap: boolean
 } => {
   // Roughly four times the output cap of raw input to work from, bounded so a
   // large thread cannot blow the request budget.
@@ -59,6 +60,10 @@ const fragmentsToPrompt = (
   const origins: string[] = []
   let usedBytes = 0
   let truncated = false
+  // The input budget is derived from `contextSources.summary.maxBytes`, so a cut
+  // here IS that cap binding — reported apart from a provider's own per-file cut for
+  // the reason given on `ChangeIntentBrief.cutBySummaryCap`.
+  let cutBySummaryCap = false
 
   for (const fragment of fragments) {
     const remaining =
@@ -66,6 +71,7 @@ const fragmentsToPrompt = (
 
     if (remaining <= 0) {
       truncated = true
+      cutBySummaryCap = true
       break
     }
 
@@ -75,6 +81,7 @@ const fragmentsToPrompt = (
 
     if (fitted.length === 0) {
       truncated = true
+      cutBySummaryCap = true
       break
     }
 
@@ -95,11 +102,12 @@ const fragmentsToPrompt = (
 
     if (fitted.length < section.length) {
       truncated = true
+      cutBySummaryCap = true
       break
     }
   }
 
-  return { prompt: sections.join('\n\n'), origins, truncated }
+  return { prompt: sections.join('\n\n'), origins, truncated, cutBySummaryCap }
 }
 
 /**
@@ -159,6 +167,9 @@ export const createModelSummarizer = (input: {
 
     const brief = String(response.object.brief).trim()
     const text = truncateToUtf8Bytes(brief, summarizeInput.maxBytes)
+    // Both ends of the same cap: the input cut above, and the model's own brief
+    // coming back longer than the output cap and being cut here.
+    const cutBySummaryCap = prepared.cutBySummaryCap || text.length < brief.length
 
     return {
       text,
@@ -169,6 +180,7 @@ export const createModelSummarizer = (input: {
       // longer than the output cap and was cut here. Either way the brief is not
       // the whole of what it claims to summarize.
       truncated: prepared.truncated || text.length < brief.length,
+      ...(cutBySummaryCap ? { cutBySummaryCap } : {}),
       mode: 'model'
     }
   }

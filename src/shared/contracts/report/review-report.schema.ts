@@ -184,6 +184,18 @@ export const DiscoveryTelemetrySchema = z.strictObject({
   // apart from transient retry on purpose — an oversize split and a rate-limit retry
   // have different causes and different meanings.
   contextOverflowSplitCount: z.int().min(0),
+  // Spec 28: how many times a refused packet was answered by HALVING the retriever's
+  // per-read byte allowance instead of by splitting the task. Its sibling above was
+  // the only visible response to an overflow, and this one is the response that
+  // happens FIRST — so a run that narrowed its own reads repeatedly, down to the
+  // 4 000-byte floor, reported `contextOverflowSplitCount: 0` and read exactly like
+  // a run that never strained. The reduction outlives the call that caused it: it
+  // mutates the single run-wide retriever, so every later task reads less too.
+  //
+  // Optional, and absent means NOT RECORDED rather than zero — the same distinction
+  // `discovery` itself carries in `docs/06-reference/artifacts.md`. A report written
+  // before this counter existed must not be read as one that never reduced.
+  readBudgetReductionCount: z.int().min(0).optional(),
   // Spec 05 merge counters. Both are needed: "the merge is not firing" (no calls)
   // and "there was nothing to merge" (calls, no groups) are indistinguishable from a
   // candidate count alone, and they have opposite fixes.
@@ -193,7 +205,22 @@ export const DiscoveryTelemetrySchema = z.strictObject({
 })
 
 export const TaskDiscoveryTelemetrySchema = DiscoveryTelemetrySchema.extend({
-  taskId: TaskIdSchema
+  taskId: TaskIdSchema,
+  // Spec 16: whether this task spent its whole cross-file tool-call allowance
+  // (`review.crossFileRetrieval.maxToolCallsPerTask`) — the reviewer stopped
+  // looking because it ran out of lookups, not because it was finished.
+  //
+  // PER TASK and not summed into `totals`, because the allowance is per task: one
+  // exhausted task says the cap bound for that task's files, and adding the flags
+  // up would state a run-wide condition that does not exist.
+  //
+  // Three states, which is why this is an optional boolean rather than a defaulted
+  // one: absent means the task had NO retrieval scope at all (cross-file retrieval
+  // off, or no repository root), and "the reviewer had no lookups to run out of" is
+  // a different fact from "it had them and did not exhaust them". Until this field
+  // existed the only report of it was a `logger.debug` line, dropped twice over —
+  // once by the level and once by the `silent` default.
+  retrievalBudgetExhausted: z.boolean().optional()
 })
 
 export const ReviewDiscoveryReportSchema = z.strictObject({

@@ -40,11 +40,36 @@
 // as far as it is possible to get from a silent empty section on somebody's pull
 // request.
 //
-// Severity is imported rather than restated: it is a CLOSED five-value
-// vocabulary, not a field that gains members the way a report object gains keys,
-// and a local copy would be a second place to edit.
+// EVERY CLOSED VOCABULARY IS IMPORTED rather than restated: severity, reporter
+// eligibility, baseline status and obligation status are enumerations, not fields
+// that gain members the way a report object gains keys, and a local copy would be
+// a second place to edit.
+//
+// Three of them were `z.string()` here, and the gap that left is a different one
+// from the tolerance rule above. A RENAME was already caught — `fixtures.ts` parses
+// every fixture through the producer's own contract on import, so a moved spelling
+// fails the whole suite. An ADDITION was not caught by anything: a value added to
+// one of these enums would parse here as an ordinary string, land on the actionable
+// side of `isActionableFinding` (or on the "nothing evidences this" list, for an
+// obligation status), and be rendered on a pull request as a proved defect or an
+// outstanding obligation, with no test going red. The vocabularies are pinned here,
+// and the two places this file DECIDES something from one of them are covered
+// member by member (see `report-digest.test.ts` and
+// `reporter-eligibility-drift.test.ts`).
 import { z } from 'zod'
-import { SeveritySchema, type Severity } from '../../src/shared/contracts/index.js'
+import {
+  ObligationStatusSchema,
+  type ObligationStatus
+} from '../../src/domains/intent-fulfilment/index.js'
+import {
+  BaselineStatusSchema,
+  isActionableFinding,
+  ReporterEligibilitySchema,
+  SeveritySchema,
+  type BaselineStatus,
+  type ReporterEligibility,
+  type Severity
+} from '../../src/shared/contracts/index.js'
 
 export type { Severity }
 
@@ -161,8 +186,8 @@ const AdmittedFindingSchema = z.object({
   title: z.string(),
   description: z.string(),
   location: LocationSchema,
-  baselineStatus: z.string(),
-  reporterEligibility: z.string(),
+  baselineStatus: BaselineStatusSchema,
+  reporterEligibility: ReporterEligibilitySchema,
   // The link into `refutationResults`. Without it the comment can state that a
   // finding exists but not what was tried against it, which is the difference
   // between a claim a reviewer can check and one they must take on faith.
@@ -246,16 +271,16 @@ export type FindingDigest = {
   readonly description: string
   readonly path: string
   readonly startLine: number
-  readonly baselineStatus: string
+  readonly baselineStatus: BaselineStatus
   /**
-   * `inline` | `summary-only` | `artifact-only`, carried verbatim from
-   * admission. `artifact-only` marks a finding refutation could neither prove
+   * The finding's eligibility, carried verbatim from admission.
+   * `artifact-only` marks a finding refutation could neither prove
    * nor disprove (`needs-more-evidence`): a real suspicion kept as a question
    * for a human rather than dropped. It is excluded from the quality gate, from
    * inline comments, and — by the renderer, not this type — from the actionable
    * findings list.
    */
-  readonly reporterEligibility: string
+  readonly reporterEligibility: ReporterEligibility
   /**
    * What refutation tried against this finding and could not do, in the
    * refuter's own words. Absent when no verdict was recorded against it.
@@ -377,10 +402,9 @@ export const digestReviewReport = (raw: string): ReviewDigest => {
   // rendered findings list itself — they exclude `artifact-only` findings.
   // Otherwise the "N high, M medium" line would count suspicions the run could
   // neither prove nor disprove alongside proved defects, with no way to tell
-  // them apart.
-  const actionableFindings = findings.filter(
-    (finding) => finding.reporterEligibility !== 'artifact-only'
-  )
+  // them apart. The predicate is the engine's own, so this comment counts exactly
+  // the population the quality gate blocked on.
+  const actionableFindings = findings.filter(isActionableFinding)
   const resolvedBaselineEntries = report.resolvedBaselineEntries
   const mergedAwayCount = report.discovery?.totals.mergedAwayCount
 
@@ -434,10 +458,17 @@ const IntentReportSchema = z.object({
     undeterminedCount: z.number().int(),
     extraScopeFileCount: z.number().int()
   }),
+  // The obligation status is PINNED where the report's own status above is left a
+  // plain string, and the difference is again the consequence. The report status
+  // renders as `Status: <it>` in front of the reader, so an added value shows
+  // itself; an obligation status is DECIDED on below — anything that is neither
+  // `evidenced` nor `not-contradicted` is put on the list of obligations nothing
+  // evidences — so an added value would land on that list silently, which is the
+  // failure mode the `not-contradicted` status was introduced to end.
   obligations: z.array(
     z.object({
       statement: z.string(),
-      status: z.string()
+      status: ObligationStatusSchema
     })
   ),
   // The one optional field, because the engine's contract makes it optional: the
@@ -448,7 +479,7 @@ const IntentReportSchema = z.object({
 
 export type IntentObligationDigest = {
   readonly statement: string
-  readonly status: string
+  readonly status: ObligationStatus
 }
 
 export type IntentDigest = {
@@ -638,4 +669,25 @@ export const digestImpactReport = (raw: string): ImpactDigest => {
     warnings: report.warnings
   }
 }
+
+/**
+ * The three read models above, exported for `report-digest.test.ts` alone.
+ *
+ * They are hand-maintained narrow views of three producer contracts, and the
+ * expensive failure of a narrow view is the one that already happened here: the
+ * producer grew `changedSymbols`/`impactedFiles`, this file kept reading
+ * `symbols`, and every pull-request comment rendered an empty Impact section for
+ * months with nothing to report. Refusing an unreadable shape (above) closes the
+ * half of that where the producer's field MOVED; it says nothing about a field
+ * the producer ADDS, which parses fine and is simply never read.
+ *
+ * So the test diffs these shapes against the producers' and requires every
+ * unmodelled key to be listed as deliberately not read, with a reason — the same
+ * guard `eval-comparison-view.test.ts` puts on the comparison read model.
+ */
+export const digestReadModels = {
+  review: ReviewReportSchema,
+  intent: IntentReportSchema,
+  impact: ImpactReportSchema
+} as const
 

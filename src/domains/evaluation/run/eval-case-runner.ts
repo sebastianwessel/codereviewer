@@ -192,7 +192,15 @@ export const runEvalCase = async (
             ? {}
             : { findingJudgment: outcome.findingJudgment }),
           fixProduced: outcome.fixProduced,
-          applyCheck: outcome.applyCheck
+          applyCheck: outcome.applyCheck,
+          // Carried, not dropped: a refused fix and a fix nobody proposed both
+          // report `not-attempted`, and this is the only field that tells them
+          // apart. It feeds no metric — the fix-lane tallies read `applyCheck` and
+          // `findingJudgment` only — so no scored number moves; it makes a saved
+          // report able to answer why an apply-check never ran.
+          ...(outcome.fixDeclinedReason === undefined
+            ? {}
+            : { fixDeclinedReason: outcome.fixDeclinedReason })
         }))
       }
     } catch (error) {

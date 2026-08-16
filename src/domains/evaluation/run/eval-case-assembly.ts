@@ -44,7 +44,7 @@ import {
   diffScopeCountsForCase,
   expectedFindingSummaries,
   findingSummaries,
-  isActionableFinding,
+  hasActionableDetail,
   isKnownProviderErrorStage,
   fixLaneCaseTallies,
   judgeProviderIssuesFromMatchResults,
@@ -187,7 +187,7 @@ const buildMetricCase = (
       input.reviewReport === undefined
         ? 0
         : actionableFindings.filter((finding) =>
-            isActionableFinding(finding, input.reviewReport!)
+            hasActionableDetail(finding, input.reviewReport!)
           ).length,
     falsePositiveCount: input.matchResult.falsePositiveFindingIds.length,
     unlistedRealFindingCount:

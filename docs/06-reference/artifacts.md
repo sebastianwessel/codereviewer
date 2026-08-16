@@ -134,6 +134,8 @@ Both use these fields:
 | `candidateCount` | Candidates surviving collection: post-parse, post-scope, post-cap, post-suppression, before the semantic merge. |
 | `droppedCount`, `suppressedByIdCount`, `suppressedByLocationCount` | Raw findings that never became candidates, separated by cause — a parse failure is a different problem from a duplicate. |
 | `contextOverflowSplitCount` | Times the provider refused a packet and it was halved. Counted apart from transient retry, which has a different cause. |
+| `readBudgetReductionCount` | Times a refused packet was answered by halving the reviewer's per-read byte allowance instead of splitting the task — the response that is tried first. A reduction is not local to the call that caused it: it narrows every later read in the run, including tasks already running, and nothing restores it. Absent means *not recorded*, which is not the same claim as a recorded zero. |
+| `retrievalBudgetExhausted` | **`tasks[]` only.** Whether the task spent its whole cross-file lookup allowance (`review.crossFileRetrieval.maxToolCallsPerTask`) — such a task stopped looking because it ran out of lookups, not because it was finished. Not summed into `totals`, because the allowance is per task. Absent means the task had no retrieval tools at all, which is not the same claim as `false`. |
 | `mergeCallCount`, `mergeGroupCount`, `mergedAwayCount` | Semantic-merge counters. "Not firing" (no calls) and "nothing to merge" (calls, no groups) are indistinguishable from a candidate count alone and have opposite fixes. |
 
 #### `testAdequacy`

@@ -6,6 +6,7 @@ import {
   isReviewRunFailedError,
   runReview as runReviewPipeline
 } from '../../domains/review-workflow/index.js'
+import { REVIEW_JSON_ARTIFACT_NAME } from '../../domains/reporting/index.js'
 import { runWarningsForVerificationReport } from '../../domains/verification/index.js'
 import {
   loggingCliOptions,
@@ -256,7 +257,10 @@ export const runReview = async (
         startedAt: report.run.startedAt,
         completedAt: report.run.completedAt,
         status: 'completed',
-        reportPath: path.posix.join(runArtifactRoot, 'report.json')
+        // The name the reporter wrote it under, imported rather than retyped: this
+        // entry is how baseline resolution finds the report again, and a copy that
+        // drifted would point at a file nothing wrote.
+        reportPath: path.posix.join(runArtifactRoot, REVIEW_JSON_ARTIFACT_NAME)
       }
     })
 

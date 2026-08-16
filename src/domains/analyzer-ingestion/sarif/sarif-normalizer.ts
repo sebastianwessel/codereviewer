@@ -20,6 +20,14 @@
 import { z } from 'zod'
 import { sha256 } from '../../../shared/hash/hash.js'
 import {
+  DataFlowPathSchema,
+  RelatedLocationSchema
+} from '../../../shared/contracts/index.js'
+import {
+  stringFieldBound,
+  truncateForContract
+} from '../../../shared/text/truncate.js'
+import {
   ANALYZER_MESSAGE_MAX,
   AnalyzerAlertSchema,
   type AnalyzerAlert,
@@ -36,7 +44,13 @@ import type {
 // Bounds on what one alert may contribute to a model packet. An artifact can
 // legitimately carry a hundred-step interprocedural flow; a review packet cannot,
 // and the value of a flow is its shape (source, barrier, sink), not its length.
-// Both cuts are disclosed in the flow label rather than applied invisibly.
+//
+// EVERY cut here is disclosed in the text the reader (model or human) actually
+// sees, never applied invisibly — which is the module's own second rule, stated at
+// the top. Two of the three were not: the flow cap and the related-location cap
+// were bare list truncations, so an alert with eleven related locations arrived
+// carrying six and asserting six, and the module comment claiming "both cuts are
+// disclosed" was describing one cut of three.
 const MAX_FLOWS_PER_ALERT = 2
 const MAX_STEPS_PER_FLOW = 12
 const MAX_RELATED_LOCATIONS_PER_ALERT = 6
@@ -270,12 +284,17 @@ const dataFlowsFor = (
   resolvePath: AnalyzerPathResolver
 ): AnalyzerAlert['dataFlow'] => {
   const flows: AnalyzerAlert['dataFlow'] = []
+  // Flows the artifact reported that this alert could have carried and does not.
+  //
+  // Counted rather than broken out of, so the cut can be stated: a `break` at the
+  // cap knows only that it stopped, not how much it stopped short of, and an alert
+  // carrying two of nine taint paths looked identical to one the analyzer traced
+  // twice. The extra work is resolving locations for flows that will be dropped,
+  // which is a map over an in-memory artifact — cheaper than the reviewer silently
+  // reasoning about a third of an analysis.
+  let usableFlowCount = 0
 
   for (const [flowIndex, codeFlow] of (result.codeFlows ?? []).entries()) {
-    if (flows.length >= MAX_FLOWS_PER_ALERT) {
-      break
-    }
-
     const threadFlowLocations = (codeFlow.threadFlows ?? []).flatMap(
       (threadFlow) => threadFlow.locations ?? []
     )
@@ -284,6 +303,15 @@ const dataFlowsFor = (
       .filter((entry): entry is ResolvedLocation => entry !== undefined)
 
     if (resolvedSteps.length === 0) {
+      continue
+    }
+
+    // A flow with steps this run can point at. Counted before the cap so the cap has
+    // a denominator; a flow whose every location fell outside the repository is not
+    // one the cap withheld and is not counted here.
+    usableFlowCount += 1
+
+    if (flows.length >= MAX_FLOWS_PER_ALERT) {
       continue
     }
 
@@ -315,23 +343,73 @@ const dataFlowsFor = (
     })
   }
 
+  // The flow cap, disclosed the way the step cap already is: appended to the label
+  // of the LAST flow the alert kept, which is where the list visibly stops. There is
+  // no container above a flow to hang it on, and inventing a third flow to carry the
+  // notice would put a data-flow object in the packet that no analyzer reported.
+  //
+  // The label is trimmed to leave room, through the shared marked-truncation helper,
+  // so the disclosure cannot itself be the thing that gets cut off.
+  const lastFlow = flows.at(-1)
+
+  if (lastFlow !== undefined && usableFlowCount > flows.length) {
+    const note = ` (${flows.length} of ${usableFlowCount} reported flows shown)`
+
+    flows[flows.length - 1] = {
+      ...lastFlow,
+      label: `${truncateForContract(
+        lastFlow.label,
+        stringFieldBound(DataFlowPathSchema.shape.label) - note.length
+      )}${note}`
+    }
+  }
+
   return flows
 }
 
+// Redaction and the message bound live HERE rather than at the call site, so the
+// omission notice below is appended after both and cannot be sliced off by them.
+// Analyzer messages quote the code they matched, and redaction can make a message
+// LONGER than the text it replaced, so the order is not academic.
 const relatedLocationsFor = (
   result: SarifResult,
   alertId: string,
-  resolvePath: AnalyzerPathResolver
-): AnalyzerAlert['relatedLocations'] =>
-  (result.relatedLocations ?? [])
+  resolvePath: AnalyzerPathResolver,
+  redact: (value: string) => string
+): AnalyzerAlert['relatedLocations'] => {
+  const resolved = (result.relatedLocations ?? [])
     .map((location) => resolveLocation(location, resolvePath))
     .filter((entry): entry is ResolvedLocation => entry !== undefined)
+  const messageBound = stringFieldBound(RelatedLocationSchema.shape.message)
+  const kept = resolved
     .slice(0, MAX_RELATED_LOCATIONS_PER_ALERT)
     .map((entry, index) => ({
       id: `${alertId}_related${index}`,
       location: codeLocationFrom(entry),
-      message: entry.message ?? 'Related location.'
+      message: truncateForContract(
+        redact(entry.message ?? 'Related location.'),
+        messageBound
+      )
     }))
+  const last = kept.at(-1)
+
+  // Was a bare `.slice`, with no counter and no label, beside a sibling cut that
+  // labels itself. An alert whose analyzer supplied fourteen related locations —
+  // the other places the same defect reaches — arrived carrying six and claiming
+  // six, and the reviewer had no way to know it was reading a sample.
+  if (last === undefined || resolved.length <= kept.length) {
+    return kept
+  }
+
+  const note = ` (${kept.length} of ${resolved.length} related locations shown)`
+
+  kept[kept.length - 1] = {
+    ...last,
+    message: `${truncateForContract(last.message, messageBound - note.length)}${note}`
+  }
+
+  return kept
+}
 
 const normalizeResult = (input: {
   readonly result: SarifResult
@@ -396,14 +474,14 @@ const normalizeResult = (input: {
     // the code they matched, and a secrets rule quotes the secret.
     message: normalizeMessageText(input.redact(messageText)),
     location: codeLocationFrom(primary),
+    // Already redacted and already bounded — see `relatedLocationsFor`, which owns
+    // both so its omission notice survives them.
     relatedLocations: relatedLocationsFor(
       input.result,
       alertId,
-      input.resolvePath
-    ).map((related) => ({
-      ...related,
-      message: input.redact(related.message).slice(0, 300)
-    })),
+      input.resolvePath,
+      input.redact
+    ),
     dataFlow: dataFlowsFor(input.result, alertId, input.resolvePath).map(
       (flow) => ({
         ...flow,

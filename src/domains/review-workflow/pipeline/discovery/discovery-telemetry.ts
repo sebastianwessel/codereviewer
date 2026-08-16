@@ -50,6 +50,14 @@ export const summarizeDiscoveryTelemetry = (
       contextOverflowSplitCount: sumOf(
         (task) => task.contextOverflowSplitCount
       ),
+      // Summed like every other counter. `?? 0` is not a defaulted absence here:
+      // every task row this run produced carries the number, because the producer
+      // (`holistic-task-review.ts`) always writes it; the fallback only exists
+      // because the FIELD is optional for reports written before it existed, and
+      // this function only ever sees rows from the run in progress.
+      readBudgetReductionCount: sumOf(
+        (task) => task.readBudgetReductionCount ?? 0
+      ),
       mergeCallCount: sumOf((task) => task.mergeCallCount),
       mergeGroupCount: sumOf((task) => task.mergeGroupCount),
       mergedAwayCount: sumOf((task) => task.mergedAwayCount)

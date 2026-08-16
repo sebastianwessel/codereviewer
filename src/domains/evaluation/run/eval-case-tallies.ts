@@ -1,4 +1,8 @@
 import type { z } from 'zod'
+import {
+  isActionableFinding,
+  isArtifactOnlyFinding
+} from '../../../shared/contracts/index.js'
 import type {
   AdmittedFinding,
   ReviewReport
@@ -56,7 +60,18 @@ const providerIssuesFromWarnings = (
     return []
   })
 
-export const isActionableFinding = (
+// The numerator property of `actionableRate` (spec 06): an admitted finding
+// carrying "resolvable location, impact, evidence, and a concrete remediation
+// direction" — i.e. everything a reader needs to act without opening the run
+// artifacts.
+//
+// RENAMED FROM `isActionableFinding`, because that name now belongs to the
+// contract's eligibility predicate and the two answer different questions over
+// the same word. This one asks whether a finding is COMPLETE; the contract's asks
+// whether a reader may be handed it at all. The eval applies this one only to the
+// population the other one already admitted, so a single name for both would have
+// hidden a nesting, not a synonym.
+export const hasActionableDetail = (
   finding: AdmittedFinding,
   reviewReport: ReviewReport
 ): boolean => {
@@ -261,19 +276,18 @@ export const refutationResultSummaries = (
     })
   )
 
+// The eval's names for the shared predicate. They stay because the eval reads
+// this split constantly and the names say which population a call site means, but
+// the QUESTION is the contract's — scored actionable output has to be exactly what
+// the gate blocks on and the reporters render, or a measured precision figure is
+// about a population no reader ever sees.
 export const actionableFindingsForEval = (
   admittedFindings: readonly AdmittedFinding[]
-): readonly AdmittedFinding[] =>
-  admittedFindings.filter(
-    (finding) => finding.reporterEligibility !== 'artifact-only'
-  )
+): readonly AdmittedFinding[] => admittedFindings.filter(isActionableFinding)
 
 export const artifactOnlyFindingsForEval = (
   admittedFindings: readonly AdmittedFinding[]
-): readonly AdmittedFinding[] =>
-  admittedFindings.filter(
-    (finding) => finding.reporterEligibility === 'artifact-only'
-  )
+): readonly AdmittedFinding[] => admittedFindings.filter(isArtifactOnlyFinding)
 
 // Per-expectation report entries, including the diff-scope classification
 // (spec 17) derived from the case's own reviewed diff. Deriving it here, at the

@@ -53,6 +53,18 @@ export type DiscoveryCallResult = {
   // one that did not — several partial reviews instead of one whole-file review —
   // and before this nothing said so.
   readonly splitCount: number
+  // How many times this call halved the retriever's per-read byte allowance before
+  // retrying (spec 28), carried exactly as `splitCount` is and for the same reason.
+  //
+  // The retry path returns a result that looks like an ordinary first-attempt
+  // success, so a run that strained hard enough to narrow its own reads — twice,
+  // three times, down to the 4 000-byte floor — was indistinguishable from one that
+  // never strained at all. The reduction is not local to this call either: it
+  // mutates the ONE run-wide retriever (`cross-file-tools.ts` says so in as many
+  // words), so every other task, including tasks already in flight, gets shorter
+  // reads from that point on and nothing restores them. A degradation that changes
+  // what every later task is shown has to be countable.
+  readonly readBudgetReductionCount: number
   // The tasks a model call was ACTUALLY issued for. For an unsplit call that is the
   // task itself; for a split one it is the leaves, which are the only units that
   // carry a genuine sub-file line span. Admission checks a finding's line against
@@ -68,6 +80,7 @@ const emptyResult = (
   findings: [],
   providerIssues,
   splitCount: 0,
+  readBudgetReductionCount: 0,
   // A call WAS issued; it just yielded nothing usable. Recording it as a zero-yield
   // call rather than as no call keeps the denominator honest — dropping it would
   // quietly inflate findings-per-call exactly when the provider is degrading.
@@ -108,6 +121,7 @@ export const runDiscoveryCall = async (
       findings: review.findings,
       providerIssues: [],
       splitCount: 0,
+      readBudgetReductionCount: 0,
       rawFindingsPerCall: [review.findings.length],
       reviewedTasks: [task]
     }
@@ -118,7 +132,16 @@ export const runDiscoveryCall = async (
       // overflow identically. Shrinking what a read returns is the only thing that
       // makes the next attempt smaller.
       if (reduceActiveReadBudget()) {
-        return await runDiscoveryCall({ ...input, depth })
+        const retried = await runDiscoveryCall({ ...input, depth })
+
+        // Counted HERE rather than inside the retriever: the retriever halves a
+        // number, and only this frame knows that the halving was paid for by a
+        // refused provider call. The retry's own count is added to, not replaced,
+        // because an overflow that repeats reduces again.
+        return {
+          ...retried,
+          readBudgetReductionCount: retried.readBudgetReductionCount + 1
+        }
       }
 
       return await splitAndRetry({ ...input, depth, error })
@@ -193,6 +216,13 @@ const splitAndRetry = async (
     // This split, plus any the halves themselves needed.
     splitCount:
       1 + results.reduce((total, result) => total + result.splitCount, 0),
+    // The halves' reductions only. Reaching this point means the read budget could
+    // NOT be reduced (or there was no scope to reduce), so this split itself
+    // contributed none.
+    readBudgetReductionCount: results.reduce(
+      (total, result) => total + result.readBudgetReductionCount,
+      0
+    ),
     // The refused call is deliberately NOT an entry: it returned no findings
     // because the provider never read it, and counting it would report a
     // zero-yield look that never happened.

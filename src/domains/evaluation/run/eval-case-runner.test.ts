@@ -233,3 +233,75 @@ describe('runEvalCase — fix lane failure visibility', () => {
     expect(output.result.reviewReport.providerIssues).toEqual([])
   })
 })
+
+// A refused fix and a fix nobody proposed report the same `fixProduced: false,
+// applyCheck: 'not-attempted'`, so `fixDeclinedReason` is the only thing that
+// separates them — and this mapping used to drop it, leaving the eval unable to
+// tell the two apart at all. See `EvalFixOutcomeReportSchema`.
+describe('runEvalCase — fix outcomes reaching the case output', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = path.join(tmpdir(), `codereviewer-eval-case-runner-${crypto.randomUUID()}`)
+    await mkdir(path.join(root, 'fixtures', 'typescript', 'positive'), {
+      recursive: true
+    })
+    mocks.runReview.mockReset().mockResolvedValue(reviewResult)
+    mocks.runFixRun.mockReset()
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  test('carries the reason a proposed fix was refused', async () => {
+    mocks.runFixRun.mockResolvedValue({
+      report: {
+        fixOutcomes: [
+          {
+            findingId: 'find_defect1',
+            findingJudgment: 'real',
+            fixProduced: false,
+            applyCheck: 'not-attempted',
+            fixDeclinedReason: 'edits-outside-finding-file'
+          },
+          {
+            findingId: 'find_defect2',
+            findingJudgment: 'real',
+            fixProduced: false,
+            applyCheck: 'not-attempted'
+          }
+        ]
+      },
+      findings: [admittedFinding]
+    })
+
+    const output = await runEvalCase({
+      root,
+      config: CodeReviewerConfigSchema.parse({
+        provider: { id: 'openai', model: 'gpt-x' },
+        fix: { enabled: true }
+      }),
+      configWarnings: [],
+      baselineExplicitlyConfigured: false,
+      environment: {},
+      evalCase
+    })
+
+    expect(output.fixOutcomes).toEqual([
+      {
+        findingId: 'find_defect1',
+        findingJudgment: 'real',
+        fixProduced: false,
+        applyCheck: 'not-attempted',
+        fixDeclinedReason: 'edits-outside-finding-file'
+      },
+      {
+        findingId: 'find_defect2',
+        findingJudgment: 'real',
+        fixProduced: false,
+        applyCheck: 'not-attempted'
+      }
+    ])
+  })
+})

@@ -41,6 +41,23 @@ export type ChangeIntentBrief = {
    * fit the summarizer's input budget, or the brief itself cut at `maxBytes`.
    */
   readonly truncated: boolean
+  /**
+   * True when the SUMMARY CAP — `contextSources.summary.maxBytes` — is what did the
+   * cutting: a section trimmed to fit it, or a later fragment dropped because
+   * nothing was left to fit into.
+   *
+   * Separate from `truncated`, which is deliberately the union of every cause
+   * above, because the causes have different remedies and only one of them was
+   * reportable. A body the provider had already cut at its own per-file cap is
+   * disclosed as a run warning naming `maxFileBytes`; the summarizer's own cap had
+   * no warning at all, so a brief that lost four of its five sources to a 4 000-byte
+   * default reached the reviewer looking exactly like a complete one. Warning on
+   * the union instead would name the wrong cap on every run where only the provider
+   * cut, which is the shape that teaches a reader to ignore the warning.
+   *
+   * Absent means the cap did not bind; a summarizer that cuts at it MUST set it.
+   */
+  readonly cutBySummaryCap?: boolean
   readonly mode: 'model' | 'digest'
 }
 

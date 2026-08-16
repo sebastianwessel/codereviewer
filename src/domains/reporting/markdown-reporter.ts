@@ -16,6 +16,10 @@
 //
 // Pure: it takes a report and returns a string. No filesystem, no clock, no
 // configuration.
+import {
+  isActionableFinding,
+  isArtifactOnlyFinding
+} from '../../shared/contracts/index.js'
 import type {
   AdmittedFinding,
   EvidenceRecord,
@@ -657,6 +661,16 @@ const renderDiscovery = (report: ReviewReport): readonly string[] => {
     totals.suppressedByLocationCount +
     totals.cappedByLimitCount +
     totals.mergedAwayCount
+  // Tasks whose cross-file tool-call allowance ran out. Counted from the task rows
+  // rather than summed into `totals`, because the allowance is per task (see the
+  // field's comment in `review-report.schema.ts`). Tasks that never had retrieval
+  // at all carry no flag and are not counted here or in the denominator.
+  const retrievalTasks = discovery.tasks.filter(
+    (task) => task.retrievalBudgetExhausted !== undefined
+  )
+  const exhaustedTasks = retrievalTasks.filter(
+    (task) => task.retrievalBudgetExhausted === true
+  )
 
   return [
     '## What Discovery Produced',
@@ -666,6 +680,21 @@ const renderDiscovery = (report: ReviewReport): readonly string[] => {
     `- Dropped before adjudication: ${totals.droppedCount}`,
     `- Suppressed as duplicates or over a cap: ${suppressed} (${totals.suppressedByIdCount} by id, ${totals.suppressedByLocationCount} by location, ${totals.cappedByLimitCount} over the per-call cap, ${totals.mergedAwayCount} merged as the same defect)`,
     `- Packets split because the provider refused the input: ${totals.contextOverflowSplitCount}`,
+    // The other response to a refused packet, and the one that fires FIRST. Absent
+    // means the run recorded no such counter, which is not a run that never reduced.
+    ...(totals.readBudgetReductionCount === undefined
+      ? []
+      : [
+          `- Times the reviewer's per-read byte allowance was halved after a refused packet: ${totals.readBudgetReductionCount} (a reduction narrows every later read in the run, including tasks already running)`
+        ]),
+    // Stated only when some task actually held retrieval tools: for a run with
+    // cross-file retrieval off there is no allowance, and a line reading "0 of 0"
+    // would suggest one.
+    ...(retrievalTasks.length === 0
+      ? []
+      : [
+          `- Tasks that used up their cross-file lookup allowance: ${exhaustedTasks.length} of ${retrievalTasks.length} (such a task stopped looking because it ran out of lookups, not because it was finished)`
+        ]),
     '',
     'Read this next to the rejected-candidate count above. A quiet report with a low proposed count is a discovery problem; a quiet report with a high one is an adjudication problem.',
     ''
@@ -694,12 +723,8 @@ const indexById = <T>(
 export const renderMarkdownReport = (input: unknown): string => {
   const report: ReviewReport = validateReviewReport(input)
   const admittedFindings = sortAdmittedFindings(report.admittedFindings)
-  const actionable = admittedFindings.filter(
-    (finding) => finding.reporterEligibility !== 'artifact-only'
-  )
-  const unresolved = admittedFindings.filter(
-    (finding) => finding.reporterEligibility === 'artifact-only'
-  )
+  const actionable = admittedFindings.filter(isActionableFinding)
+  const unresolved = admittedFindings.filter(isArtifactOnlyFinding)
   const evidenceById = indexById(report.evidence, (record) => record.id)
   const refutationById = indexById(
     report.refutationResults,

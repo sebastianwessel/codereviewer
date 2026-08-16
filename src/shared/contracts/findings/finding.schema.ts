@@ -70,6 +70,38 @@ export const RejectReasonSchema = z.enum([
 export const ReporterEligibilitySchema = z.enum(['inline', 'summary-only', 'artifact-only'])
 export const BaselineStatusSchema = z.enum(['new', 'existing', 'resolved', 'unknown'])
 
+// "Is this finding something a reader must act on?", asked once.
+//
+// It was asked eight times — by the quality gate, the SARIF and markdown
+// reporters, the eval tallies, the pull-request digest, the summary comment and
+// the review conversation — each spelling out `reporterEligibility !==
+// 'artifact-only'` for itself. Eight copies of one predicate over a vocabulary
+// that can gain a member is eight places to forget: a value added to
+// `ReporterEligibilitySchema` and NOT meant to be actionable would be counted as
+// actionable by every one of them, silently, because "not artifact-only" is a
+// default rather than a decision.
+//
+// The predicate lives here, beside the vocabulary it reads, because its callers
+// span layers that must not import each other: `scripts/github/` renders the pull
+// request, `domains/reporting/` writes the artifacts, `domains/admission/` decides
+// the gate, and `domains/evaluation/` scores. The contract is the one module all
+// four already depend on.
+//
+// It stays a `!==` on purpose. `artifact-only` is the single value that means
+// "refutation could neither prove nor disprove this, keep it as a question for a
+// human"; every other member is a finding somebody is expected to read and act
+// on. What a NEW member means is a decision, and
+// `reporter-eligibility-drift.test.ts` requires it to be taken there rather than
+// inherited from this default.
+export const isActionableFinding = (
+  finding: { readonly reporterEligibility: ReporterEligibility }
+): boolean => finding.reporterEligibility !== 'artifact-only'
+
+/** The complement of `isActionableFinding`: kept as a question for a human. */
+export const isArtifactOnlyFinding = (
+  finding: { readonly reporterEligibility: ReporterEligibility }
+): boolean => finding.reporterEligibility === 'artifact-only'
+
 // Internally generated ids take the form `<prefix>_<hex>` and may carry an
 // extra segment for grouped tasks (e.g. `task_intent_<hex>`). The pattern allows
 // one or more `_<alnum>` segments so multi-segment ids validate consistently

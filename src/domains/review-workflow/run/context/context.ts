@@ -344,7 +344,11 @@ export const assembleContext = async (
         instructions: staticContext.instructions,
         instructionScopes: staticContext.instructionScopes,
         facts: input.analysis.facts,
-        evidence: input.analysis.evidence
+        evidence: input.analysis.evidence,
+        // Decides which stage the support-signal document's ledger entry claims to
+        // have reached. Read from config here, where config already is, rather than
+        // handing the whole config to a module that needs one boolean.
+        signalFactsEnabled: input.config.review.signalFacts.enabled
       })
 
       // Appended here, in task order, rather than inside the creation above: the

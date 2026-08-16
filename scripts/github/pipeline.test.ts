@@ -1,5 +1,11 @@
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runPipeline, type PipelineDependencies } from './pipeline.js'
+import {
+  REVIEW_COMMENT_PLATFORM,
+  runPipeline,
+  type PipelineDependencies
+} from './pipeline.js'
 import type { PullRequestContext } from './pull-request-context.js'
 import type { GithubApi } from './github-api.js'
 import type { StageResult } from './stage-outcomes.js'
@@ -654,5 +660,29 @@ describe('runPipeline: the engine and the digest disagree', () => {
     expect(body).toContain('could not complete')
     expect(body).not.toContain('this search reported nothing')
     expect(result.exitCode).toBe(2)
+  })
+})
+
+// The pipeline reads the rendered review comments of ONE platform, and it knows
+// which one only because the shipped config pins it. Nothing linked the two: the
+// producer derives the file name from the run's configured platform, so a config
+// that stopped pinning `github` would leave this pipeline reading a file no run
+// wrote — and `?? ''` turns that into "no inline comments", posted as a success.
+// The name now comes from the producer's derivation; this is the other half, the
+// assumption that derivation is called with.
+describe('the shipped GitHub config', () => {
+  it('pins the platform whose comments the pipeline reads back', async () => {
+    const configPath = fileURLToPath(
+      new URL('./codereviewer.github.json', import.meta.url)
+    )
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as {
+      readonly reporting?: {
+        readonly reviewComments?: { readonly platform?: string }
+      }
+    }
+
+    expect(config.reporting?.reviewComments?.platform).toBe(
+      REVIEW_COMMENT_PLATFORM
+    )
   })
 })

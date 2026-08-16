@@ -50,7 +50,11 @@ describe('cross-file discovery tools', () => {
     })
 
     const output = await runWithCrossFileDiscoveryTools(
-      { tools: bounded.tools, reduceReadBudget: () => false },
+      {
+        tools: bounded.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
       () => runRead('src/dep.ts')
     )
 
@@ -74,7 +78,11 @@ describe('cross-file discovery tools', () => {
     })
 
     const refused = await runWithCrossFileDiscoveryTools(
-      { tools: bounded.tools, reduceReadBudget: () => false },
+      {
+        tools: bounded.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
       async () => {
         await crossFileDiscoveryToolDefinitions.repo_read.handler(undefined, {
           path: 'src/a.ts'
@@ -121,7 +129,11 @@ describe('cross-file discovery tools', () => {
 
     await expect(
       runWithCrossFileDiscoveryTools(
-        { tools: failing, reduceReadBudget: () => false },
+        {
+        tools: failing,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
         () => runRead('x')
       )
     ).rejects.toThrow(/resolve inside the root/u)
@@ -141,7 +153,11 @@ describe('cross-file discovery tools', () => {
     // OWN scope, so concurrent tasks never consume each other's budget.
     const [firstOutput, secondOutput] = await Promise.all([
       runWithCrossFileDiscoveryTools(
-        { tools: first.tools, reduceReadBudget: () => false },
+        {
+        tools: first.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
         async () => {
           const output = await runRead('src/first.ts')
           await runRead('src/first-again.ts')
@@ -149,7 +165,11 @@ describe('cross-file discovery tools', () => {
         }
       ),
       runWithCrossFileDiscoveryTools(
-        { tools: second.tools, reduceReadBudget: () => false },
+        {
+        tools: second.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
         () => runRead('src/second.ts')
       )
     ])
@@ -189,7 +209,11 @@ describe('expected retrieval conditions reach the model as content', () => {
     })
 
     return runWithCrossFileDiscoveryTools(
-      { tools: bounded.tools, reduceReadBudget: () => false },
+      {
+        tools: bounded.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
       operation
     )
   }
@@ -332,7 +356,8 @@ describe('read-budget reduction on context overflow (spec 28)', () => {
         reduceReadBudget: () => {
           reductions += 1
           return reductions <= 2
-        }
+        },
+        budgetExhausted: () => false
       },
       async () => [
         reduceActiveReadBudget(),

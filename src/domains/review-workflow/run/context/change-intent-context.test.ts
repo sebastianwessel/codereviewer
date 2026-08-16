@@ -132,6 +132,79 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
     expect(result.warnings).toEqual([])
   })
 
+  test('says so when its own summary cap cut the brief', async () => {
+    // The third bound on this path and the last one that was mute. The provider caps
+    // (`maxFiles`, `maxFileBytes`) each get a carefully-worded warning; the
+    // summarizer's own `contextSources.summary.maxBytes` got none, so a brief that
+    // lost most of its sources reached the reviewer looking complete. It was
+    // reported only as an observability attribute and a ledger `decision`, neither
+    // of which a default run surfaces to a human.
+    //
+    // Nothing here raises or lowers a bound: the cap is its 4 000-byte DEFAULT, and
+    // the ticket is a single ordinary Markdown file above it. That is the point —
+    // `changed-files` defaults to `include: ['**/*.md']`, so this binds on real
+    // changes rather than on contrived ones.
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'long-ticket.md'),
+      `# Ticket\n\n${'Rotate the session token on sign-in. '.repeat(200)}\n`
+    )
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+    const { logger } = createCapturingLogger()
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger
+    })
+
+    // One warning, and it names the setting that relieves it. The provider's own
+    // per-file cap is 64 000 bytes and did not bind, so the `maxFileBytes` warning
+    // must NOT fire here: two warnings for one cut would name the wrong remedy.
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toContain('contextSources.summary.maxBytes')
+    expect(result.warnings[0]).toContain('4000')
+    expect(result.warnings[0]).toContain(
+      'the beginning of the intent, not all of it'
+    )
+  })
+
+  test('stays quiet when the brief fits its cap', async () => {
+    // The counterweight, and the reason this is driven by the summary cap rather
+    // than by the brief's `truncated` flag: the flag is also true when a provider
+    // had already cut a body at `maxFileBytes`, which has its own warning. A
+    // warning that fires on every ordinary run is one nobody reads.
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+    const { logger } = createCapturingLogger()
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger
+    })
+
+    expect(result.warnings).toEqual([])
+  })
+
   test('reports the classified reason when resolving the model summarizer throws', async () => {
     const config = CodeReviewerConfigSchema.parse({
       provider: { id: 'openai', model: 'gpt-x' },

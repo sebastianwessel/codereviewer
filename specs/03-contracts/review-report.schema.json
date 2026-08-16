@@ -1306,6 +1306,11 @@
               "minimum": 0,
               "maximum": 9007199254740991
             },
+            "readBudgetReductionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
             "mergeCallCount": {
               "type": "integer",
               "minimum": 0,
@@ -1391,6 +1396,11 @@
                 "minimum": 0,
                 "maximum": 9007199254740991
               },
+              "readBudgetReductionCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
               "mergeCallCount": {
                 "type": "integer",
                 "minimum": 0,
@@ -1409,6 +1419,9 @@
               "taskId": {
                 "type": "string",
                 "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
+              },
+              "retrievalBudgetExhausted": {
+                "type": "boolean"
               }
             },
             "required": [

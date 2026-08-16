@@ -361,7 +361,11 @@ describe('runModelBackedHolisticTaskReview', () => {
     })
 
     await runWithCrossFileDiscoveryTools(
-      { tools: bounded.tools, reduceReadBudget: () => false },
+      {
+        tools: bounded.tools,
+        reduceReadBudget: () => false,
+        budgetExhausted: () => false
+      },
       () =>
         runModelBackedHolisticTaskReview({
           workflowInput: workflowInputWithSecurityPass,
@@ -1456,5 +1460,75 @@ describe('discovery citation evidence (spec 05)', () => {
       logger: { debug: () => {} }
     })
     expect(enabledText).toContain('## Citing your evidence')
+  })
+})
+
+// Spec 16. A task's cross-file tool-call allowance is spent by the model asking for
+// reads, and a task that spends all of it stopped looking because it ran out of
+// lookups rather than because it was finished. That fact was reported in exactly one
+// place — a `logger.debug` line in `model-backed-harness.ts` — which a default run
+// drops twice over: `observability.logging.level` defaults to `silent`, where the
+// logger is a no-op, and debug is below the threshold anyway. The verification lane
+// reads the same flag and forces an `uncertain` verdict from it; discovery only
+// logged it. This makes it visible WITHOUT changing what discovery does with it.
+describe('cross-file lookup allowance is visible in the task telemetry', () => {
+  const reviewInScope = async (
+    budgetExhausted: boolean
+  ): Promise<boolean | undefined> => {
+    const bounded = createBoundedRetrievalTools({
+      retriever: {
+        budget: () => ({}),
+        readRepositoryFile: async () => ({}),
+        listRepositoryDirectory: async () => ({}),
+        grepRepository: async () => ({})
+      } as unknown as ContextRetriever,
+      maxToolCalls: 4
+    })
+
+    const result = await runWithCrossFileDiscoveryTools(
+      {
+        tools: bounded.tools,
+        reduceReadBudget: () => false,
+        // The bounded tools' own flag, as `model-backed-harness.ts` passes it.
+        budgetExhausted: () => budgetExhausted
+      },
+      () =>
+        runModelBackedHolisticTaskReview({
+          workflowInput,
+          taskInput,
+          task,
+          runners: { holisticReview: async () => holisticResultWith([]) },
+          logger: { debug: () => {} }
+        })
+    )
+
+    return result.discovery?.retrievalBudgetExhausted
+  }
+
+  test('records that the reviewer used up its lookups', async () => {
+    expect(await reviewInScope(true)).toBe(true)
+  })
+
+  test('records that it had lookups left', async () => {
+    expect(await reviewInScope(false)).toBe(false)
+  })
+
+  test('records nothing at all when the task had no retrieval tools', async () => {
+    // Absent, not `false`. With cross-file retrieval off there is no allowance, and
+    // "the reviewer had no lookups to run out of" is a different fact from "it had
+    // them and did not exhaust them" — the same distinction `discovery` itself
+    // carries between absent and a recorded zero.
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: { holisticReview: async () => holisticResultWith([]) },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.discovery?.retrievalBudgetExhausted).toBeUndefined()
+    expect(
+      Object.hasOwn(result.discovery ?? {}, 'retrievalBudgetExhausted')
+    ).toBe(false)
   })
 })

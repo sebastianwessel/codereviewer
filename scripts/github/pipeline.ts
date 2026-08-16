@@ -17,6 +17,11 @@ import {
   IMPACT_JSON_ARTIFACT_NAME,
   INTENT_JSON_ARTIFACT_NAME
 } from '../../src/cli/run-artifacts.js'
+import {
+  REVIEW_JSON_ARTIFACT_NAME,
+  reviewCommentsArtifactName
+} from '../../src/domains/reporting/index.js'
+import type { PlatformTarget } from '../../src/shared/contracts/index.js'
 import type { GithubApi } from './github-api.js'
 import type { PullRequestContext } from './pull-request-context.js'
 import {
@@ -117,6 +122,20 @@ export type PipelineResult = {
 }
 
 const CONFIGURATION_EXIT_CODE = 2
+
+// The platform whose rendered review comments this pipeline reads back.
+//
+// It is `github` by construction — this module posts to GitHub — but the FILE is
+// named by the producer from the platform the RUN was configured with, and the two
+// meet only because the shipped config (`codereviewer.github.json`) pins
+// `reporting.reviewComments.platform` to the same value. That was previously a
+// hard-coded `review-comments.github.json` here against a
+// `review-comments.${platform}.json` there: if the config ever stopped pinning it,
+// this read would find nothing, `?? ''` would turn that into an empty comment set,
+// and the run would post no inline comments while reporting success. The name now
+// comes from the producer's own derivation, and `pipeline.test.ts` asserts the
+// shipped config still pins this platform.
+export const REVIEW_COMMENT_PLATFORM: PlatformTarget = 'github'
 
 /**
  * Reads one artifact of this run and digests it, or records why it could not.
@@ -389,7 +408,7 @@ export const runPipeline = async (
     review = await digestArtifact(
       {
         readArtifact: dependencies.readArtifact,
-        path: `${artifactDirectory}/report.json`,
+        path: `${artifactDirectory}/${REVIEW_JSON_ARTIFACT_NAME}`,
         digest: digestReviewReport
       },
       unreadableArtifactNotes
@@ -397,7 +416,7 @@ export const runPipeline = async (
     reviewReportUnreadable = unreadableArtifactNotes.length > 0
     renderedComments =
       (await dependencies.readArtifact(
-        `${artifactDirectory}/review-comments.github.json`
+        `${artifactDirectory}/${reviewCommentsArtifactName(REVIEW_COMMENT_PLATFORM)}`
       )) ?? ''
 
     // Absent exactly when the lane did not run — disabled by config, or

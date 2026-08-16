@@ -47,6 +47,15 @@ import {
 export type CrossFileDiscoveryScope = {
   readonly tools: RetrievalTools
   readonly reduceReadBudget: () => boolean
+  // Whether the task's tool-call allowance has been spent. Per task, like the tools
+  // and unlike `reduceReadBudget`, because the allowance it reports on is per task.
+  //
+  // It travels in the scope for the same reason the other two do: the fact is
+  // produced by the bounded tools, and the only place that can state it in a report
+  // is the telemetry built at the end of the task — too deep in the harness loop to
+  // reach by parameter. Reading it is what turns "the reviewer ran out of lookups"
+  // from a debug line into a recorded property of the run.
+  readonly budgetExhausted: () => boolean
 }
 
 const crossFileToolScope = new AsyncLocalStorage<CrossFileDiscoveryScope>()
@@ -67,6 +76,17 @@ export const runWithCrossFileDiscoveryTools = <T>(
  */
 export const reduceActiveReadBudget = (): boolean =>
   crossFileToolScope.getStore()?.reduceReadBudget() ?? false
+
+/**
+ * Whether the active task has spent its cross-file tool-call allowance.
+ *
+ * `undefined` OUTSIDE a scope, never `false`: a task with no retrieval tools has no
+ * allowance to exhaust, and answering `false` would report "the reviewer had
+ * lookups left" about a reviewer that had none. The caller records the distinction
+ * rather than flattening it.
+ */
+export const activeCrossFileBudgetExhausted = (): boolean | undefined =>
+  crossFileToolScope.getStore()?.budgetExhausted()
 
 /**
  * Whether the caller is inside a task's cross-file discovery scope.

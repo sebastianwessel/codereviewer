@@ -143,6 +143,8 @@ The reviewer made 2 discovery call(s) and proposed 3 finding(s), of which 3 beca
 - Dropped before adjudication: 0
 - Suppressed as duplicates or over a cap: 0 (0 by id, 0 by location, 0 over the per-call cap, 0 merged as the same defect)
 - Packets split because the provider refused the input: 0
+- Times the reviewer's per-read byte allowance was halved after a refused packet: 0 (a reduction narrows every later read in the run, including tasks already running)
+- Tasks that used up their cross-file lookup allowance: 0 of 1 (such a task stopped looking because it ran out of lookups, not because it was finished)
 
 Read this next to the rejected-candidate count above. A quiet report with a low proposed count is a discovery problem; a quiet report with a high one is an adjudication problem.
 

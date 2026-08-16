@@ -364,6 +364,39 @@ describe('over-long model text truncates instead of dropping the finding', () =>
     expect(parsed.success && parsed.data.description).toHaveLength(3000)
   })
 
+  test('the shortened description is MARKED, not silently cut', () => {
+    // An unmarked cut is the failure `shared/text/truncate.ts` exists to prevent: a
+    // description cut at 3 000 characters reads as a complete explanation that
+    // happens to end, and the reader — a human triaging the finding — has nothing to
+    // tell them the conclusion is missing. The mark is spent out of the field's own
+    // budget, so the value still satisfies the contract's `.max(3000)`.
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      description: `${'d'.repeat(20_000)} and therefore it fails.`
+    })
+
+    expect(parsed.description?.endsWith('…')).toBe(true)
+    expect(parsed.description).not.toContain('and therefore it fails.')
+    expect(parsed.description?.length).toBeLessThanOrEqual(3000)
+  })
+
+  test('a cut CITATION QUOTE stays unmarked, deliberately', () => {
+    // The one exception, and the mark is what would break it. A citation is verified
+    // by looking for its quote inside the cited source line
+    // (`discovery/citation-evidence.ts`), and an unverified citation mints no
+    // evidence at all. The cut quote is still a PREFIX of the line and still
+    // verifies; the same quote with `…` glued on matches nothing, so marking here
+    // would silently delete the evidence of every finding whose cited line is long.
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      description: 'A concrete failure.',
+      citations: [{ startLine: 12, quote: 'x'.repeat(400) }]
+    })
+
+    expect(parsed.citations?.[0]?.quote).toBe('x'.repeat(300))
+    expect(parsed.citations?.[0]?.quote).not.toContain('…')
+  })
+
   test('a verbose title is kept and shortened', () => {
     const parsed = ModelHolisticFindingSchema.safeParse({
       ...base,

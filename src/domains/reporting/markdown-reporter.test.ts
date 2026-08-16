@@ -567,6 +567,126 @@ describe('what discovery produced', () => {
     expect(markdown).toContain('Packets split because the provider refused the input: 2')
   })
 
+  test('states the two strain signals a split count cannot carry', () => {
+    // A refused packet is answered by NARROWING THE READS first and splitting the
+    // task second, and only the second had a counter — so a run that halved its own
+    // per-read allowance three times, down to the floor, rendered
+    // `contextOverflowSplitCount: 0` and read exactly like a run that never
+    // strained. The lookup allowance is the same kind of fact: the reviewer stopped
+    // looking because it ran out, not because it was finished.
+    const report = createReportFixture()
+    const markdown = renderMarkdownReport({
+      ...report,
+      discovery: {
+        totals: {
+          callCount: 3,
+          rawFindingCount: 11,
+          rawFindingsPerCall: [5, 4, 2],
+          candidateCount: 7,
+          droppedCount: 1,
+          suppressedByIdCount: 1,
+          suppressedByLocationCount: 0,
+          cappedByLimitCount: 0,
+          contextOverflowSplitCount: 0,
+          readBudgetReductionCount: 3,
+          mergeCallCount: 1,
+          mergeGroupCount: 1,
+          mergedAwayCount: 2
+        },
+        tasks: [
+          {
+            taskId: 'task_one',
+            callCount: 2,
+            rawFindingCount: 7,
+            rawFindingsPerCall: [5, 2],
+            candidateCount: 4,
+            droppedCount: 1,
+            suppressedByIdCount: 1,
+            suppressedByLocationCount: 0,
+            cappedByLimitCount: 0,
+            contextOverflowSplitCount: 0,
+            readBudgetReductionCount: 3,
+            retrievalBudgetExhausted: true,
+            mergeCallCount: 1,
+            mergeGroupCount: 1,
+            mergedAwayCount: 2
+          },
+          {
+            taskId: 'task_two',
+            callCount: 1,
+            rawFindingCount: 4,
+            rawFindingsPerCall: [4],
+            candidateCount: 3,
+            droppedCount: 0,
+            suppressedByIdCount: 0,
+            suppressedByLocationCount: 0,
+            cappedByLimitCount: 0,
+            contextOverflowSplitCount: 0,
+            readBudgetReductionCount: 0,
+            retrievalBudgetExhausted: false,
+            mergeCallCount: 0,
+            mergeGroupCount: 0,
+            mergedAwayCount: 0
+          }
+        ]
+      }
+    })
+
+    expect(markdown).toContain('Packets split because the provider refused the input: 0')
+    expect(markdown).toContain(
+      "Times the reviewer's per-read byte allowance was halved after a refused packet: 3"
+    )
+    expect(markdown).toContain(
+      'Tasks that used up their cross-file lookup allowance: 1 of 2'
+    )
+  })
+
+  test('says nothing about a lookup allowance that never existed', () => {
+    // With cross-file retrieval off there is no allowance, and a line reading
+    // "0 of 0" would suggest one. Absent stays absent.
+    const report = createReportFixture()
+    const markdown = renderMarkdownReport({
+      ...report,
+      discovery: {
+        totals: {
+          callCount: 1,
+          rawFindingCount: 1,
+          rawFindingsPerCall: [1],
+          candidateCount: 1,
+          droppedCount: 0,
+          suppressedByIdCount: 0,
+          suppressedByLocationCount: 0,
+          cappedByLimitCount: 0,
+          contextOverflowSplitCount: 0,
+          readBudgetReductionCount: 0,
+          mergeCallCount: 0,
+          mergeGroupCount: 0,
+          mergedAwayCount: 0
+        },
+        tasks: [
+          {
+            taskId: 'task_one',
+            callCount: 1,
+            rawFindingCount: 1,
+            rawFindingsPerCall: [1],
+            candidateCount: 1,
+            droppedCount: 0,
+            suppressedByIdCount: 0,
+            suppressedByLocationCount: 0,
+            cappedByLimitCount: 0,
+            contextOverflowSplitCount: 0,
+            readBudgetReductionCount: 0,
+            mergeCallCount: 0,
+            mergeGroupCount: 0,
+            mergedAwayCount: 0
+          }
+        ]
+      }
+    })
+
+    expect(markdown).not.toContain('cross-file lookup allowance')
+  })
+
   // A provider-errored run recorded nothing. Rendering zeros would state a
   // measurement nobody took — "discovery proposed 0" is a different claim from
   // "discovery was never asked".

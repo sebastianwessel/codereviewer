@@ -19,6 +19,35 @@ import { renderReviewComments } from './review-comment-renderers.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
 import { renderSarifReport, type SarifRenderOptions } from './sarif-reporter.js'
 
+// THE REVIEW REPORT'S NAME, in one place, because three modules in two layers
+// agree on it: this writer, the run index `review.ts` records a run under (which
+// is how baseline resolution finds the report again), and `scripts/github/`, which
+// reads the artifacts of the run it just spawned. A literal in each is three
+// places to edit and, since the reader resolves a missing file to "this lane did
+// not run", a rename would silently produce a pull-request comment with no
+// findings rather than an error.
+//
+// `report.md` and `report.sarif` stay literals below: each is written once and no
+// module reads either back by name, so there is nothing for them to drift from.
+export const REVIEW_JSON_ARTIFACT_NAME = 'report.json'
+
+/**
+ * The rendered review comments for one platform, named by the platform they were
+ * rendered for.
+ *
+ * The neutral drafts (`review-comments.json`) are the source of truth and the
+ * per-platform file is a rendering of them, so the name has to carry the platform
+ * or the two could not coexist in a run directory. It is a FUNCTION rather than a
+ * constant for the same reason `scripts/github/pipeline.ts` must call it: that
+ * pipeline used to hard-code `review-comments.github.json`, which met this
+ * producer only because the shipped config pins `platform: "github"` — and if it
+ * ever stopped pinning it, the read would return nothing, `?? ''` would make that
+ * an empty comment set, and the run would post no inline comments at all without
+ * saying so.
+ */
+export const reviewCommentsArtifactName = (platform: PlatformTarget): string =>
+  `review-comments.${platform}.json`
+
 export type ReportArtifactWriter = (
   path: string,
   content: string
@@ -142,7 +171,7 @@ export const writeReportingArtifacts = async (
     nonJsonArtifacts.push({
       artifact: createReportArtifact(
         'json',
-        `review-comments.${platform}.json`,
+        reviewCommentsArtifactName(platform),
         rendered
       ),
       content: rendered
@@ -156,7 +185,7 @@ export const writeReportingArtifacts = async (
   const jsonContent = renderJsonReport(reportWithArtifacts)
   const artifacts: WrittenReportArtifact[] = [
     {
-      artifact: createReportArtifact('json', 'report.json', jsonContent),
+      artifact: createReportArtifact('json', REVIEW_JSON_ARTIFACT_NAME, jsonContent),
       content: jsonContent
     },
     ...nonJsonArtifacts

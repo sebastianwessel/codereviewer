@@ -390,6 +390,78 @@ describe('review runner context assembly', () => {
     }
   })
 
+  // The support-signal document is ledgered `included`, with `bytesIncluded ===
+  // bytesConsidered`, on EVERY run. That is true of refutation, which is shown every
+  // reviewContext kind but `change-intent`, and false of discovery unless
+  // `review.signalFacts.enabled` renders the section into the packet — and the flag
+  // is off by default. So the entry was not false and could not be read correctly:
+  // a reader asking "was the reviewer shown the symbol map" found an `included`
+  // entry that meant a different stage. That is the shape that hid the
+  // reviewer-instructions defect, where context was ledgered, hashed, and dropped
+  // before the discovery call.
+  const supportSignalLedgerReason = async (
+    signalFactsEnabled: boolean
+  ): Promise<string | undefined> => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      const sourceContent = 'export const alpha = 1\n'
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          contextMaxBytes: 10000,
+          signalFacts: { enabled: signalFactsEnabled }
+        }
+      })
+
+      const result = await assembleContext({
+        repositoryRoot: root,
+        config,
+        sourceFiles: [{ path: 'src/a.ts', content: sourceContent }],
+        analysis: {
+          facts: [
+            {
+              id: 'fact_alpha',
+              language: 'typescript',
+              kind: 'declaration',
+              path: 'src/a.ts',
+              name: 'alpha',
+              line: 1,
+              endLine: 1,
+              summary: 'alpha declaration',
+              contentHash: sha256(sourceContent)
+            }
+          ],
+          evidence: []
+        },
+        reviewedDiffText: '',
+        tasks: [taskFor('src/a.ts')]
+      })
+
+      return result.contextLedger.find(
+        (entry) => entry.kind === 'support-signal-output'
+      )?.reason
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+
+  test('the support-signal ledger entry names the stage that actually reads it', async () => {
+    // Default configuration: these bytes reach refutation and NOT discovery.
+    expect(await supportSignalLedgerReason(false)).toBe(
+      'task-context-support-signal-chunk-refutation-only'
+    )
+  })
+
+  test('the same entry says so when signal facts do reach discovery', async () => {
+    // With `review.signalFacts.enabled` the packet renders the section, so the same
+    // bytes reach both stages. Both readings have to be distinguishable in the
+    // ledger, or naming the stage would just be a differently worded constant.
+    expect(await supportSignalLedgerReason(true)).toBe(
+      'task-context-support-signal-chunk-discovery-and-refutation'
+    )
+  })
+
   test('prepares context state with safe metrics and provenance hashes', async () => {
     const root = await createTempDir()
 

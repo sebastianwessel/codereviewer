@@ -26,6 +26,10 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
     const origins: string[] = []
     let usedBytes = 0
     let truncated = false
+    // Set only where THIS cap does the cutting, never on the branch below that
+    // merely inherits a provider's per-file cut. See `ChangeIntentBrief` for why the
+    // two causes are reported apart.
+    let cutBySummaryCap = false
 
     for (const fragment of fragments) {
       const budget =
@@ -33,6 +37,7 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
 
       if (budget <= 0) {
         truncated = true
+        cutBySummaryCap = true
         break
       }
 
@@ -41,6 +46,7 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
 
       if (fitted.length === 0) {
         truncated = true
+        cutBySummaryCap = true
         break
       }
 
@@ -61,6 +67,7 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
 
       if (fitted.length < section.length) {
         truncated = true
+        cutBySummaryCap = true
         break
       }
     }
@@ -69,6 +76,7 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
       text: sections.join('\n\n'),
       origins,
       truncated,
+      ...(cutBySummaryCap ? { cutBySummaryCap } : {}),
       mode: 'digest'
     }
 

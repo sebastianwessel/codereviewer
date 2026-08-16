@@ -29,6 +29,7 @@
 // wrong in the direction that flatters the engine.
 
 import { z } from 'zod'
+import { EvalMatchModeSchema } from '../corpus/eval-fixture.schema.js'
 
 // Required exactly where recall analysis reads the field, and optional
 // everywhere else. `path` and `lineRange` are optional in the producer too — a
@@ -41,7 +42,12 @@ const RecallViewExpectedFindingSchema = z.looseObject({
   severity: z.string().min(1),
   path: z.string().min(1).optional(),
   lineRange: z.tuple([z.int().min(1), z.int().min(1)]).optional(),
-  matchMode: z.enum(['path-line', 'path-semantic', 'semantic-only']),
+  // The corpus's own vocabulary, imported rather than restated. It is a closed
+  // enum the fixture schema owns; a local copy is a second place to edit, and a
+  // mode added there and not here would refuse every report that carries it —
+  // which is the failure this view exists to prevent, arriving through the one
+  // field recall's own matching rule reads.
+  matchMode: EvalMatchModeSchema,
   // OPTIONAL, and this is the second field where mirroring the producer's
   // required set was the wrong rule. Per-expectation `diffScope` was added on
   // 2026-07-31; its own metrics-version entry
@@ -87,3 +93,21 @@ export type EvalRecallView = z.infer<typeof EvalRecallViewSchema>
  */
 export const parseEvalRecallView = (report: unknown): EvalRecallView =>
   EvalRecallViewSchema.parse(report)
+
+/**
+ * The three levels of this view, exported for `eval-recall-view.test.ts` alone.
+ *
+ * Tolerance on READ is the point of this module and stays exactly as documented
+ * above. What it costs is a failure mode: a field the PRODUCER adds parses here
+ * without complaint and is simply never read, so a new fact that recall analysis
+ * ought to use can be missing from the recall report indefinitely with nothing to
+ * say so. The test diffs these shapes against the producer's contract and requires
+ * every unread field to be listed with a reason — the guard
+ * `eval-comparison-view.test.ts` already puts on the comparison read model, which
+ * is the same kind of hand-maintained narrow view of the same producer.
+ */
+export const recallViewReadModels = {
+  report: EvalRecallViewSchema,
+  caseResult: RecallViewCaseResultSchema,
+  expectedFinding: RecallViewExpectedFindingSchema
+} as const

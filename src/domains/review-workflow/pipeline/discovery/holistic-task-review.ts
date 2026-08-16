@@ -18,7 +18,10 @@ import {
 import type { DebugLogger } from '../debug-logger.js'
 import type { ProviderIssue } from '../provider-issues.js'
 import { citationEvidenceFor } from './citation-evidence.js'
-import { hasActiveCrossFileDiscoveryScope } from './cross-file-tools.js'
+import {
+  activeCrossFileBudgetExhausted,
+  hasActiveCrossFileDiscoveryScope
+} from './cross-file-tools.js'
 import { runDiscoveryCall, type DiscoveryCallResult } from './discovery-call.js'
 import { partitionTaskForDiscovery } from './discovery-partition.js'
 import {
@@ -42,7 +45,44 @@ import type { ReviewWorkflowInput } from '../contracts.js'
 // candidate, and are additive (they never displace a general-pass candidate).
 // Exported so the prompt-genericity guard (agent-instructions.test.ts) can assert
 // over every prompt the engine sends, not only the ones that happen to live in the
-// instructions module.
+// instructions module — and so the mechanism-coverage guard
+// (`evaluation/scoring/security-checklist-mechanism-coverage.test.ts`) can prove
+// the classes below still span the vocabulary the eval measures recall over.
+//
+// WHY THAT SECOND GUARD EXISTS, and why open redirect is listed at all. Spec 15
+// requires this checklist to apply "across the mechanisms above" — its own
+// eleven-item mechanism list — and for a while it did not. `open-redirect` was
+// added to that list, to `SecurityMechanismSchema`, and to the CWE attribution
+// table on 2026-08-07, and this checklist was not touched, so a class the eval
+// publishes a recall rate for was one the security pass never named. Nothing
+// failed, because nothing connected the three vocabularies.
+//
+// ADDING IT IS NOT TUNING THIS PROMPT TO THE ANSWER KEY, which is the objection it
+// has to survive and the reason the reasoning is written down here rather than
+// left in a commit message. The test for that contamination is whether the clause
+// would read differently if the corpus were empty. This one would not: its content
+// is CWE-601 and the OWASP category that carries it, the same public provenance as
+// every other bullet, and spec 15 justifies the class itself "on the public
+// definitions rather than on any fixture". It names no fixture, no repository, no
+// stack, and no observed miss. Contrast the authorization-scope clause this project
+// measured and rejected, which was derived from a diagnosis of which cases the
+// corpus saw missed — that is the shape that contaminates. Singling this one class
+// out for exclusion, while it sits in the spec, the enum and the CWE table, is what
+// would have had to be justified by the corpus.
+//
+// It is UNMEASURED. The change is made for conformance with spec 15, not for a
+// recall claim, and no measurement here supports one: the pass is off by default,
+// and this project's record is that five pre-registered prompt clauses in a row
+// moved nothing.
+//
+// CWE-79 stays under Injection rather than becoming its own XSS bullet, and that
+// mismatch with the `xss` label is deliberate. The checklist is organised by SINK —
+// what the untrusted value reaches — and an HTML sink sits beside the SQL, shell and
+// template sinks a reviewer scans for in one pass; the measurement vocabulary is
+// organised by WEAKNESS CLASS, where CWE-79 is its own family. Neither organisation
+// is wrong for its job, and the headings cannot drift into a wrong number: mechanism
+// attribution reads the matched expectation's label first and the finding's CWE tags
+// second (`security-mechanism-attribution.ts`), and never reads this text at all.
 export const securityReviewChecklist = [
   '## Security review checklist',
   '',
@@ -60,6 +100,10 @@ export const securityReviewChecklist = [
   '  escaping.',
   '- SSRF (CWE-918): a user-controlled URL or host passed to a request/fetch/open',
   '  call without an allowlist or validation.',
+  '- Open redirect (CWE-601, OWASP A01): attacker-controlled input reaching a',
+  '  redirect destination or Location value without an allowlist of permitted',
+  '  targets. Distinct from SSRF: here the server issues no request of its own, it',
+  '  hands the target to the client, which follows it away from a trusted origin.',
   '- Insecure deserialization (CWE-502): untrusted data passed to an unsafe',
   '  deserializer (pickle, yaml.load, ObjectInputStream.readObject, Marshal.load).',
   '- Secrets and sensitive data (CWE-798/532, OWASP A02): hardcoded credentials or',
@@ -68,7 +112,8 @@ export const securityReviewChecklist = [
   '  randomness used for tokens, IDs, or state; missing signature or verification.',
   '- Path traversal (CWE-22): user input used in a filesystem path without',
   '  canonicalization and base-directory containment.',
-  '- Security misconfiguration (OWASP A05): disabled TLS/certificate verification;',
+  '- Security misconfiguration (CWE-16, OWASP A05): disabled TLS/certificate',
+  '  verification;',
   '  permissive CORS with credentials; missing or weakened security headers',
   '  (e.g. X-Frame-Options); debug enabled in production; overly broad allowlists.',
   '- Concurrency affecting security state (CWE-362): check-then-act races on',
@@ -245,6 +290,11 @@ type DiscoveryPassResult = {
   readonly reviewedTasks: readonly WorkflowReviewTask[]
   readonly findingCount: number
   readonly splitCount: number
+  // Times a refused packet was answered by halving the retriever's per-read
+  // allowance (spec 28) rather than by splitting the task. Carried alongside
+  // `splitCount` because the two are the two halves of one failure policy, and only
+  // one of them was ever countable.
+  readonly readBudgetReductionCount: number
   // Raw findings per discovery call this pass issued, in issue order.
   readonly rawFindingsPerCall: readonly number[]
   readonly collected: CollectedCandidates
@@ -322,6 +372,7 @@ const collectDiscoveryPass = (params: {
   const rawFindingsPerCall: number[] = []
   let findingCount = 0
   let splitCount = 0
+  let readBudgetReductionCount = 0
   let dropped = 0
   let suppressedByLocation = 0
   let suppressedById = 0
@@ -332,6 +383,7 @@ const collectDiscoveryPass = (params: {
     reviewedTasks.push(...call.reviewedTasks)
     findingCount += call.findings.length
     splitCount += call.splitCount
+    readBudgetReductionCount += call.readBudgetReductionCount
     rawFindingsPerCall.push(...call.rawFindingsPerCall)
 
     // Collected against the PARTITION, not the parent task: a finding must stay
@@ -360,6 +412,7 @@ const collectDiscoveryPass = (params: {
     reviewedTasks,
     findingCount,
     splitCount,
+    readBudgetReductionCount,
     rawFindingsPerCall,
     collected: { dropped, suppressedByLocation, suppressedById, cappedByLimit }
   }
@@ -621,6 +674,9 @@ export const runModelBackedHolisticTaskReview = async (
     ...(security?.reviewedTasks ?? [])
   ]
   const splitCount = general.splitCount + (security?.splitCount ?? 0)
+  const readBudgetReductionCount =
+    general.readBudgetReductionCount +
+    (security?.readBudgetReductionCount ?? 0)
   const droppedCount =
     general.collected.dropped + (security?.collected.dropped ?? 0)
   const suppressedByLocationCount =
@@ -661,6 +717,11 @@ export const runModelBackedHolisticTaskReview = async (
   // every paid run so far had debug logging off — so the one measurement that
   // separates "discovery produced no more" from "discovery produced more and later
   // stages filtered it out" was computed and then discarded, every time.
+  // Read after every discovery call for this task has finished and before the
+  // telemetry is built: the flag only becomes true when a tool call is refused, so
+  // reading it earlier would report on a budget that had not been spent yet.
+  const retrievalBudgetExhausted = activeCrossFileBudgetExhausted()
+
   const discovery = TaskDiscoveryTelemetrySchema.parse({
     taskId: input.task.id,
     callCount: general.rawFindingsPerCall.length +
@@ -676,6 +737,14 @@ export const runModelBackedHolisticTaskReview = async (
     suppressedByLocationCount,
     cappedByLimitCount,
     contextOverflowSplitCount: splitCount,
+    readBudgetReductionCount,
+    // Spec 16: read INSIDE the task's cross-file scope, which is still open here —
+    // `runDiscoveryTask` in `model-backed-harness.ts` wraps this whole function.
+    // Omitted entirely when there is no scope, so "cross-file retrieval was off"
+    // stays distinguishable from "it was on and the cap did not bind".
+    ...(retrievalBudgetExhausted === undefined
+      ? {}
+      : { retrievalBudgetExhausted }),
     mergeCallCount: merge?.mergeCallCount ?? 0,
     mergeGroupCount: merge?.groupCount ?? 0,
     mergedAwayCount: merge?.rejectedFindings.length ?? 0
@@ -696,6 +765,8 @@ export const runModelBackedHolisticTaskReview = async (
     // limit retry have different causes and different meanings, and one counter for
     // both would hide which was happening.
     context_overflow_split_count: splitCount,
+    read_budget_reduction_count: readBudgetReductionCount,
+    retrieval_budget_exhausted: retrievalBudgetExhausted,
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
