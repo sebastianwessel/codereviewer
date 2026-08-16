@@ -100,6 +100,44 @@ describe('review runner finalization', () => {
     expect(finalization.resolvedBaselineEntries).toBeUndefined()
   })
 
+  // The referenced-definition caps bind on roughly half of TypeScript/JavaScript
+  // changed files, and their only disclosure used to be a `logger.warn` that a
+  // default run (`observability.logging.level: 'silent'`) never emits. The report
+  // is the channel a reader actually has, so the counts have to arrive here.
+  test('carries referenced-definition warnings into the run warnings', () => {
+    const finalization = prepareReviewRunFinalization({
+      config,
+      driftFindings: [],
+      admissionWarnings: [],
+      admittedFindings: [],
+      // Supplied so run cost is computable and contributes no warning of its own,
+      // leaving the assertion below about exactly what this test is checking.
+      providerUsage: { inputTokens: 1_000, outputTokens: 500 },
+      referencedDefinitionWarnings: [
+        'Referenced-definition context was capped: 3 imported dependency file(s) …',
+        'Referenced-definition dependencies were unreadable: 1 imported dependency file(s) …'
+      ]
+    })
+
+    expect(finalization.warnings).toEqual([
+      'Referenced-definition context was capped: 3 imported dependency file(s) …',
+      'Referenced-definition dependencies were unreadable: 1 imported dependency file(s) …'
+    ])
+  })
+
+  test('adds no referenced-definition warning when the caps did not bind', () => {
+    const finalization = prepareReviewRunFinalization({
+      config,
+      driftFindings: [],
+      admissionWarnings: [],
+      admittedFindings: [],
+      providerUsage: { inputTokens: 1_000, outputTokens: 500 },
+      referencedDefinitionWarnings: []
+    })
+
+    expect(finalization.warnings).toEqual([])
+  })
+
   // The counterweight: a baseline that exists and resolved nothing IS a measured
   // zero, and must keep saying so.
   test('reports a measured zero when the baseline exists and resolved nothing', () => {

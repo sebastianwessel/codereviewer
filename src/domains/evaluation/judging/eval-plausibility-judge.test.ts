@@ -176,6 +176,37 @@ describe('prepareEvalPlausibilitySource', () => {
     )
   })
 
+  // The same enormous single line, but built from characters outside the BMP. The
+  // local binary search this module used to cut with searched UTF-16 CODE-UNIT
+  // indices, so it could stop between the halves of a surrogate pair and hand the
+  // judge a lone surrogate — not a character, and the byte the pair would have
+  // cost is not what a lone half costs, so even the budget arithmetic was off.
+  //
+  // The padding is deliberate, not decoration: with a bare run of 4-byte emoji the
+  // budget happens to fall on a pair boundary and the old code got away with it.
+  // One leading ASCII byte shifts the parity so the largest fitting code-unit index
+  // lands INSIDE a pair, which is the case that shipped broken.
+  test('never cuts a surrogate pair in half on a single oversized line', () => {
+    const budget = EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP - 1_024
+    const prepared = prepareEvalPlausibilitySource({
+      content: `x${'\u{1F600}'.repeat(EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP / 4)}`,
+      line: 1
+    })
+
+    expect(prepared.partial).toBe(true)
+    // The whole point: no unpaired surrogate anywhere in what the judge is sent.
+    expect(prepared.text.isWellFormed()).toBe(true)
+    expect(prepared.text).not.toMatch(/�/u)
+    expect(
+      Buffer.byteLength(prepared.text, 'utf8')
+    ).toBeLessThanOrEqual(EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP)
+    // And the cut is still a whole number of characters at the budget: one leading
+    // 'x' plus as many 4-byte emoji as fit.
+    expect(
+      [...(prepared.text.split('\n')[1] ?? '')].length - 1
+    ).toBe(Math.floor((budget - 1) / 4))
+  })
+
   // The redaction is the same 13-sweep pass for every finding in a file; the
   // WINDOW is not — it is centred on each finding's own line. The cache holds the
   // first and must never hold the second.

@@ -67,7 +67,7 @@ describe('review runner context assembly', () => {
     }
   })
 
-  test('converts diff maps to new-side reviewed ranges and skips deleted hunks', () => {
+  test('converts diff maps to new-side reviewed ranges and drops a hunk with no head-side position', () => {
     expect(
       reviewedDiffRangesForDiffMaps([
         {
@@ -80,6 +80,8 @@ describe('review runner context assembly', () => {
               newStartLine: 8,
               newLineCount: 3
             },
+            // A whole-file deletion: `newStartLine` 0 is not a line, and the file
+            // has no head side for a candidate to point at.
             {
               oldStartLine: 20,
               oldLineCount: 2,
@@ -95,6 +97,37 @@ describe('review runner context assembly', () => {
         startLine: 8,
         endLine: 10,
         changeKind: 'modified'
+      }
+    ])
+  })
+
+  // A hunk that only removes lines reports `newLineCount === 0` — the ordinary
+  // shape under intake's `--unified=0`, not an edge case. Dropping it took the
+  // whole FILE out of the reviewed-range list, and admission scope reads that list
+  // by path.
+  test('anchors a pure-deletion hunk at the removal point and marks it', () => {
+    expect(
+      reviewedDiffRangesForDiffMaps([
+        {
+          path: 'src/deleted-only.ts',
+          changeKind: 'modified',
+          hunks: [
+            {
+              oldStartLine: 10,
+              oldLineCount: 3,
+              newStartLine: 9,
+              newLineCount: 0
+            }
+          ]
+        }
+      ])
+    ).toEqual([
+      {
+        path: 'src/deleted-only.ts',
+        startLine: 9,
+        endLine: 9,
+        changeKind: 'modified',
+        deletionAnchor: true
       }
     ])
   })

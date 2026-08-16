@@ -129,7 +129,12 @@ export const ReviewedDiffRangeSchema = z.strictObject({
   path: RepositoryRelativePathSchema,
   startLine: z.int().min(1),
   endLine: z.int().min(0),
-  changeKind: z.enum(['new', 'modified', 'deleted']).optional()
+  changeKind: z.enum(['new', 'modified', 'deleted']).optional(),
+  // Set only for a hunk that removed lines and added none, where the range is an
+  // anchor at the removal point rather than a span of changed head-side lines.
+  // Carried through the packets rather than stripped because a reader of a range
+  // has to be able to tell the two apart; see `ReviewedDiffRange`.
+  deletionAnchor: z.boolean().optional()
 })
 
 export const WorkflowProvenanceInputSchema = FindingProvenanceSchema.omit({

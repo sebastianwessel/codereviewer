@@ -5,6 +5,10 @@ import {
   normalizeError
 } from '../../../shared/errors/error-normalizer.js'
 import { redactText } from '../../../shared/redaction/redactor.js'
+import {
+  sliceUtf8Bytes,
+  utf8ByteLength
+} from '../../../shared/text/utf8-bytes.js'
 import { z } from 'zod'
 import type { EvalCase } from '../corpus/eval-fixture.schema.js'
 
@@ -183,24 +187,14 @@ export type EvalPlausibilitySource = {
   readonly findingLineOmittedByCap: boolean
 }
 
-const byteLength = (value: string): number => Buffer.byteLength(value, 'utf8')
-
-// Longest prefix of `value` fitting `budget` bytes, found by binary search on
-// code-unit length so a multi-byte character is never split down the middle.
-const boundedPrefix = (value: string, budget: number): string => {
-  let low = 0
-  let high = value.length
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2)
-    if (byteLength(value.slice(0, mid)) <= budget) {
-      low = mid
-    } else {
-      high = mid - 1
-    }
-  }
-
-  return value.slice(0, low)
-}
+// The shared slicer, not a local one. This module had its own: a binary search on
+// UTF-16 code-unit indices, with a comment claiming it never split a character.
+// It could, and `sliceUtf8Bytes`'s own doc names that exact algorithm as a bug
+// this repository already shipped once — `value.slice(0, mid)` at an odd `mid`
+// inside a surrogate pair yields a LONE SURROGATE, which is not a character at
+// all. Reachable with emoji or CJK content on a pathological single line, and the
+// output of this module feeds the plausibility judge, whose verdicts produce
+// `adjustedPrecision` — a number this project publishes.
 
 // Splits into the lines an editor would number, so a range this module discloses
 // means the same thing as the `path:line` the finding cites. A trailing newline
@@ -224,19 +218,19 @@ const buildLineWindow = (
   budget: number
 ): { readonly startIndex: number; readonly endIndex: number; readonly text: string } => {
   const anchor = lines[anchorIndex] ?? ''
-  if (byteLength(anchor) > budget) {
+  if (utf8ByteLength(anchor) > budget) {
     // Pathological single line (a minified or generated file has exactly one).
     // Nothing can be centred; the caller still discloses the cut.
     return {
       startIndex: anchorIndex,
       endIndex: anchorIndex,
-      text: boundedPrefix(anchor, budget)
+      text: sliceUtf8Bytes(anchor, budget)
     }
   }
 
   let startIndex = anchorIndex
   let endIndex = anchorIndex
-  let used = byteLength(anchor)
+  let used = utf8ByteLength(anchor)
   let preferBefore = true
 
   for (;;) {
@@ -244,17 +238,17 @@ const buildLineWindow = (
     const afterIndex = endIndex + 1
     // +1 per line for the newline that rejoins it to the window.
     const beforeFits =
-      beforeIndex >= 0 && used + byteLength(lines[beforeIndex] ?? '') + 1 <= budget
+      beforeIndex >= 0 && used + utf8ByteLength(lines[beforeIndex] ?? '') + 1 <= budget
     const afterFits =
       afterIndex < lines.length &&
-      used + byteLength(lines[afterIndex] ?? '') + 1 <= budget
+      used + utf8ByteLength(lines[afterIndex] ?? '') + 1 <= budget
     if (!beforeFits && !afterFits) {
       break
     }
 
     const takeBefore = beforeFits && (preferBefore || !afterFits)
     const index = takeBefore ? beforeIndex : afterIndex
-    used += byteLength(lines[index] ?? '') + 1
+    used += utf8ByteLength(lines[index] ?? '') + 1
     if (takeBefore) {
       startIndex = index
     } else {
@@ -346,7 +340,7 @@ export const prepareEvalPlausibilitySource = (
   const contentBudget =
     EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP - EVAL_PLAUSIBILITY_DISCLOSURE_RESERVE_BYTES
 
-  if (byteLength(redacted) <= contentBudget) {
+  if (utf8ByteLength(redacted) <= contentBudget) {
     return {
       text: `${completeContentNotice(totalLines)}\n${redacted}`,
       partial: false,

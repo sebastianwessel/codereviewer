@@ -356,6 +356,13 @@ export const buildContextSections = (
       (range) =>
         `${range.path} lines ${range.startLine}-${range.endLine}${
           range.changeKind === undefined ? '' : ` (${range.changeKind})`
+        }${
+          // A deletion anchor names a surviving line, not a changed one: saying
+          // "lines 9-9 changed" would be false, and the removal is the thing the
+          // reviewer has to reason about.
+          range.deletionAnchor === true
+            ? ' - lines were REMOVED here and none added'
+            : ''
         }`
     )
     .join('\n')

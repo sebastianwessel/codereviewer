@@ -38,16 +38,21 @@ raw thrown value:
 | `config` | `2` | yes |
 | `repository` | `3` | yes |
 | `provider` | `4` | yes |
+| `input-limit` | `4` | yes |
 | `quality-gate` | `1` | yes |
 | `admission` | `5` | no |
 | `report` | `5` | no |
 | `internal` | `5` | no |
 
-**The category does not fix the exit code.** A structured error carries its own
-`exitCode` and keeps it. The three `intent check` input limits are the case that
-proves it: they are category `config` and exit `4`, because they are not a
-configuration mistake to fix but an input the command declined to judge in part.
-Read the `code`, not the category, when mapping to a CI action.
+**The category is what supplies the exit code.** Both columns are derived from
+the category when the error is built, never passed in beside it, so a code and a
+category cannot disagree — that derivation is why `input-limit` exists as its own
+category rather than as `config` errors overriding the exit code by hand. A
+structured error that reaches the normalizer keeps the `exitCode` it already
+carries; nothing reclassifies it on the way out.
+
+Read the `code`, not the category, when mapping to a CI action: the category tells
+you how the run ended, the code tells you what to do about it.
 
 ## Generic codes
 
@@ -115,20 +120,19 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | `eval_semantic_judge_missing` | An eval case with expected findings was scored without the semantic judge (no provider). |
 | `provider_*` setup codes | See the table above. |
 
-Three `config`-category codes exit `4` rather than `2`. They are `intent check`'s
-input limits: the command refuses an input it cannot see whole instead of judging
-part of it and reporting obligations as not-evidenced whose evidence was never
-shown. Nothing is truncated in any of the three.
+### `input-limit` (exit 4)
 
-| Code | Exit | When |
-| --- | --- | --- |
-| `intent_change_too_large` | `4` | The change has more citable lines than `intentFulfilment.maxChangeLines` allows. |
+`intent check`'s three input limits. They are **not** `config` errors: the input is
+not a mistake to correct in configuration, it is more than the command will judge
+in one pass, and refusing it beats judging part of it and reporting obligations as
+not-evidenced whose evidence was never shown. Nothing is truncated in any of the
+three, and the exit code is `4` because the category says so.
 
-> The three `intent_*` refusals above carry category `input-limit`, whose exit
-> code is `4` by definition. The category determines the exit code — it is never
-> written beside it, so the two cannot disagree.
-| `intent_text_too_large` | `4` | The stated intent is larger than `intentFulfilment.maxIntentBytes` allows. |
-| `intent_too_many_obligations` | `4` | The stated intent yielded at least as many obligations as `intentFulfilment.maxObligations` allows. |
+| Code | When |
+| --- | --- |
+| `intent_change_too_large` | The change has more citable lines than `intentFulfilment.maxChangeLines` allows. |
+| `intent_text_too_large` | The stated intent is larger than `intentFulfilment.maxIntentBytes` allows. |
+| `intent_too_many_obligations` | The stated intent yielded at least as many obligations as `intentFulfilment.maxObligations` allows. |
 
 Each message names the offending size, the configured limit, and a recovery — and
 where the limit is already at its schema maximum it says so instead of advising a
@@ -179,6 +183,8 @@ These never set an exit code on their own; they appear in `run.warnings` in
 | `config-file-missing` | No config file at the **default** path; defaults were used. A file named by `--config` or `CODEREVIEWER_CONFIG_PATH` that does not exist is a `config_error` at exit `2` instead — a named file that is missing is a mistake, not a fallback. |
 | `baseline-missing` | A baseline was explicitly configured but the file is absent. Findings are marked `unknown` and treated as new. |
 | `cost-unavailable` | Token counts or prices were unavailable, so cost was not computed and `review.maxCostUsd` could not be enforced. |
+| `Referenced-definition context was capped: N imported dependency file(s) resolved but were not shown to the reviewer…` | The per-task dependency-digest caps (6 files, 12288 bytes total, 4096 bytes per file) kept resolvable imported dependencies out of the review context. The reviewer reasoned about calls into those files without their definitions; findings that hinge on such a callee's contract are less well evidenced than a run where nothing was dropped. |
+| `Referenced-definition dependencies were unreadable: N imported dependency file(s) resolved and then could not be read…` | A dependency resolved to a real path and the read failed (it vanished between probe and read, permissions, an I/O error). Reported apart from the capped count because the caps are not what bound: check that those files exist and are readable. |
 | `External change-intent provider "<id>" failed and was skipped.` | The provider errored. The review continues without its contribution. |
 | `External change-intent provider "<id>" found no change-intent source, so the review ran without one. This is the ordinary result when a change has no written intent; if you expected content, check where the provider points.` | The provider ran and matched nothing — an empty inbox, a mistyped directory, no changed file matching its globs. With `contextSources` on by default, this is what an ordinary run sees; it is not read as a misconfiguration, though a mistyped path produces the same shape. |
 | `External change-intent provider "<id>" matched N sources but none carried usable text, so the review ran without them. Check that those sources have a body below their frontmatter.` | The provider found sources and none of them yielded usable text — empty bodies, frontmatter only. Genuinely odd, since something did match. |

@@ -119,18 +119,66 @@ export const reviewedLineRangesForSourceFiles = (
     })
   )
 
+/**
+ * The head-side span every hunk occupies, per changed file: the reviewed change
+ * footprint admission scopes candidates by and the discovery packet shows the
+ * model as change metadata.
+ *
+ * A PURE-DELETION hunk reports `newLineCount === 0` and occupies no head-side
+ * line. This used to drop those hunks, which is not a smaller range but the FILE
+ * disappearing from the list — and `candidateWithinReviewedScope` admits by PATH,
+ * treating a non-empty list as authoritative. So a change whose file A only
+ * deletes lines while file B adds some produced a list with no entry for A, and
+ * every model candidate in A was rejected as out-of-diff scope. That is not an
+ * exotic shape: intake fetches the diff with `--unified=0`, so any hunk that only
+ * removes lines reports zero, and deleting a function is precisely how a change
+ * breaks its callers.
+ *
+ * A deletion hunk is therefore anchored at `newStartLine` — the head-side line the
+ * removal sits after — which is the answer `changedSymbols`' `hunkRange`,
+ * `eval-diff-scope` and `git-diff-header`'s `hunksWithinRange` already derive for
+ * this shape. Four derivations of one coordinate, one of them disagreeing, is what
+ * produced the bug.
+ *
+ * `deletionAnchor` marks it, and the mark is load-bearing. The anchor line is NOT
+ * a changed head-side line: under `--unified=0` it is not in the diff at all, so
+ * no inline comment can be placed on it. Inline-comment eligibility is a separate
+ * decision (`locationDiffRangeIsInlineEligible`) but it reads THIS array, so the
+ * two only stay separable if a range says which kind it is.
+ *
+ * A whole-file deletion reports `newStartLine === 0`: no head-side position exists
+ * and no head-side content exists for a candidate to point at, so it contributes
+ * nothing. Such a range would also fail `ReviewedDiffRangeSchema`, whose
+ * `startLine` is 1-based.
+ */
 export const reviewedDiffRangesForDiffMaps = (
   diffMaps: readonly DiffMap[]
 ): readonly ReviewedDiffRange[] =>
   diffMaps.flatMap((diffMap) =>
-    diffMap.hunks
-      .filter((hunk) => hunk.newLineCount > 0)
-      .map((hunk) => ({
-        path: diffMap.path,
-        startLine: hunk.newStartLine,
-        endLine: hunk.newStartLine + hunk.newLineCount - 1,
-        changeKind: diffMap.changeKind
-      }))
+    diffMap.hunks.flatMap((hunk) => {
+      if (hunk.newLineCount > 0) {
+        return [
+          {
+            path: diffMap.path,
+            startLine: hunk.newStartLine,
+            endLine: hunk.newStartLine + hunk.newLineCount - 1,
+            changeKind: diffMap.changeKind
+          }
+        ]
+      }
+
+      return hunk.newStartLine < 1
+        ? []
+        : [
+            {
+              path: diffMap.path,
+              startLine: hunk.newStartLine,
+              endLine: hunk.newStartLine,
+              changeKind: diffMap.changeKind,
+              deletionAnchor: true
+            }
+          ]
+    })
   )
 
 const workflowTaskPaths = (

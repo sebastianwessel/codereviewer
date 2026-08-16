@@ -13,6 +13,7 @@ import {
   readOptionalText,
   storedDiffOf
 } from '../corpus/git-corpus-hydration.js'
+import { parseGitDiffNewPath } from '../../../shared/diff/git-diff-header.js'
 import {
   checkoutCorpusCase,
   defaultCorpusGitRunner,
@@ -64,23 +65,37 @@ export const gitForwardDiffArgs = (input: {
   ...input.reviewedPaths
 ]
 
-// Every path the diff touches, from its `diff --git a/X b/Y` headers, taken from
-// BOTH sides.
+// Every path the diff touches, from its `diff --git` headers.
 //
 // `materializeDiffFiles` reports only paths with new-side content, which is the
 // right set for spec 17 and the wrong one here: a change that DELETES a file is
 // the strongest change-impact case there is — the dependents stop compiling — and
 // a deletion has no new side. Reading the headers keeps a pure-deletion change
 // reviewable and keeps the undeclared-path guard honest about it.
+//
+// Read with the SHARED header parser. This used to carry its own
+// `/^diff --git a\/(.+) b\/(.+)$/`, which is the failure `git-diff-header`'s own
+// header comment records having already happened in the discovery packet: git
+// C-quotes and octal-escapes any path with a non-ASCII byte (`core.quotePath` is
+// on by default), so `diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"`
+// did not match the pattern AT ALL. The path was then silently absent — and the
+// undeclared-path guard below is a check for paths NOT in the manifest, so an
+// absent path passes it. A case could hydrate having reviewed a file no one
+// declared, and the emptiness check would still see the other files and say
+// nothing.
+//
+// The parser returns the `b/` (head) side only, which is the same set both sides
+// gave here: the corpus diff is taken with `--no-renames` (see
+// `gitForwardDiffArgs`), so no header names two different paths, and git writes
+// the file's path on both sides even for a deletion.
 export const diffHeaderPaths = (diff: string): readonly string[] => {
   const paths = new Set<string>()
 
   for (const line of diff.split(/\r?\n/u)) {
-    const match = /^diff --git a\/(.+) b\/(.+)$/u.exec(line)
+    const path = parseGitDiffNewPath(line)
 
-    if (match?.[1] !== undefined && match[2] !== undefined) {
-      paths.add(match[1])
-      paths.add(match[2])
+    if (path !== undefined) {
+      paths.add(path)
     }
   }
 

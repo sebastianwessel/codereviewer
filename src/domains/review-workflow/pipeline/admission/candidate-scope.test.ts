@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { CandidateFinding } from '../../../admission/index.js'
+import { reviewedDiffRangesForDiffMaps } from '../../run/context/context.js'
 import {
   candidateWithinReviewedScope,
   isModelProposedCandidate,
@@ -64,6 +65,59 @@ describe('model admission candidate scope', () => {
       candidateWithinReviewedScope(candidate({ path: 'src/other.ts' }), [
         { path: 'src/admission.ts', startLine: 1, endLine: 30 }
       ])
+    ).toBe(false)
+  })
+
+  // The regression this whole pair of modules exists to prevent, driven through the
+  // real range derivation rather than a hand-written range list: the bug was that
+  // the two disagreed about what a pure-deletion hunk contributes.
+  //
+  // Mixed change: file A only DELETES lines, file B adds some. Before the fix, A
+  // produced no range at all, the list was non-empty because of B, and so every
+  // candidate in A — including one at the deletion site, which is exactly where
+  // "this change broke its callers" lives — was rejected as out-of-diff scope.
+  test('keeps a candidate in a pure-deletion file in scope when another file has additions', () => {
+    const ranges = reviewedDiffRangesForDiffMaps([
+      {
+        path: 'src/deleted-only.ts',
+        changeKind: 'modified',
+        hunks: [
+          { oldStartLine: 10, oldLineCount: 4, newStartLine: 9, newLineCount: 0 }
+        ]
+      },
+      {
+        path: 'src/added.ts',
+        changeKind: 'modified',
+        hunks: [
+          { oldStartLine: 2, oldLineCount: 0, newStartLine: 3, newLineCount: 2 }
+        ]
+      }
+    ])
+
+    expect(ranges.map((range) => range.path)).toEqual([
+      'src/deleted-only.ts',
+      'src/added.ts'
+    ])
+    expect(
+      candidateWithinReviewedScope(
+        candidate({ path: 'src/deleted-only.ts', startLine: 9 }),
+        ranges
+      )
+    ).toBe(true)
+    // Elsewhere in the same pure-deletion file, too: admission scope is the file,
+    // not the removal point.
+    expect(
+      candidateWithinReviewedScope(
+        candidate({ path: 'src/deleted-only.ts', startLine: 42 }),
+        ranges
+      )
+    ).toBe(true)
+    // Unchanged files are still out of scope; the fix must not widen that.
+    expect(
+      candidateWithinReviewedScope(
+        candidate({ path: 'src/untouched.ts', startLine: 9 }),
+        ranges
+      )
     ).toBe(false)
   })
 

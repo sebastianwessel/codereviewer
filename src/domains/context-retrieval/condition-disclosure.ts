@@ -87,12 +87,29 @@ const conditionDisclosure: Record<
       remedy:
         'Use repo_grep to locate the path you meant, and say that a check you could not complete is unresolved.'
     }),
+  // THESE TWO ARE NOT PER CALL, and used to say they were.
+  //
+  // `usedReads`/`usedSearches` live on the retriever object, and the review
+  // pipeline builds ONE retriever for the whole run (`pipeline/handler.ts`) and
+  // hands the same one to every task — the same fact `discovery/cross-file-tools.ts`
+  // records about `reduceReadBudget`. So a model told "you have no reads left in
+  // this call" was told a scoped fact about a global counter: the natural reading
+  // is that the next call starts fresh, and "decide from what you have" was then
+  // advice given under a premise the engine does not honour.
+  //
+  // They do not say "this run" either, because these disclosures are shared by
+  // every lane that exposes the tools, and the verification lane builds a retriever
+  // PER CLAIM (`verification/verification-flow.ts`) — "run" would be the same kind
+  // of wrong in the other direction there. What is true in every lane is the part
+  // that changes what the model should do: the budget is shared across calls, and
+  // asking again does not get a fresh one.
   'read-budget-exhausted': ({ toolId }) =>
     refusalOutput({
       toolId,
       marker: 'READ BUDGET EXHAUSTED',
-      summaryReason: "this call's repository read budget is exhausted.",
-      situation: 'You have no file reads or directory listings left in this call.',
+      summaryReason: 'the shared repository read budget is exhausted.',
+      situation:
+        'You have no file reads or directory listings left. This budget is shared across calls rather than granted per call, and it does not refill, so a later request will be refused the same way.',
       meaning: engineLimitMeaning,
       remedy: decideFromWhatYouHave
     }),
@@ -100,8 +117,9 @@ const conditionDisclosure: Record<
     refusalOutput({
       toolId,
       marker: 'SEARCH BUDGET EXHAUSTED',
-      summaryReason: "this call's repository search budget is exhausted.",
-      situation: 'You have no searches left in this call.',
+      summaryReason: 'the shared repository search budget is exhausted.',
+      situation:
+        'You have no searches left. This budget is shared across calls rather than granted per call, and it does not refill, so a later search will be refused the same way.',
       meaning: engineLimitMeaning,
       remedy: decideFromWhatYouHave
     }),

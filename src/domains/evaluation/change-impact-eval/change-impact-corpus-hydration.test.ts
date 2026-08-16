@@ -274,6 +274,29 @@ describe('diff path extraction', () => {
     ).toEqual(['pkg/gone.go'])
   })
 
+  // Git C-quotes and octal-escapes any path containing a non-ASCII byte, which
+  // `core.quotePath` does by default. The private regex this used to carry matched
+  // only the unquoted form, so a quoted path produced NO entry — and the guard
+  // downstream looks for paths that are not declared, so an absent path passes it
+  // silently. The expected value is byte-per-character because that is what the
+  // shared parser produces; the point of routing through it is that hydration and
+  // every other reader of a `diff --git` header agree on one answer.
+  test('reads a C-quoted non-ASCII path instead of dropping it', () => {
+    expect(
+      diffHeaderPaths(
+        [
+          'diff --git "a/src/caf\\303\\251.ts" "b/src/caf\\303\\251.ts"',
+          'index 1111111..2222222 100644',
+          '--- "a/src/caf\\303\\251.ts"',
+          '+++ "b/src/caf\\303\\251.ts"',
+          '@@ -1,1 +1,1 @@',
+          '-export const brew = () => 1',
+          '+export const brew = () => 2'
+        ].join('\n')
+      )
+    ).toEqual(['src/cafÃ©.ts'])
+  })
+
   test('ignores a diff with no headers', () => {
     expect(diffHeaderPaths('')).toEqual([])
   })

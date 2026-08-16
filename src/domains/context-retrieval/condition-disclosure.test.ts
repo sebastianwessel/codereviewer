@@ -77,6 +77,25 @@ describe('expected-condition disclosure', () => {
     }
   })
 
+  // The read and search counters live on the retriever, and the review pipeline
+  // builds one retriever per RUN and shares it across every task. Telling the model
+  // its reads ran out "in this call" invited a retry the engine refuses on the same
+  // grounds, so the disclosure states the property that holds in every lane: the
+  // budget is shared and does not refill.
+  test('the read and search bounds never claim to be per call', () => {
+    for (const condition of [
+      'read-budget-exhausted',
+      'search-budget-exhausted'
+    ] as const) {
+      const output = disclose(conditionErrors[condition])
+
+      expect(output?.content).not.toContain('in this call')
+      expect(output?.summary).not.toContain("this call's")
+      expect(output?.content).toContain('shared across calls')
+      expect(output?.content).toContain('does not refill')
+    }
+  })
+
   test('the scope tool-call bound keeps its shape and joins the same vocabulary', () => {
     const output = disclosedRetrievalCondition({
       toolId: 'repo_list',

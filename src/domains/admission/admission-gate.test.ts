@@ -300,6 +300,42 @@ describe('admission gate', () => {
     expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
   })
 
+  // A deletion anchor is in `reviewedDiffRanges` so its FILE is admitted (a hunk
+  // that only removes lines still changed that file), but the line it names is a
+  // surviving line the change never touched — it is not in the diff at all under
+  // `--unified=0`, so no comment could be anchored to it. Admission scope and
+  // inline eligibility read the same array, so the flag is the only thing keeping
+  // the second from inheriting the first.
+  test('a deletion anchor puts the file in scope without making its line inline-eligible', () => {
+    const deletionAnchored = {
+      ...policy,
+      reviewedDiffRanges: [
+        {
+          path: 'src/app.ts',
+          startLine: 4,
+          endLine: 4,
+          changeKind: 'modified' as const,
+          deletionAnchor: true
+        }
+      ]
+    }
+
+    for (const side of ['new', 'file'] as const) {
+      const result = admitCandidate({
+        candidate: {
+          ...candidate,
+          location: { path: 'src/app.ts', startLine: 4, side }
+        },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: deletionAnchored
+      })
+
+      expect(result.status).toBe('admitted')
+      expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+    }
+  })
+
   test('does not invent inline eligibility when diff maps are explicitly empty', () => {
     const result = admitCandidate({
       candidate,

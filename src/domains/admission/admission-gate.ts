@@ -85,6 +85,13 @@ export type ReviewedDiffRange = {
   readonly startLine: number
   readonly endLine: number
   readonly changeKind?: 'new' | 'modified' | 'deleted' | undefined
+  // True when the hunk removed lines and added none. The range is then an ANCHOR
+  // at the head-side line the removal sits after, not a span of changed head-side
+  // lines: it puts the file into reviewed scope — a deletion is how a change
+  // breaks a caller — without claiming that line changed. See
+  // `locationDiffRangeIsInlineEligible`, which is the reason the flag exists, and
+  // `reviewedDiffRangesForDiffMaps`, which is the only thing that sets it.
+  readonly deletionAnchor?: boolean | undefined
 }
 
 // The absolute line span of one source chunk, tied to the review task that was
@@ -296,8 +303,15 @@ const locationDiffRangeIsInlineEligible = (
     return false
   }
 
+  // A deletion anchor is present so its FILE is in reviewed scope; it marks a hunk
+  // that occupies no head-side line, so nothing can be anchored to it — the line it
+  // names is not part of the diff at all under `--unified=0`. Dropping it here is
+  // what keeps "in reviewed scope" and "commentable" separable while both are read
+  // off one array.
+  const changedRanges = ranges?.filter((range) => range.deletionAnchor !== true)
+
   if (candidate.location.side === 'file') {
-    return (ranges ?? []).some(
+    return (changedRanges ?? []).some(
       (range) =>
         range.path === candidate.location.path &&
         candidate.location.startLine >= range.startLine &&
@@ -305,7 +319,7 @@ const locationDiffRangeIsInlineEligible = (
     )
   }
 
-  if (ranges === undefined) {
+  if (changedRanges === undefined) {
     return true
   }
 
@@ -314,7 +328,7 @@ const locationDiffRangeIsInlineEligible = (
     endLine: candidate.location.endLine ?? candidate.location.startLine
   }
 
-  return ranges
+  return changedRanges
     .filter((range) => range.path === candidate.location.path)
     .some((range) => lineRangesOverlap(candidateRange, range))
 }

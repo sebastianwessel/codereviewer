@@ -35,6 +35,7 @@ import { prepareReviewRunnerRunObservability } from './support/run-observability
 import { prepareReviewRunnerSourceState } from './intake/source-state.js'
 import { prepareReviewRunnerPlanningState } from './planning/planning-state.js'
 import { prepareReviewRunnerContextAssemblyState } from './context/assembly-state.js'
+import { referencedDefinitionContextWarnings } from './context/referenced-definition-warnings.js'
 import { prepareReviewRunnerChangeIntentContext } from './context/change-intent-context.js'
 import { prepareReviewRunnerAnalyzerSignalContext } from './context/analyzer-signal-context.js'
 import { prepareReviewRunnerCompletionState } from './results/completion-state.js'
@@ -282,6 +283,16 @@ export const runReview = async (
       contextRedactionWarnings: redactedReviewMaterialWarnings({
         redactedDiffSpanCount: intakeMetrics.redactedDiffSpanCount,
         redactedContextSpanCount: contextState.metrics.redactedContextSpanCount
+      }),
+      // Context assembly already counted the dependency digests its caps kept out
+      // and the ones that could not be read, and already disclosed both — but only
+      // through `logger.warn`, and the default logging level is `silent`, where the
+      // logger is a no-op. So the report is where a default run can say it, and
+      // `report.md` renders run warnings under "Bounds that bound".
+      referencedDefinitionWarnings: referencedDefinitionContextWarnings({
+        droppedCount: contextState.metrics.referencedDefinitionsDroppedCount,
+        unreadableCount:
+          contextState.metrics.referencedDefinitionsUnreadableCount
       }),
       providerWorkflow,
       providerTaskEventsObservedLive,

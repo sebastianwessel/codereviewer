@@ -62,6 +62,9 @@ export const prepareReviewRunnerCompletionState = (
     readonly contextIngestionWarnings?: readonly string[] | undefined
     // What redaction replaced in the diff and the task context this run reviewed.
     readonly contextRedactionWarnings?: readonly string[] | undefined
+    // What the referenced-definition caps kept out of the task context, and what
+    // resolved but could not be read.
+    readonly referencedDefinitionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -140,6 +143,9 @@ export const prepareReviewRunnerCompletionState = (
       ...(input.contextRedactionWarnings === undefined
         ? {}
         : { contextRedactionWarnings: input.contextRedactionWarnings }),
+      ...(input.referencedDefinitionWarnings === undefined
+        ? {}
+        : { referencedDefinitionWarnings: input.referencedDefinitionWarnings }),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),
