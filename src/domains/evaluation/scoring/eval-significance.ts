@@ -15,6 +15,8 @@
 // per-pair discordant counts of several run pairs instead would count the same
 // expectation once per pair and manufacture independence that is not there.
 
+import { poolIdentityRefusals } from '../report/eval-pool-identity.js'
+
 export type ExpectationKey = string
 
 // The minimum a run must record to take part in a paired test. Declared
@@ -110,32 +112,34 @@ const refuseIncompleteScoring = (
 export const collectArmOutcomes = (
   reports: readonly PairedScoredRun[]
 ): ArmOutcomes => {
-  // Every run in an arm must have been scored by the same rules, for the same
-  // reason the comparison refuses to mix them: a metrics-version change alters
-  // what a metric reports for identical review output, so pooling across one
-  // measures the scoring change.
-  const versions = [...new Set(reports.map((report) => report.metricsVersion))]
+  // Every run in an arm must have been scored by the same rules and against the
+  // same answer key. Both refusals used to be written out here; they now come
+  // from `eval-pool-identity.ts`, which owns the question for every caller that
+  // merges runs — including `eval recall-report`, which pools the same
+  // per-expectation outcomes and enforced nothing at all. The messages are
+  // unchanged.
+  //
+  // Stricter than the comparison renderer, deliberately, and that argument is
+  // still this module's: comparing two runs with different case selections is
+  // ordinary work and only warrants a warning, but POOLING them is never right —
+  // the runs form one arm whose per-expectation hit rates share a denominator, so
+  // mixing selections silently computes a rate over a population that never
+  // existed. The aggregate digest is the correct test here even though it is too
+  // blunt for comparison.
+  //
+  // `PairedScoredRun` carries no model fields, so the judge dimension of that
+  // guard resolves to `unrecorded` for every run and cannot fire. That is not a
+  // hole opened here: the only caller builds its arms from a comparison whose
+  // command already refuses a judge mismatch before this module is reached.
+  const refusals = poolIdentityRefusals(
+    reports.map((report) => ({
+      metricsVersion: report.metricsVersion,
+      provenance: { answerKeyDigest: report.provenance.answerKeyDigest }
+    }))
+  )
 
-  if (versions.length > 1) {
-    throw new Error(
-      `Refusing to pool evaluation runs scored by different rules: metrics versions ${versions.join(', ')}.`
-    )
-  }
-
-  // Stricter than the comparison renderer, deliberately. Comparing two runs with
-  // different case selections is ordinary work and only warrants a warning, but
-  // POOLING them is never right: the runs form one arm whose per-expectation hit
-  // rates share a denominator, so mixing selections silently computes a rate over
-  // a population that never existed. An arm must be homogeneous, so the aggregate
-  // digest is the correct test here even though it is too blunt for comparison.
-  const answerKeyDigests = [
-    ...new Set(reports.map((report) => report.provenance.answerKeyDigest))
-  ]
-
-  if (answerKeyDigests.length > 1) {
-    throw new Error(
-      `Refusing to pool evaluation runs scored against different answer keys: digests ${answerKeyDigests.join(', ')}.`
-    )
+  if (refusals.length > 0) {
+    throw new Error(refusals.join(' '))
   }
 
   const hits = new Map<ExpectationKey, number>()

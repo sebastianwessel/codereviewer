@@ -19,6 +19,7 @@ import {
 } from './report-digest.js'
 import {
   impactReportFixture,
+  impactReportWithAdjudicationFixture,
   intentReportFixture,
   reviewReportFixture,
   reviewReportWithFullAccountingFixture
@@ -362,9 +363,12 @@ describe('digestImpactReport', () => {
   it('does not give one symbol the callers of a same-named symbol', () => {
     const digest = digestImpactReport(
       json({
-        schemaVersion: '1.0',
-        status: 'completed',
+        // Built on the fixture so the bookkeeping the digest now reads — the
+        // adjudication status and its counters — is the shape a run writes,
+        // rather than a hand-made minimum that would drift from it.
+        ...impactReportFixture,
         summary: {
+          ...impactReportFixture.summary,
           changedSymbolCount: 2,
           referenceCount: 1,
           testReferenceCount: 0
@@ -406,6 +410,106 @@ describe('digestImpactReport', () => {
       definitionPath: 'src/a.ts',
       referenceCount: 1
     })
+  })
+
+  // THE ADJUDICATED LAYER, which this digest did not read at all until
+  // 2026-08-16: an operator who turned `changeImpact.adjudication.enabled` on
+  // bought model calls that decided which dependents actually break, and the
+  // digest dropped every one of them before the comment could render it.
+  it('carries the adjudicated findings and everything they are relied on with', () => {
+    const digest = digestImpactReport(json(impactReportWithAdjudicationFixture))
+
+    expect(digest.adjudicationStatus).toBe('completed')
+    expect(digest.findings.map((finding) => finding.path)).toEqual([
+      'src/routes/admin.ts',
+      'src/auth/session.test.ts'
+    ])
+    // Spec 22: a finding MUST carry the dependent's path and line, the contract
+    // element relied upon, and the consequence. All four survive the digest, or
+    // the comment states a judgement it cannot back.
+    expect(digest.findings[0]).toMatchObject({
+      destination: 'production',
+      compatibilityClass: 'breaks-on-build'
+    })
+    expect(digest.findings[0]?.reliances[0]).toEqual({
+      line: 41,
+      symbolName: 'loadUser',
+      contractElement: 'the declaration of loadUser, which this change removes',
+      consequence: 'this reference cannot resolve and the file will not build',
+      adjudicatedBy: 'deterministic'
+    })
+    // One file, two tiers. Which sentence cost a provider call is a property of
+    // the reliance, and flattening it onto the finding would lose it.
+    expect(digest.findings[0]?.reliances[1]?.adjudicatedBy).toBe('model')
+  })
+
+  // An empty finding list means three different things, and the counters are what
+  // separate them. Summed here, once, by the contract's own helper.
+  it('sums how much was checked, so an empty list can be told from an absent one', () => {
+    const checked = digestImpactReport(
+      json(impactReportWithAdjudicationFixture)
+    )
+    const disabled = digestImpactReport(json(impactReportFixture))
+
+    // 3 relied upon + 0 settled in code + 1 answered "does not rely".
+    expect(checked.checkedPairCount).toBe(4)
+    expect(checked.adjudicationCallCount).toBe(3)
+    expect(disabled.adjudicationStatus).toBe('disabled')
+    expect(disabled.checkedPairCount).toBe(0)
+  })
+
+  // The counters that say the triage above is narrower than it looks. A run whose
+  // provider threw, or whose call cap bound the residue, must not be readable as
+  // a run that checked everything and found little.
+  it('carries the counters that qualify a partial triage', () => {
+    const digest = digestImpactReport(
+      json({
+        ...impactReportWithAdjudicationFixture,
+        summary: {
+          ...impactReportWithAdjudicationFixture.summary,
+          unadjudicatedPairCount: 2,
+          failedAdjudicationCallCount: 1,
+          adjudicationCallsTruncated: true
+        }
+      })
+    )
+
+    expect(digest).toMatchObject({
+      unadjudicatedPairCount: 2,
+      failedAdjudicationCallCount: 1,
+      adjudicationCallsTruncated: true
+    })
+  })
+
+  // `adjudicationStatus` is DECIDED on by the renderer — it is what tells "checked
+  // and found nothing" from "never ran" — so a fourth member added to the
+  // vocabulary must fail here rather than take the quietest branch.
+  it('refuses an adjudication status this build does not know', () => {
+    expect(() =>
+      digestImpactReport(
+        json({ ...impactReportFixture, adjudicationStatus: 'partial' })
+      )
+    ).toThrow(ReportShapeError)
+  })
+
+  // Same rule for the compatibility class, which keys the wording of every
+  // rendered finding. `no-impact` is the case that matters: it is a real member of
+  // the contract's enum and an adjudication outcome, but never a finding, and a
+  // report carrying one would be manufacturing something to look at.
+  it('refuses a finding carrying a compatibility class that is not reportable', () => {
+    expect(() =>
+      digestImpactReport(
+        json({
+          ...impactReportWithAdjudicationFixture,
+          impactFindings: [
+            {
+              ...impactReportWithAdjudicationFixture.impactFindings[0],
+              compatibilityClass: 'no-impact'
+            }
+          ]
+        })
+      )
+    ).toThrow(ReportShapeError)
   })
 })
 
@@ -590,19 +694,21 @@ const INTENT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
   'usage'
 ]
 
+// `impactFindings` and `adjudicationStatus` were BOTH on this list until
+// 2026-08-16, declared as a live product question: how a model-authored finding
+// list should be read beside the review's own was said to be undecided. The
+// consequence of leaving it undecided was not neutral. An operator who switched
+// `changeImpact.adjudication.enabled` on paid for the calls that decide which
+// dependents actually break, the engine wrote them into `impact-report.json`, and
+// the human on the pull request saw only the untriaged reference table — the layer
+// spec 22 calls the floor, and measures near 90% irrelevant on its own. The two
+// lists are now rendered as two lists, under separate headings, and the question
+// is answered where a reader can see the answer.
 const IMPACT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
-  // THE ADJUDICATED LAYER, and the one entry here that is a live product question
-  // rather than a settled decision. The comment renders the REFERENCE table only —
-  // what changed and which files reach it — which is the layer spec 22 calls the
-  // floor and the falsifier. Publishing adjudicated findings in a pull-request
-  // comment would put a second, model-authored finding list beside the review's
-  // own, and nothing has decided how the two are to be read together.
-  'impactFindings',
-  // Why adjudication produced what it did. It qualifies `impactFindings`, so it is
-  // unreadable without them and follows them here.
-  'adjudicationStatus',
   'generatedAt',
   'scope',
+  // Tokens and cost for this lane. The comment publishes one run-level cost, from
+  // the review report — the same decision the intent lane's usage gets.
   'usage'
 ]
 

@@ -129,15 +129,20 @@ may and may not assert applies there, and the silence has already cost something
   two warnings; it is a property of the report, not of warnings. A heading that names
   a relation the traversal did not resolve asserts that relation to every reader who
   never opens the artifact.
-- **Known divergence, and it is the exact failure this rule forbids.** The rendered
-  table reads `| Symbol | Defined in | Callers | Test callers |`, while
-  *Known and NOT reported*, entry 7 records that *"references are matched as text,
-  not resolved as bindings"* — an aliased import lists the import line and **not** the
-  `loadUser(...)` call sites. A text-match count is therefore printed under a word
-  that names a resolved binding. The count is right for what it counts; the heading
-  names something else. The reader-facing fix is to name the column **reference
-  sites**, matching the vocabulary this spec uses everywhere else, and the divergence
-  is recorded here rather than the requirement being softened to fit the renderer.
+- **Divergence RESOLVED 2026-08-16.** The rendered table read
+  `| Symbol | Defined in | Callers | Test callers |`, while *Known and NOT reported*,
+  entry 7 records that *"references are matched as text, not resolved as bindings"* —
+  an aliased import lists the import line and **not** the `loadUser(...)` call sites.
+  A text-match count was therefore printed under a word that names a resolved
+  binding. The count was right for what it counted; the heading named something
+  else, to every reader who never opens the artifact. It now reads
+  `| Symbol | Defined in | Reference sites | Test reference sites |`, matching the
+  vocabulary this spec uses everywhere else.
+
+  Recording it here rather than softening the requirement is what kept it fixable:
+  the entry stayed accurate for two days and named the fix, so closing it was a
+  rename rather than a re-litigation. That is the argument for writing a divergence
+  down instead of adjusting the rule to match the code.
 - **Precision travels with the list.** With adjudication off the list reaches this
   surface untriaged at a measured precision lower bound of 5.2%. Whatever qualifier
   the artifact carries about that, the comment surface owes the same one: a reader

@@ -117,6 +117,14 @@ that changed; most of that is settled in code, and only a symbol whose *behaviou
 moved costs a call. **It is unmeasured** — no accuracy figure for it exists, and
 none may be quoted.
 
+What it decides reaches every surface the lane has: the JSON report, the rendered
+`impact-report.md`, and — since 2026-08-16 — the `### Impact` section of the
+[pull-request comment](../../04-guides/github-integration.md#what-the-summary-comment-says),
+where the dependents it showed to rely on the change are listed above the
+untriaged reference table rather than folded into it. With the switch off, all
+three surfaces say so rather than rendering an empty list that could be mistaken
+for "nothing depends on this change".
+
 **Intent-fulfilment review** (`intentFulfilment.enabled`) is its own lane too
 ([`intent check`](../../06-reference/cli.md#codereviewer-intent-check), and a
 stage `review` runs in-process), **on by default since 2026-08-11**, with no

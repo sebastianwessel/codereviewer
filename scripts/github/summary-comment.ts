@@ -33,7 +33,10 @@ import {
 import type {
   FindingDigest,
   ImpactDigest,
+  ImpactFindingDigest,
+  ImpactRelianceDigest,
   IntentDigest,
+  ReportableCompatibilityClass,
   ReviewDigest,
   Severity
 } from './report-digest.js'
@@ -101,6 +104,15 @@ const MAX_LISTED_FINDINGS = 50
 const MAX_LISTED_UNRESOLVED = 20
 const MAX_LISTED_OBLIGATIONS = 20
 const MAX_LISTED_SYMBOLS = 15
+// The adjudicated layer is bounded far below the reference table it sits over,
+// and deliberately: it is the short list by construction (spec 22 measures the
+// untriaged reference list near 90% irrelevant), so a long one is a signal to
+// open the artifact rather than something to paste onto a pull request.
+const MAX_LISTED_IMPACT_FINDINGS = 10
+const MAX_LISTED_RELIANCES = 5
+// The producer caps both `contractElement` and `consequence` at 300 characters,
+// so this is a bound on this surface, not a second truncation policy.
+const MAX_CONTRACT_STATEMENT = 300
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 700
 const MAX_WHY_SURVIVED = 400
@@ -485,28 +497,259 @@ const intentSection = (intent: IntentDigest): string | undefined => {
   ].join('\n')
 }
 
+// THE COMPATIBILITY CLASS IS A MECHANISM, NOT A RATING, and spec 22 chose that
+// axis over spec 05's severity precisely so it could not be read as one. A bare
+// `may-break` in front of a reviewer is a rating, so the label is written out and
+// the mechanism behind it is stated once, for the classes actually present.
+//
+// The wording is this surface's own rather than a copy of `impact-markdown.ts`'s
+// — the artifact writes for someone who opened a report, this writes for someone
+// scanning a pull request — but the three MEANINGS may not diverge, which is why
+// the record is keyed by the producer's own vocabulary rather than by a string.
+const compatibilityClassLabel: Readonly<
+  Record<ReportableCompatibilityClass, string>
+> = {
+  'breaks-on-build': 'breaks on build',
+  'breaks-at-runtime': 'breaks at runtime',
+  'may-break': 'may break'
+}
+
+const compatibilityClassMechanism: Readonly<
+  Record<ReportableCompatibilityClass, string>
+> = {
+  'breaks-on-build': 'the name the file uses is gone',
+  'breaks-at-runtime':
+    'the name still resolves and nothing at build time sees it, so what moved is behaviour the file was shown to use',
+  'may-break': 'the mechanism is known and the outcome is not, so someone has to look'
+}
+
+// Named in the order a reviewer should work through them, so the glossary reads
+// the same way whichever subset of classes this change produced.
+const compatibilityClassOrder: readonly ReportableCompatibilityClass[] = [
+  'breaks-on-build',
+  'breaks-at-runtime',
+  'may-break'
+]
+
+// WHICH TIER ANSWERED, on the sentence it answered. A finding can mix the two —
+// a file can reference both a removed symbol (settled in code) and a modified one
+// (settled by a model call) — so it is stated per line rather than per file, and
+// it is stated for BOTH values rather than only for the model. Marking only the
+// model judgements would make silence mean "settled in code", and a reader has no
+// way to tell that silence from a renderer that forgot.
+//
+// Keyed on the producer's vocabulary, like the classes above, so a third tier
+// would fail to compile here rather than render as a bare engine token.
+const adjudicatedByLabel: Readonly<
+  Record<ImpactRelianceDigest['adjudicatedBy'], string>
+> = {
+  deterministic: 'settled in code',
+  model: 'judged by a model'
+}
+
+const impactFindingLines = (
+  finding: ImpactFindingDigest
+): readonly string[] => {
+  const shown = finding.reliances.slice(0, MAX_LISTED_RELIANCES)
+  const testNote =
+    finding.destination === 'test'
+      ? ' _(a test — it breaks in CI, not in production)_'
+      : ''
+
+  return [
+    `- **${compatibilityClassLabel[finding.compatibilityClass]}** · \`${sanitizeLine(finding.path, 200)}\`${testNote}`,
+    ...shown.map(
+      (reliance) =>
+        `  line ${reliance.line}: relies on ${sanitizeLine(reliance.contractElement, MAX_CONTRACT_STATEMENT)} — ${sanitizeLine(reliance.consequence, MAX_CONTRACT_STATEMENT)} _(${adjudicatedByLabel[reliance.adjudicatedBy]})_`
+    ),
+    ...(finding.reliances.length > shown.length
+      ? [
+          `  _…and ${finding.reliances.length - shown.length} further use${finding.reliances.length - shown.length === 1 ? '' : 's'} of a changed symbol in this file._`
+        ]
+      : [])
+  ]
+}
+
+// What qualifies the adjudicated list, whether or not it is empty.
+//
+// Every one of these says the same kind of thing: the triage above is narrower
+// than it looks. They are rendered with the list rather than in the collapsed
+// block, because a partial triage read as a complete one is exactly the mistake
+// this layer exists to prevent, and it has to be prevented where the list is.
+const adjudicationCaveats = (impact: ImpactDigest): readonly string[] => {
+  const caveats: string[] = []
+
+  if (impact.adjudicationStatus === 'no-model') {
+    caveats.push(
+      'No model was available for the part code could not settle on its own, so this covers only what the deterministic tier could decide.'
+    )
+  } else if (impact.checkedPairCount > 0 && impact.adjudicationCallCount === 0) {
+    // A run that spent no call is not a run whose judge said no. Without this
+    // sentence a reader credits a model with an answer code reached for free.
+    caveats.push(
+      'No model call was spent on this change: everything above was settled in code.'
+    )
+  }
+
+  if (impact.unadjudicatedPairCount > 0) {
+    caveats.push(
+      `${impact.unadjudicatedPairCount} use${impact.unadjudicatedPairCount === 1 ? ' of a changed symbol was' : 's of a changed symbol were'} left unadjudicated and assert nothing either way — absence from this list is not a statement that a dependent is unaffected.`
+    )
+  }
+
+  if (impact.failedAdjudicationCallCount > 0) {
+    caveats.push(
+      `${impact.failedAdjudicationCallCount} adjudication call${impact.failedAdjudicationCallCount === 1 ? '' : 's'} did not complete.`
+    )
+  }
+
+  if (impact.adjudicationCallsTruncated) {
+    caveats.push(
+      'The adjudication call cap was reached, so this triage stops short of the whole reference list.'
+    )
+  }
+
+  return caveats
+}
+
+// THE ADJUDICATED LAYER, in the pull-request comment.
+//
+// It reached no reader here until 2026-08-16: the digest read neither
+// `impactFindings` nor `adjudicationStatus`, so an operator who switched
+// `changeImpact.adjudication.enabled` on paid for model calls that decided which
+// dependents actually break, and the human on the pull request saw only the
+// deterministic reference table. Nothing failed, because the reference table is a
+// section that renders either way — the same shape of silence that once left the
+// whole Impact section empty for months.
+//
+// AN EMPTY LIST IS NOT AN ABSENT ONE, and this block's first job is to keep those
+// apart. `adjudicationStatus` is the field that tells them apart, so it is what
+// this reads first: with adjudication off there is nothing to say and the comment
+// renders exactly what it has always rendered, byte for byte.
+const adjudicationBlock = (impact: ImpactDigest): readonly string[] => {
+  if (impact.adjudicationStatus === 'disabled') {
+    return []
+  }
+
+  const caveats = adjudicationCaveats(impact)
+  const heading = `**Shown to rely on this change (${impact.findings.length})**`
+
+  if (impact.findings.length === 0) {
+    // Which kind of empty. "Checked and found nothing" is a result; "nothing was
+    // checked" is an absence; and neither may be allowed to read as "adjudication
+    // did not run", which is what this comment said by saying nothing at all.
+    const emptyMeans =
+      impact.checkedPairCount === 0
+        ? 'Nothing was triaged: no use of a changed symbol reached an adjudicator, so nothing below has been checked against what this change altered.'
+        : `${impact.checkedPairCount} use${impact.checkedPairCount === 1 ? '' : 's'} of a changed symbol ${impact.checkedPairCount === 1 ? 'was' : 'were'} checked against what changed, and none was shown to rely on it. That is an answer, not an empty section — the reference list below is still untriaged and still yours to judge.`
+
+    return [heading, '', emptyMeans, ...caveats.flatMap((caveat) => ['', caveat])]
+  }
+
+  const shown = impact.findings.slice(0, MAX_LISTED_IMPACT_FINDINGS)
+  const presentClasses = compatibilityClassOrder.filter((compatibilityClass) =>
+    shown.some((finding) => finding.compatibilityClass === compatibilityClass)
+  )
+
+  return [
+    heading,
+    '',
+    // Evidence, not verdict. Spec 22: the useful output is "two callers rely on
+    // the return value you changed; here they are" — never "you broke it". The
+    // unmeasured note travels with the list for the same reason the review's
+    // measured rates travel with its findings: a reader who only ever sees this
+    // comment must not be handed a more confident artifact than one who opens the
+    // report.
+    'Each entry is a judgement about a file, not a mention of a name: something these files use has moved under them. Breaking a dependent is frequently deliberate, so whether it matters is your call. This layer is unmeasured — no accuracy number exists for it.',
+    '',
+    `_Labels are mechanisms, not ratings: ${presentClasses
+      .map(
+        (compatibilityClass) =>
+          `**${compatibilityClassLabel[compatibilityClass]}** — ${compatibilityClassMechanism[compatibilityClass]}`
+      )
+      .join('; ')}._`,
+    '',
+    ...shown.flatMap((finding) => impactFindingLines(finding)),
+    ...(impact.findings.length > shown.length
+      ? [
+          '',
+          `_…and ${impact.findings.length - shown.length} more in the artifacts._`
+        ]
+      : []),
+    ...caveats.flatMap((caveat) => ['', caveat])
+  ]
+}
+
+// The Impact section: the adjudicated judgements first, then the untriaged
+// reference table they were drawn from.
+//
+// THE TWO LISTS ARE NOT ONE LIST. The table says "this file mentions a name this
+// change touched" — the floor and the falsifier spec 22 measures the capability
+// against, and near 90% irrelevant by construction. The block above it says "this
+// file was shown to rely on the part that moved". Blurring them would hand a
+// reviewer a reference count dressed as a finding, so the two carry separate
+// headings whenever both are present. With adjudication off — the default — there
+// is only ever one list, and it renders with no heading at all, exactly as before.
 const impactSection = (impact: ImpactDigest): string | undefined => {
-  if (impact.status !== 'completed' || impact.symbols.length === 0) {
+  if (impact.status !== 'completed') {
     return undefined
   }
 
+  // Nothing referenced and nothing adjudicated is a change that reaches nothing,
+  // and this section has always been silent about it — an empty table under a
+  // heading is not a statement. The findings check is not redundant with the
+  // symbol check: a finding whose symbol is missing from the symbol table would
+  // otherwise be dropped here without a trace, and a finding that vanishes
+  // silently is the defect this whole section is being fixed for.
+  if (impact.symbols.length === 0 && impact.findings.length === 0) {
+    return undefined
+  }
+
+  const adjudicated = adjudicationBlock(impact)
   const shown = impact.symbols.slice(0, MAX_LISTED_SYMBOLS)
   const rows = shown.map(
     (symbol) =>
       `| \`${sanitizeLine(symbol.name, 120)}\` | \`${sanitizeLine(symbol.definitionPath, 200)}\` | ${symbol.referenceCount} | ${symbol.testReferenceCount} |`
   )
+  const referenceList =
+    shown.length === 0
+      ? []
+      : [
+          // The heading appears only when there is an adjudicated list to tell
+          // this one apart from. Alone, it would be a label on the only thing in
+          // the section — and it would change every comment on the default path.
+          ...(adjudicated.length === 0
+            ? []
+            : ['**Everything this change reaches, untriaged**', '']),
+          `${impact.changedSymbolCount} changed symbol${impact.changedSymbolCount === 1 ? '' : 's'}, ${impact.referenceCount} production reference${impact.referenceCount === 1 ? '' : 's'} outside the defining file.`,
+          '',
+          // "Reference sites", not "Callers". Spec 22 states that a column
+          // heading is an assertion bound by the same rule as a warning — it may
+          // not assert a relation the traversal did not resolve — and recorded
+          // this exact heading as violating it, rather than softening the
+          // requirement to fit the renderer. References are matched as TEXT, not
+          // resolved as bindings: an aliased import lists the import line and not
+          // the call sites, and roughly a third of reference sites measured on
+          // this repository were prose or fixture data containing the identifier.
+          // The counts are right for what they count; "Callers" named something
+          // else to every reader who never opens the artifact.
+          '| Symbol | Defined in | Reference sites | Test reference sites |',
+          '| --- | --- | --- | --- |',
+          ...rows,
+          ...(impact.symbols.length > shown.length
+            ? [
+                '',
+                `_…and ${impact.symbols.length - shown.length} more in the artifacts._`
+              ]
+            : [])
+        ]
 
   return [
     '### Impact',
     '',
-    `${impact.changedSymbolCount} changed symbol${impact.changedSymbolCount === 1 ? '' : 's'}, ${impact.referenceCount} production reference${impact.referenceCount === 1 ? '' : 's'} outside the defining file.`,
-    '',
-    '| Symbol | Defined in | Callers | Test callers |',
-    '| --- | --- | --- | --- |',
-    ...rows,
-    ...(impact.symbols.length > shown.length
-      ? ['', `_…and ${impact.symbols.length - shown.length} more in the artifacts._`]
-      : [])
+    ...adjudicated,
+    ...(adjudicated.length === 0 || referenceList.length === 0 ? [] : ['']),
+    ...referenceList
   ].join('\n')
 }
 

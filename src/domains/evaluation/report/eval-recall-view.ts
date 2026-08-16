@@ -73,9 +73,45 @@ const RecallViewCaseResultSchema = z.looseObject({
   matchedFindings: z.array(RecallViewMatchSchema)
 })
 
+// The identity a report states about how its numbers were produced, read so a
+// POOL of several reports can be refused — never to render, and never required.
+//
+// This is the one place the module header's "required exactly where recall
+// analysis reads the field" rule needs restating rather than repeating, because
+// these fields are read for a different purpose. Recall is not computed from
+// them, so a report that omits them can still be read; but `eval recall-report`
+// merges several reports into one `k/n` per expectation, and two runs scored
+// against different answer keys or by different judges do not share that
+// denominator. `eval-pool-identity.ts` owns what that means, including the case
+// that actually matters here: 121 of the 516 eval reports on disk carry neither
+// field, and absence resolves to the identity `unrecorded` rather than to a
+// wildcard — so a silent archive refuses to pool with a report that can name its
+// answer key, and a single-report read is unaffected because nothing is merged.
+//
+// EVERY LEAF IS OPTIONAL, deliberately. Requiring `metricsVersion` here would
+// refuse those 121 archives outright, which is the failure this whole module
+// exists to end, arriving through the guard meant to protect their numbers.
+//
+// THREE PROVENANCE FIELDS, AND THE BOUND IS STATED. `answerKeyDigestByCase` is
+// comparison's tool for naming which SHARED case moved, and this report pools
+// rather than compares, so the aggregate digest is the right test here for the
+// reason the significance module gives. `configHash` is a digest nothing can be
+// read out of, and `eval compare` deliberately does not refuse across one.
+// `capabilities` is the one real gap: `eval compare` WARNS when reports disagree
+// on it, and this command does not — adding a second warning surface is a
+// decision on its own, and the refusals above are the ones that make a pooled
+// `k/n` mean something rather than merely explicable.
+const RecallViewProvenanceSchema = z.looseObject({
+  answerKeyDigest: z.string().min(1).optional(),
+  modelName: z.string().min(1).optional(),
+  judgeModelName: z.string().min(1).optional()
+})
+
 export const EvalRecallViewSchema = z.looseObject({
   generatedAt: z.string().min(1),
   fixtureCount: z.int().min(0),
+  metricsVersion: z.string().min(1).optional(),
+  provenance: RecallViewProvenanceSchema.optional(),
   selection: z.looseObject({
     selectedCaseIds: z.array(z.string())
   }),

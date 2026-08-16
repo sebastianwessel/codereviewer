@@ -152,7 +152,7 @@ subprocess any more.
 | --- | --- | --- | --- |
 | `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. This is the only row in the comment's stage table — it is the only stage with a process of its own to report a status for. |
 | Intent (`intentFulfilment.enabled`, on by default) | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. Rendered as its own `### Intent` section in the comment when its report is present; absent (not an error) when the lane is disabled. |
-| Impact (`changeImpact.enabled`, on by default) | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled`, which stays off — which of them rely on what changed. Makes no model call with that switch off. Rendered as its own `### Impact` section under the same rule. |
+| Impact (`changeImpact.enabled`, on by default) | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled`, which stays off — which of them rely on what changed. Makes no model call with that switch off. Rendered as its own `### Impact` section under the same rule, with the adjudicated dependents listed above the untriaged reference table when adjudication is on. |
 
 **The two advisory lanes can never fail the job.** That is a specification
 requirement, not a configuration default — spec 23 states it outright: the
@@ -269,7 +269,20 @@ Top level, in this order:
 - **Review conversation** — only on a run a reply triggered; see below.
 - **Intent** — the obligations read from the description and which changed lines
   evidence them. Present when the lane produced a report.
-- **Impact** — the changed symbols and their callers, same rule.
+- **Impact** — two lists, kept apart. With `changeImpact.adjudication.enabled`
+  off (the default) it is one: the untriaged reference table of the changed
+  symbols and their callers, same rule as Intent. With adjudication on, the
+  dependents an adjudicator *showed* to rely on the part of the contract that
+  changed are listed above it under **Shown to rely on this change (N)**, each
+  with its compatibility class, the line in the dependent, what it relies on,
+  what goes wrong, and whether that answer was settled in code or judged by a
+  model — and the reference table below it is then headed **Everything this
+  change reaches, untriaged**. A judgement and a text match are different
+  claims. The list carries the qualifier the report carries: the layer is
+  unmeasured, and a class (`breaks on build`, `breaks at runtime`, `may break`)
+  names a mechanism, never a severity. When adjudication ran and found nothing,
+  the section says so — an empty list that is an answer must not read like a
+  layer that never ran.
 - **Findings** — every admitted finding whose `reporterEligibility` is
   `inline` or `summary-only`: the ones this run is prepared to stand behind. A
   run with none renders the section anyway and says what the silence means.

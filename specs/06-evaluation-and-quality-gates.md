@@ -1006,7 +1006,10 @@ the default floor.
 When `fix.enabled` (spec 12), eval case execution runs the finding
 investigation-and-fix lane on the review's admitted findings after the review
 and before scoring, capturing each `FixOutcome` (`findingId`,
-`findingJudgment`, `fixProduced`, `applyCheck`) into the case output. The lane
+`findingJudgment`, `fixProduced`, `applyCheck`, `fixDeclinedReason`) into the
+case output. `fixDeclinedReason` was added on 2026-08-16: without it the artifact
+could not tell a fix the lane REFUSED from one it never proposed, which is the
+distinction spec 12 introduced the field for in the first place. The lane
 is off by default, so existing eval runs and their cost are unchanged; the lane
 is exercised only when a caller enables `fix` and configures a provider. The
 lane is advisory and non-fatal in eval: a lane failure is logged and the case is

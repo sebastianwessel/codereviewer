@@ -20,7 +20,7 @@ with no `.codereviewer/context` directory and no changed Markdown sees plain
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `contextSources.enabled` | boolean | `true` | Master switch. |
-| `contextSources.providers` | array of provider objects | see below | See the union below. |
+| `contextSources.providers` | array of provider objects | see below <!-- no-literal-default the default is two fully populated provider objects; their keys and per-key defaults are the context-provider union table below --> | See the union below. |
 | `contextSources.summary.mode` | `"model"` \| `"digest"` | *unset* | When unset, resolved at runtime from whether a **model provider** (`provider`) is configured — not from `contextSources.providers`, which now always has entries. With one: `model`, a dedicated summarizer call that falls back to `digest` if it fails. Without one: `digest`, fully deterministic. |
 | `contextSources.summary.maxBytes` | integer 256–20000 | `4000` | Byte cap on the change-intent brief injected into review packets. |
 
@@ -110,7 +110,7 @@ reported the same counts as one that read all of it.
 | `evaluation.minJudgeAgreement` | number 0–1 | `0.9` | Minimum semantic-judge agreement against the committed calibration set. The judge is the sole authority for every eval quality metric, so a run below this bar reports `scoring.judgeTrustworthy = false`. It marks metrics untrustworthy — **it does not fail the regression gate**. |
 | `evaluation.judgeModel` | string | *unset* | Model the two `eval run` judges (semantic match + plausibility) score with. Unset, they use `provider.model` — the reviewer's own. Environment: `CODEREVIEWER_JUDGE_MODEL`. |
 | `evaluation.regressionGate.profile` | `"stable"` \| `"strict"` | `"stable"` | Which threshold set `eval run` gates on. Overridable per run with `eval run --gate-profile`. |
-| `evaluation.regressionGate.overrides` | object | `{}` | Per-threshold values layered on top of the resolved profile. Any key set here wins over the profile's value for the same key. |
+| `evaluation.regressionGate.overrides` | object | `{}` <!-- covers-subtree every override key is optional with no default of its own; the value each one takes when unset comes from the resolved profile, so they are documented as the threshold table and prose under "The eval run regression gate" rather than as thirteen rows of *unset* --> | Per-threshold values layered on top of the resolved profile. Any key set here wins over the profile's value for the same key. |
 
 There is deliberately no `evaluation.enabled` key: case selection is driven by
 `eval run` CLI flags, not config, so an `enabled` flag would have been accepted

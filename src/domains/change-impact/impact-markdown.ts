@@ -27,6 +27,10 @@
 import { inlineCode, pluralize, safeText } from '../reporting/index.js'
 import {
   impactedSymbolKey,
+  // The pooled "how much was checked at all" sum. Shared with the pull-request
+  // comment's digest rather than spelled out twice, so the two surfaces cannot
+  // come to disagree about what an empty finding list means.
+  settledPairCount,
   type ChangeImpactReferenceReport,
   type ChangedSymbolReport,
   type ImpactedFile,
@@ -314,16 +318,6 @@ const renderFinding = (finding: ImpactFinding): readonly string[] => [
   ''
 ]
 
-// Every pair an adjudicator settled, DERIVED here and labelled as the sum wherever
-// it is shown. The report deliberately stores no pooled counter: pooling the
-// deterministic tier's `no-impact` with the model's is what let spec 22's first
-// adjudication measurement read as a judge that rejected everything, when the judge
-// had never been called.
-const settledPairCount = (report: ChangeImpactReferenceReport): number =>
-  report.summary.reliedUponPairCount +
-  report.summary.deterministicNoImpactPairCount +
-  report.summary.modelVerdictCounts['does-not-rely']
-
 // WHICH TIER ANSWERED, in the reader's terms.
 //
 // A run that spent no call is not a run whose judge said no. Saying which tier did
@@ -368,7 +362,7 @@ const renderNoFindings = (
   }
 
   const { summary } = report
-  const checked = settledPairCount(report)
+  const checked = settledPairCount(report.summary)
 
   if (checked === 0) {
     return [

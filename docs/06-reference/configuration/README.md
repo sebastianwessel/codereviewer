@@ -1,8 +1,17 @@
 # Configuration Reference
 
-Every key, type, and default on these pages is read from
+Every key, type, and default on these pages comes from
 [`src/shared/contracts/config/config.schema.ts`](../../../src/shared/contracts/config/config.schema.ts),
-which is the single source of truth. The generated JSON Schema at
+which is the single source of truth.
+
+The **Key** and **Default** columns are checked against it on every `npm test` by
+`src/domains/drift/config-default-table-checker.ts`, in both directions: a
+documented default that no longer matches, a documented key the schema does not
+have, and a schema key no table documents are each a failure. The **Type** column
+and the prose are not checked and remain a convention — see
+[running-tests-and-checks.md](../../09-contributing/running-tests-and-checks.md#documented-configuration-defaults).
+
+The generated JSON Schema at
 [`schema/codereviewer-config.schema.json`](../../../schema/codereviewer-config.schema.json)
 is the committed public contract; regenerate it with `npm run generate:schemas`
 (`npm run generate:schemas:check` verifies it in CI).

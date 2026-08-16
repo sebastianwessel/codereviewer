@@ -213,7 +213,7 @@ Neither obligation is evidenced by this change: the cap and the guard are both s
 
 2 changed symbols, 2 production references outside the defining file.
 
-| Symbol | Defined in | Callers | Test callers |
+| Symbol | Defined in | Reference sites | Test reference sites |
 | --- | --- | --- | --- |
 | \`applyDiscount\` | \`src/pricing.ts\` | 2 | 0 |
 

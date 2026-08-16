@@ -517,10 +517,14 @@ directions:
   under *Deterministic Apply-Check*, but in leaving the refusal indistinguishable
   from "no fix was proposed". It carries `fixDeclinedReason` now.
 
-  Note for the evaluation lane, which mirrors `FixOutcome` in its own contract
-  rather than importing it: that mirror carries `applyCheck` and not the new
-  reason, so an eval artifact still cannot tell a refused fix from an unproposed
-  one. The mirror is owned there, and widening it is that lane's call.
+  The evaluation lane mirrors `FixOutcome` in its own contract rather than
+  importing it, and that mirror **now carries `fixDeclinedReason` too**
+  (amendment 2026-08-16). It did not, which left an eval artifact unable to tell
+  a refused fix from an unproposed one — the same conflation this section exists
+  to end, reproduced one layer out in the artifact the measurements are read
+  from. The mirror is owned by that lane and the widening was its call to make;
+  it has been made. No eval figure moved: `fixLaneCaseTallies` reads only
+  `applyCheck` and `findingJudgment`.
 
 ## A False-Positive Judgement Must Reach The Reader
 

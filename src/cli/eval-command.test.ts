@@ -2689,6 +2689,137 @@ describe('eval CLI', () => {
     }
   })
 
+  // THE DEFECT THIS EXISTS FOR. `--report` is repeatable and the reports are
+  // POOLED -- the `Rate` column is `k/n` over them -- yet this command read no
+  // provenance at all, so two runs scored against different answer keys merged
+  // into one table with nothing saying so. `caseId#expectedIndex` is a positional
+  // address, so that pool does not blend two rates; it writes two different
+  // expected findings into one row.
+  test('refuses to pool recall reports scored against different answer keys', async () => {
+    const root = await createTempDir()
+
+    try {
+      const base = evalReport()
+
+      await writeFile(join(root, 'one.json'), JSON.stringify(base))
+      await writeFile(
+        join(root, 'two.json'),
+        JSON.stringify({
+          ...base,
+          provenance: {
+            ...(base.provenance as Record<string, unknown>),
+            answerKeyDigest: 'c'.repeat(64)
+          }
+        })
+      )
+
+      const result = await runCli(
+        ['eval', 'recall-report', '--report', 'one.json', '--report', 'two.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('different answer keys')
+      expect(result.stderr).toContain('two.json')
+      expect(result.stdout).not.toContain('# Evaluation Recall Report')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // THE CASE THAT ACTUALLY MATTERS, and the reason the guard is not a required
+  // field. 121 of the eval reports on disk here record neither `metricsVersion`
+  // nor `provenance`. One of them still renders exactly as before, because a pool
+  // of one merges nothing.
+  test('renders a single archive that records no provenance at all', async () => {
+    const root = await createTempDir()
+
+    try {
+      const {
+        provenance: _provenance,
+        metricsVersion: _metricsVersion,
+        ...archive
+      } = evalReport()
+
+      await writeFile(join(root, 'archive.json'), JSON.stringify(archive))
+
+      const result = await runCli(
+        ['eval', 'recall-report', '--report', 'archive.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('# Evaluation Recall Report')
+      expect(result.stderr).toBe('')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Two silent archives agree on `unrecorded` and pool -- an absence is not
+  // evidence they were produced by the same build, so the permissiveness that
+  // keeps the archives readable together is stated out loud rather than assumed.
+  test('warns rather than refuses when no pooled archive can state its identity', async () => {
+    const root = await createTempDir()
+
+    try {
+      const {
+        provenance: _provenance,
+        metricsVersion: _metricsVersion,
+        ...archive
+      } = evalReport()
+
+      await writeFile(join(root, 'one.json'), JSON.stringify(archive))
+      await writeFile(join(root, 'two.json'), JSON.stringify(archive))
+
+      const result = await runCli(
+        ['eval', 'recall-report', '--report', 'one.json', '--report', 'two.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('# Evaluation Recall Report')
+      expect(result.stderr).toContain('Absent means not recorded')
+      expect(result.stderr).toContain('answer key')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A pool that mixes a silent archive with a report that CAN name its answer key
+  // is the one the audit was about: it looks like the well-formed case and is not.
+  test('refuses to pool an archive that cannot state its identity with one that can', async () => {
+    const root = await createTempDir()
+
+    try {
+      const {
+        provenance: _provenance,
+        metricsVersion: _metricsVersion,
+        ...archive
+      } = evalReport()
+
+      await writeFile(join(root, 'archive.json'), JSON.stringify(archive))
+      await writeFile(join(root, 'today.json'), JSON.stringify(evalReport()))
+
+      const result = await runCli(
+        [
+          'eval',
+          'recall-report',
+          '--report',
+          'archive.json',
+          '--report',
+          'today.json'
+        ],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('unrecorded (archive.json)')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('reports missing default recall report input as a config error', async () => {
     const root = await createTempDir()
 

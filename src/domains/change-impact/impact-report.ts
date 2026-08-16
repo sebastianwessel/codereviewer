@@ -507,6 +507,33 @@ export const impactedSymbolKey = (symbol: {
 }): string =>
   [symbol.definitionPath, symbol.name, symbol.definitionLine].join('\u0000')
 
+/**
+ * Every dependent use an adjudicator SETTLED, either way.
+ *
+ * DERIVED, never stored, and derived HERE so every surface derives it the same
+ * way. The report deliberately carries no pooled counter — pooling the
+ * deterministic tier's `no-impact` with the model's is what let spec 22's first
+ * adjudication measurement read as a judge that rejected everything when the
+ * judge had never been called — but "how much was checked at all" is a question
+ * two renderers now ask (`impact-markdown.ts` and the pull-request comment's
+ * digest), and two spellings of one sum is how they come to disagree.
+ *
+ * It is the complement of `unadjudicatedPairCount` over all pairs, and it is
+ * what separates "nothing relies on this change" from "nothing was checked".
+ *
+ * Structurally typed rather than taking the whole report: the digest that feeds
+ * the pull-request comment parses a narrow view of the summary, and it needs the
+ * same arithmetic.
+ */
+export const settledPairCount = (summary: {
+  readonly reliedUponPairCount: number
+  readonly deterministicNoImpactPairCount: number
+  readonly modelVerdictCounts: { readonly 'does-not-rely': number }
+}): number =>
+  summary.reliedUponPairCount +
+  summary.deterministicNoImpactPairCount +
+  summary.modelVerdictCounts['does-not-rely']
+
 export type ReferenceSite = z.infer<typeof ReferenceSiteSchema>
 export type ImpactedFileSymbol = z.infer<typeof ImpactedFileSymbolSchema>
 export type ImpactedFile = z.infer<typeof ImpactedFileSchema>
@@ -515,6 +542,7 @@ export type CompatibilityClass = z.infer<typeof CompatibilityClassSchema>
 export type ReportableCompatibilityClass =
   z.infer<typeof ImpactFindingSchema>['compatibilityClass']
 export type AdjudicationStatus = z.infer<typeof AdjudicationStatusSchema>
+export type AdjudicatedBy = z.infer<typeof AdjudicatedBySchema>
 export type ModelVerdictCounts = z.infer<typeof ModelVerdictCountsSchema>
 export type ImpactReliance = z.infer<typeof ImpactRelianceSchema>
 export type ImpactFinding = z.infer<typeof ImpactFindingSchema>

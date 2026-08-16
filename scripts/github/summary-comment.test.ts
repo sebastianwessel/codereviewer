@@ -27,6 +27,7 @@ import {
 } from './stage-outcomes.js'
 import {
   impactReportFixture,
+  impactReportWithAdjudicationFixture,
   intentReportFixture,
   reviewReportFixture,
   reviewReportWithFullAccountingFixture
@@ -563,6 +564,232 @@ describe('renderSummaryComment', () => {
       expect(body).toContain('Candidates: 2 examined, 2 admitted, 0 rejected —')
       expect(body).not.toContain('merged as duplicates')
     })
+  })
+})
+
+// THE IMPACT SECTION'S TWO LISTS.
+//
+// The reference table is the untriaged floor: "this file mentions a name this
+// change touched". The adjudicated list above it is the judgement: "this file was
+// shown to rely on the part that moved". Spec 22 governs this comment as a surface
+// of the capability, so what may be asserted here is what may be asserted in the
+// report — and the layer that decides which dependents actually break reached no
+// reader here at all until 2026-08-16.
+describe('renderSummaryComment: the Impact section', () => {
+  const impactSectionOf = (body: string): string => {
+    const start = body.indexOf('### Impact')
+
+    expect(start).toBeGreaterThanOrEqual(0)
+
+    const rest = body.slice(start)
+    const boundaries = ['\n\n### ', '\n\n<details>', '\n\n_This comment reached']
+      .map((boundary) => rest.indexOf(boundary))
+      .filter((index) => index >= 0)
+
+    return boundaries.length === 0
+      ? rest
+      : rest.slice(0, Math.min(...boundaries))
+  }
+  const bodyFor = (report: unknown): string =>
+    renderSummaryComment(
+      baseInput({
+        impact: digestImpactReport(JSON.stringify(report)) as never
+      })
+    )
+
+  // BYTE FOR BYTE, and this is the whole point of pinning it: adjudication is off
+  // by default, so this is the section on essentially every pull request the
+  // engine comments on today. Reading a layer that is empty on the default path
+  // must change that path by exactly nothing — no heading, no qualifier, no
+  // rearranged blank line.
+  it('renders the default path — adjudication off — exactly as it did before the layer was read', () => {
+    expect(impactSectionOf(bodyFor(impactReportFixture))).toBe(
+      [
+        '### Impact',
+        '',
+        '2 changed symbols, 2 production references outside the defining file.',
+        '',
+        '| Symbol | Defined in | Reference sites | Test reference sites |',
+        '| --- | --- | --- | --- |',
+        '| `requireSession` | `src/auth/session.ts` | 2 | 1 |'
+      ].join('\n')
+    )
+  })
+
+  it('says nothing about adjudication when it is switched off', () => {
+    const section = impactSectionOf(bodyFor(impactReportFixture))
+
+    expect(section).not.toContain('Shown to rely')
+    expect(section).not.toContain('untriaged')
+  })
+
+  // The gap this section was fixed for: with adjudication on, the engine spends
+  // model calls deciding which dependents break, and the human on the pull request
+  // could not see one of them.
+  it('renders the dependents an adjudicator showed to rely on the change', () => {
+    const section = impactSectionOf(bodyFor(impactReportWithAdjudicationFixture))
+
+    expect(section).toContain('**Shown to rely on this change (2)**')
+    expect(section).toContain('**breaks on build** · `src/routes/admin.ts`')
+    // Path, line, contract element and consequence: the four things spec 22
+    // requires a change-impact finding to carry.
+    expect(section).toContain(
+      'line 41: relies on the declaration of loadUser, which this change removes — this reference cannot resolve and the file will not build'
+    )
+    expect(section).toContain('_(settled in code)_')
+    expect(section).toContain('_(judged by a model)_')
+    // A test dependent breaks in CI, not in production. Different news, said so.
+    expect(section).toContain('`src/auth/session.test.ts`')
+    expect(section).toContain('a test — it breaks in CI, not in production')
+  })
+
+  // A judgement and a text match are not the same claim, and a reader who cannot
+  // tell them apart has been handed a reference count dressed as a finding.
+  it('keeps the adjudicated judgements and the untriaged reference list apart', () => {
+    const section = impactSectionOf(bodyFor(impactReportWithAdjudicationFixture))
+
+    expect(section).toContain('**Everything this change reaches, untriaged**')
+    expect(section.indexOf('**Shown to rely on this change')).toBeLessThan(
+      section.indexOf('**Everything this change reaches, untriaged**')
+    )
+    // The reference table is still there, whole — both changed symbols, with the
+    // site counts that are a text match rather than a judgement.
+    expect(section).toContain('| `requireSession` | `src/auth/session.ts` | 2 | 1 |')
+    expect(section).toContain('| `loadUser` | `src/auth/session.ts` | 1 | 0 |')
+  })
+
+  // No accuracy number exists for this layer, and the comment may not be a more
+  // confident artifact than the report a reader could open instead.
+  it('carries the unmeasured qualifier with the judgements', () => {
+    const section = impactSectionOf(bodyFor(impactReportWithAdjudicationFixture))
+
+    expect(section).toContain('This layer is unmeasured')
+    expect(section).toContain('Breaking a dependent is frequently deliberate')
+    // A class is a mechanism, not a rating. Spec 22 chose the axis for that.
+    expect(section).toContain('Labels are mechanisms, not ratings')
+    expect(section).toContain('the name the file uses is gone')
+  })
+
+  // ADJUDICATION RAN AND FOUND NOTHING IS A RESULT. Rendering it as silence would
+  // be indistinguishable from the default path, where nothing was checked at all —
+  // the absence-reads-as-a-clean-answer defect this repository keeps finding.
+  it('says that adjudication ran and found nothing, rather than looking like it never ran', () => {
+    const section = impactSectionOf(
+      bodyFor({
+        ...impactReportWithAdjudicationFixture,
+        impactFindings: [],
+        summary: {
+          ...impactReportWithAdjudicationFixture.summary,
+          impactFindingCount: 0,
+          reliedUponPairCount: 0,
+          deterministicNoImpactPairCount: 1,
+          modelVerdictCounts: { relies: 0, 'does-not-rely': 3, undetermined: 0 }
+        }
+      })
+    )
+
+    expect(section).toContain('**Shown to rely on this change (0)**')
+    expect(section).toContain(
+      '4 uses of a changed symbol were checked against what changed, and none was shown to rely on it. That is an answer, not an empty section'
+    )
+    expect(section).not.toContain('Nothing was triaged')
+  })
+
+  // The other empty: adjudication was on and nothing reached it. Also a result,
+  // and a different one — it makes no claim about the dependents at all.
+  it('tells nothing-was-checked apart from checked-and-clear', () => {
+    const section = impactSectionOf(
+      bodyFor({
+        ...impactReportWithAdjudicationFixture,
+        adjudicationStatus: 'no-model',
+        impactFindings: [],
+        summary: {
+          ...impactReportWithAdjudicationFixture.summary,
+          impactFindingCount: 0,
+          reliedUponPairCount: 0,
+          deterministicNoImpactPairCount: 0,
+          unadjudicatedPairCount: 4,
+          adjudicationCallCount: 0,
+          modelVerdictCounts: { relies: 0, 'does-not-rely': 0, undetermined: 0 }
+        }
+      })
+    )
+
+    expect(section).toContain('Nothing was triaged')
+    expect(section).toContain('No model was available')
+    expect(section).toContain(
+      '4 uses of a changed symbol were left unadjudicated'
+    )
+  })
+
+  // A partial triage read as a complete one is the mistake this layer exists to
+  // prevent, so a failing provider and a bound call cap are stated with the list.
+  it('qualifies a triage that was cut short', () => {
+    const section = impactSectionOf(
+      bodyFor({
+        ...impactReportWithAdjudicationFixture,
+        summary: {
+          ...impactReportWithAdjudicationFixture.summary,
+          unadjudicatedPairCount: 2,
+          failedAdjudicationCallCount: 1,
+          adjudicationCallsTruncated: true
+        }
+      })
+    )
+
+    expect(section).toContain('1 adjudication call did not complete')
+    expect(section).toContain('The adjudication call cap was reached')
+    expect(section).toContain(
+      'absence from this list is not a statement that a dependent is unaffected'
+    )
+  })
+
+  // A run whose judge was never called is not a run whose judge said no. Without
+  // this sentence a reader credits a model with an answer code reached for free.
+  it('does not let a deterministic answer read as a model’s', () => {
+    const section = impactSectionOf(
+      bodyFor({
+        ...impactReportWithAdjudicationFixture,
+        impactFindings: impactReportWithAdjudicationFixture.impactFindings
+          .slice(0, 1)
+          .map((finding) => ({
+            ...finding,
+            reliances: finding.reliances.slice(0, 1)
+          })),
+        summary: {
+          ...impactReportWithAdjudicationFixture.summary,
+          impactFindingCount: 1,
+          reliedUponPairCount: 1,
+          deterministicNoImpactPairCount: 3,
+          adjudicationCallCount: 0,
+          modelVerdictCounts: { relies: 0, 'does-not-rely': 0, undetermined: 0 }
+        }
+      })
+    )
+
+    expect(section).toContain(
+      'No model call was spent on this change: everything above was settled in code.'
+    )
+  })
+
+  // Untrusted text reaches this section too: a contract element and a consequence
+  // are composed from identifiers read out of the repository.
+  it('cannot have the comment marker forged by a reliance sentence', () => {
+    const body = bodyFor({
+      ...impactReportWithAdjudicationFixture,
+      impactFindings: impactReportWithAdjudicationFixture.impactFindings
+        .slice(0, 1)
+        .map((finding) => ({
+          ...finding,
+          reliances: finding.reliances.slice(0, 1).map((reliance) => ({
+            ...reliance,
+            contractElement: 'x <!-- codereviewer:review-summary:default --> y',
+            consequence: 'z <!-- codereviewer:review-summary:other -->'
+          }))
+        }))
+    })
+
+    expect(body.split('<!--')).toHaveLength(2)
   })
 })
 

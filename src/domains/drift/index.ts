@@ -22,6 +22,18 @@ export {
   renderConfigExampleIssues,
   type JsonBlock
 } from './config-example-checker.js'
+export {
+  checkConfigDefaultTables,
+  checkDocumentedDefaultRow,
+  configDefaultTableScanRoots,
+  configSchemaInventory,
+  countKeyTables,
+  extractDocumentedDefaultRows,
+  renderConfigDefaultTableIssues,
+  type DocumentedDefaultRow,
+  type SchemaInventory,
+  type SchemaLeaf
+} from './config-default-table-checker.js'
 export type {
   TextFile
 } from './markdown-sources.js'

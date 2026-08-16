@@ -185,6 +185,69 @@ clean sweep of nothing.
 
 ---
 
+## Documented configuration defaults
+
+`docs/06-reference/configuration/README.md` opens by saying every key, type and
+default on those pages "is read from" `config.schema.ts`. That was a convention
+and nothing enforced it: roughly a hundred defaults were hand-transcribed into
+Markdown tables with nothing comparing them to the schema.
+`src/domains/drift/config-default-table-checker.ts` compares them, under
+`npm test`. It runs as a test rather than as a `drift check` category for the two
+reasons the configuration-example check does.
+
+Nothing was wrong when it was written — every documented default agreed with the
+schema. This is drift **prevention**, and the failure it prevents is silent in
+both directions:
+
+- a default that moves in the schema leaves a page confidently stating the old
+  value (`documented-default-mismatch`);
+- a new option ships with no row at all (`undocumented-schema-key`), which is how
+  an option nobody can discover gets released.
+
+### The convention
+
+- **Write the key as a fully-qualified dotted path in backticks** —
+  `` `review.maxConcurrentTasks` ``. A key with no dot is qualified by the
+  nearest enclosing backticked heading, which is how the single-row
+  `` `review.signalFacts` `` and `` `review.citations` `` tables address their
+  `enabled`.
+- **Write the default as a backticked JSON literal** — `` `4` ``, `` `true` ``,
+  `` `"stable"` ``, `` `[]` ``. Bold around it changes nothing.
+- **Write `*unset*`** when the schema carries no default, and **`*required*`**
+  when the key must also be supplied. They are checked as the different claims
+  they are.
+- **The table is recognised by its header**, `Key | Type | Default | …`. Any
+  other table on the page is left alone.
+
+When a default genuinely cannot be a cell, declare it in the row itself:
+
+| Tag in the Default cell | Meaning |
+| --- | --- |
+| `<!-- no-literal-default <why> -->` | The default is too large to write in the cell and is printed elsewhere on the page — `paths.exclude`'s eighteen globs. The row is not compared. |
+| `<!-- covers-subtree <why> -->` | The row documents a nested object, and its leaves are covered here on purpose rather than one row each — `evaluation.regressionGate.overrides`, whose thirteen keys are all profile-derived and are documented as a threshold table. |
+
+Both need a reason of real length. The tag lives inside the cell so it cannot
+come adrift from the row it exempts, and it does not render.
+
+**The context-provider union table is not covered**, deliberately: its keys are
+relative to a union member chosen by a first column, so they address array
+elements rather than configuration paths. A test pins that exactly one such table
+exists, so a second uncovered shape cannot appear quietly.
+
+### If the check fails
+
+Fix the row, or fix the schema — whichever is wrong. Do not add an exemption to
+silence a mismatch: the tags exist for a default that cannot be written down, not
+for one that disagrees.
+
+The check cannot pass by finding nothing: a scanned root that holds Markdown and
+yields no key table is reported, the table count is cross-checked against an
+independent line scan, floors are held under the table and row counts, every row
+must be either compared or exempted, and the exemption count is pinned to an
+exact number rather than a ceiling.
+
+---
+
 ## Artifact examples
 
 A configuration example is something a reader **writes**. An artifact example is

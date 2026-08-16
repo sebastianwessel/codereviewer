@@ -480,3 +480,190 @@ export const impactReportFixture = asProducedByThisEngine(
   }
 )
 
+// The same change with `changeImpact.adjudication.enabled` switched ON: the
+// reference lists are still there, and above them sit the dependents an
+// adjudicator SHOWED to rely on the part of the contract that changed.
+//
+// It is a second fixture rather than a flag on the first, because the two are
+// different runs and the default one has to stay exactly what it is: the comment
+// it renders is the one every existing expectation in this suite describes.
+//
+// SHAPED LIKE A RUN THAT COULD HAPPEN, down to the arithmetic. Four (dependent
+// file, changed symbol) pairs exist across the reference lists; the counters
+// partition them exactly once — 3 relied upon, 0 settled as no-impact in code, 1
+// answered "does not rely" by the model, 0 unadjudicated — which is the check the
+// report contract says a reader can run against it. `admin.ts` carries one
+// reliance from each tier, because a file that references both a removed symbol
+// and a modified one is precisely why `adjudicatedBy` sits on the reliance rather
+// than on the finding.
+export const impactReportWithAdjudicationFixture = asProducedByThisEngine(
+  ChangeImpactReferenceReportSchema,
+  {
+    schemaVersion: '1.0',
+    status: 'completed',
+    adjudicationStatus: 'completed',
+    generatedAt: '2026-07-31T09:04:00.000Z',
+    scope: {
+      baseRef: 'origin/main',
+      headRef: 'HEAD',
+      changedFileCount: 3,
+      deletedFileCount: 0
+    },
+    summary: {
+      changedSymbolCount: 2,
+      changedSymbolsTruncated: false,
+      referencedSymbolCount: 2,
+      impactedFileCount: 2,
+      impactedTestFileCount: 1,
+      referenceCount: 3,
+      testReferenceCount: 1,
+      nonSourceReferenceCount: 0,
+      impactFindingCount: 2,
+      reliedUponPairCount: 3,
+      deterministicNoImpactPairCount: 0,
+      unadjudicatedPairCount: 0,
+      adjudicationCallCount: 3,
+      failedAdjudicationCallCount: 0,
+      modelVerdictCounts: { relies: 2, 'does-not-rely': 1, undetermined: 0 },
+      adjudicationCallsTruncated: false,
+      rejectedFindingCount: 0
+    },
+    impactFindings: [
+      {
+        id: 'impact_1',
+        path: 'src/routes/admin.ts',
+        destination: 'production',
+        // The strongest class across the reliances below: a name that is gone
+        // outranks behaviour that moved.
+        compatibilityClass: 'breaks-on-build',
+        reliances: [
+          {
+            symbolName: 'loadUser',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 22,
+            line: 41,
+            contractElement:
+              'the declaration of loadUser, which this change removes',
+            consequence: 'this reference cannot resolve and the file will not build',
+            adjudicatedBy: 'deterministic'
+          },
+          {
+            symbolName: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            line: 40,
+            contractElement:
+              'requireSession may now reject a session it previously accepted',
+            consequence:
+              'a caller that assumed a session is returned takes a rejection path it does not handle',
+            adjudicatedBy: 'model'
+          }
+        ]
+      },
+      {
+        id: 'impact_2',
+        path: 'src/auth/session.test.ts',
+        destination: 'test',
+        compatibilityClass: 'breaks-at-runtime',
+        reliances: [
+          {
+            symbolName: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            line: 4,
+            contractElement:
+              'requireSession may now reject a session it previously accepted',
+            consequence:
+              'the assertion on the accepted session no longer holds and the test fails in CI',
+            adjudicatedBy: 'model'
+          }
+        ]
+      }
+    ],
+    changedSymbols: [
+      {
+        name: 'requireSession',
+        kind: 'export',
+        language: 'typescript',
+        definitionPath: 'src/auth/session.ts',
+        definitionLine: 10,
+        changeKind: 'modified',
+        contractChanges: ['may now reject a session it previously accepted'],
+        referencesInDefinitionFile: 0,
+        referencesInNonSourceFiles: 0,
+        referencesTruncated: false,
+        referenceSearchTruncated: false
+      },
+      {
+        name: 'loadUser',
+        kind: 'export',
+        language: 'typescript',
+        definitionPath: 'src/auth/session.ts',
+        definitionLine: 22,
+        changeKind: 'deleted',
+        // A confident removal: every declaration this change adds was searched
+        // and none carries the name. `deleted` may not be reported without it.
+        removalPairing: { match: 'none' },
+        contractChanges: [],
+        referencesInDefinitionFile: 0,
+        referencesInNonSourceFiles: 0,
+        referencesTruncated: false,
+        referenceSearchTruncated: false
+      }
+    ],
+    impactedFiles: [
+      {
+        path: 'src/routes/admin.ts',
+        symbols: [
+          {
+            name: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            sites: [{ line: 40, text: 'requireSession(request)' }]
+          },
+          {
+            name: 'loadUser',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 22,
+            sites: [{ line: 41, text: 'const user = loadUser(session)' }]
+          }
+        ]
+      },
+      {
+        path: 'src/routes/user.ts',
+        symbols: [
+          {
+            name: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            sites: [{ line: 12, text: 'requireSession(request)' }]
+          }
+        ]
+      }
+    ],
+    impactedTestFiles: [
+      {
+        path: 'src/auth/session.test.ts',
+        symbols: [
+          {
+            name: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            sites: [{ line: 4, text: 'requireSession' }]
+          }
+        ]
+      }
+    ],
+    warnings: [],
+    // A lane that spent three provider calls carries usage. Absent — never
+    // zero-valued — on a run that made none, which is the default fixture above.
+    usage: {
+      providerId: 'openai',
+      modelName: 'gpt-5.3-codex',
+      inputTokens: 4820,
+      outputTokens: 260,
+      costUsd: 0.0121
+    }
+  }
+)
+

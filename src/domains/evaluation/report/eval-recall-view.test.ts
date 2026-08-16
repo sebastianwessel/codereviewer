@@ -121,12 +121,18 @@ describe('the recall view', () => {
 // it. The rule that decides is stated in the module header — this view reads the
 // fields recall is COMPUTED FROM, and nothing else.
 const REPORT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
-  // Version and scoring identity. Reading either would mean deciding what to do
-  // per version, which is exactly the coupling to today's producer that made every
-  // archive unopenable here; the fields recall is computed from are identical
-  // across every version this view accepts.
+  // The shape literal. Reading it would mean deciding what to do per version,
+  // which is exactly the coupling to today's producer that made every archive
+  // unopenable here; nothing in this repository dispatches on it, and the fields
+  // recall is computed from are identical across every version this view accepts.
+  //
+  // `metricsVersion` used to sit here for that reason and has MOVED into the read
+  // model. Nothing about the argument above changed — the view still does not
+  // branch on it — but `eval recall-report` POOLS several reports into one `k/n`
+  // per expectation, and a pool that spans a metrics-version boundary merges two
+  // definitions of a match. It is read to REFUSE, not to dispatch. See
+  // `eval-pool-identity.ts`.
   'schemaVersion',
-  'metricsVersion',
   // The scoring configuration and the aggregate metrics block. This report
   // RECOMPUTES recall per expectation across the reports it was handed, rather
   // than restating a stored rate, which is the whole reason it can span archives.
@@ -135,14 +141,14 @@ const REPORT_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [
   'metricGroups',
   // The regression gate's verdict on ONE run. This report is a per-expectation
   // cross-run view and adjudicates nothing.
-  'regressionGate',
-  // Engine, model and capability provenance. NOT read here, and unlike the
-  // entries above that is a bound worth stating plainly: `eval compare` reads
-  // provenance and refuses to pool runs whose capabilities or judge disagree,
-  // while `eval recall-report` pools whatever reports the caller names and labels
-  // each column by its file path. Reading provenance to refuse a mixed pool would
-  // be a new refusal, not a new read.
-  'provenance'
+  'regressionGate'
+  // `provenance` used to sit here, under a comment that ended "Reading provenance
+  // to refuse a mixed pool would be a new refusal, not a new read." That was the
+  // right description and the wrong conclusion: `eval recall-report` pools
+  // per-expectation outcomes across every report it is handed, and the refusal was
+  // missing rather than out of scope. It is now read — see the read model — and
+  // the new refusal is the one `eval-pool-identity.ts` owns for every pooling
+  // caller, not a second rule written here.
 ]
 
 const CASE_FIELDS_DELIBERATELY_NOT_READ: readonly string[] = [

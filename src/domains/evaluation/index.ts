@@ -176,6 +176,18 @@ export {
   engineCommitArgs,
   engineWorkingTreeArgs
 } from './report/engine-identity.js'
+// Whether several finished runs may be merged into one statistic. On the barrel
+// because both pooling surfaces are CLI commands: `eval recall-report` pools
+// per-expectation outcomes, and `eval compare` asks the same question of the
+// judge before it adjudicates two arms.
+export {
+  judgeIdentityOf,
+  poolIdentityRefusals,
+  poolIdentityWarnings,
+  POOL_IDENTITY_UNRECORDED,
+  type PoolCandidate,
+  type PoolIdentityProvenance
+} from './report/eval-pool-identity.js'
 export {
   buildChangeImpactCase,
   changeImpactHydrationSource,

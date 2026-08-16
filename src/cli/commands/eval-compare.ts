@@ -1,5 +1,6 @@
 // `eval compare` — adjudicates one arm of eval runs against another.
 import {
+  judgeIdentityOf,
   renderEvalComparison,
   type EvalComparisonReport,
   type EvalComparisonRun
@@ -147,14 +148,14 @@ export const runEvalCompare = async (
     // so `modelName` is the right fallback identity. That keeps two archived
     // reports comparable with each other, and keeps an archived report
     // comparable with a pinned one that names the same model.
-    const judgeIdentity = (report: EvalComparisonReport): string =>
-      report.provenance?.judgeModelName ??
-      report.provenance?.modelName ??
-      '(unrecorded)'
+    //
+    // That fallback rule is `judgeIdentityOf`'s, not this command's: pooling asks
+    // the identical question of the identical field, and two spellings of one
+    // rule is how the two ends drift apart.
     const judges = new Map<string, string[]>()
 
     for (const { label, report } of [...base, ...head]) {
-      const identity = judgeIdentity(report)
+      const identity = judgeIdentityOf(report.provenance)
       judges.set(identity, [...(judges.get(identity) ?? []), label])
     }
 

@@ -57,6 +57,19 @@
 // member by member (see `report-digest.test.ts` and
 // `reporter-eligibility-drift.test.ts`).
 import { z } from 'zod'
+// Straight from the report contract rather than through the domain's index: the
+// index also exports the lane, the run and the agents, and the pull-request
+// comment has no business pulling a provider-facing graph in to read a JSON file.
+// `fixtures.ts` reaches for the same module for the same reason.
+import {
+  AdjudicatedBySchema,
+  AdjudicationStatusSchema,
+  ImpactFindingSchema,
+  settledPairCount,
+  type AdjudicatedBy,
+  type AdjudicationStatus,
+  type ReportableCompatibilityClass
+} from '../../src/domains/change-impact/impact-report.js'
 import {
   ObligationStatusSchema,
   type ObligationStatus
@@ -71,7 +84,10 @@ import {
   type Severity
 } from '../../src/shared/contracts/index.js'
 
-export type { Severity }
+// Re-exported so the renderer keys its wording off the producer's vocabulary
+// without importing the change-impact domain itself: the digest is the one place
+// this integration is allowed to know what a report looks like.
+export type { ReportableCompatibilityClass, Severity }
 
 /**
  * A report artifact this build wrote and this build cannot read.
@@ -551,6 +567,40 @@ const ImpactedFileSchema = z.object({
     .min(1)
 })
 
+// ONE REASON A DEPENDENT IS ON THE ADJUDICATED LIST: the line in the dependent,
+// the changed symbol, what about it is relied upon, and what goes wrong.
+//
+// All four are required, as the producer requires them, and spec 22 requires the
+// set: "Findings MUST carry the dependent's path and line, the contract element
+// relied upon, and the consequence." A reliance missing one of them is not a
+// change-impact finding, so reading it as one would put a claim in front of a
+// reviewer that the engine is not allowed to make.
+const ImpactRelianceReadSchema = z.object({
+  symbolName: z.string(),
+  line: z.number().int().min(1),
+  contractElement: z.string(),
+  consequence: z.string(),
+  // Which tier answered. Pinned, and taken from the producer's own field schema:
+  // the comment DECIDES on this value (it labels the sentence as a model's
+  // judgement or as a consequence settled in code), so a third member added to
+  // the vocabulary must fail here rather than render as an unlabelled sentence.
+  adjudicatedBy: AdjudicatedBySchema
+})
+
+// A dependent FILE an adjudicator showed to rely on the part of the contract that
+// changed. The unit is the file, as it is in the contract and in the reference
+// lists, because a reviewer opens files.
+const ImpactFindingReadSchema = z.object({
+  path: z.string(),
+  // Both enums are the producer's own field schemas rather than local copies, so
+  // there is no second spelling to drift. `compatibilityClass` in particular is
+  // the contract's enum MINUS `no-impact` — a finding can never carry it — and
+  // restating the three members here would quietly re-admit the fourth.
+  destination: ImpactFindingSchema.shape.destination,
+  compatibilityClass: ImpactFindingSchema.shape.compatibilityClass,
+  reliances: z.array(ImpactRelianceReadSchema).min(1)
+})
+
 const ImpactReportSchema = z.object({
   schemaVersion: z.literal('1.0'),
   // Pinned to the closed vocabulary, unlike the intent report's status, because
@@ -559,11 +609,47 @@ const ImpactReportSchema = z.object({
   // anybody being told. `disabled` renders nothing too — but that is a decision
   // taken about a value this digest knows.
   status: z.enum(['completed', 'disabled']),
+  // WHETHER THE ADJUDICATED LAYER RAN, and it is pinned for the same reason the
+  // status above is: the comment decides on it, and an empty finding list means
+  // three different things depending on this one field. A value this digest did
+  // not know would otherwise take the safest-looking branch — "adjudication is
+  // off" — which is the one sentence that turns a run that checked and found
+  // nothing into a run that never looked.
+  adjudicationStatus: AdjudicationStatusSchema,
   summary: z.object({
     changedSymbolCount: z.number().int(),
     referenceCount: z.number().int(),
-    testReferenceCount: z.number().int()
+    testReferenceCount: z.number().int(),
+    // THE ADJUDICATION COUNTERS THE COMMENT QUALIFIES ITS LIST WITH. The unit is a
+    // (dependent file, changed symbol) pair, which is the question adjudication
+    // answers; findings are grouped per file above.
+    //
+    // The first three are the parts of "how much was checked at all", which is
+    // what tells an empty list that is an answer from an empty list that is an
+    // absence. They are read separately and summed by the contract's own helper,
+    // because the report deliberately stores no pooled counter.
+    reliedUponPairCount: z.number().int().min(0),
+    deterministicNoImpactPairCount: z.number().int().min(0),
+    modelVerdictCounts: z.object({
+      'does-not-rely': z.number().int().min(0)
+    }),
+    // Pairs nothing settled. Read because a list that omits them is a partial
+    // triage, and a reader must not take absence from it as "unaffected".
+    unadjudicatedPairCount: z.number().int().min(0),
+    // Calls actually spent, and of those the ones that threw. Zero calls means the
+    // model tier never ran whatever the status says, and a failing provider must
+    // be visible as a failing provider rather than as a quiet run that found
+    // nothing — this repository's recurring defect class, one surface further out.
+    adjudicationCallCount: z.number().int().min(0),
+    failedAdjudicationCallCount: z.number().int().min(0),
+    // True when the call cap bound the residue, so a short list is never mistaken
+    // for a fully triaged one.
+    adjudicationCallsTruncated: z.boolean()
   }),
+  // THE ADJUDICATED LAYER. Required, like the producer's own contract: an absent
+  // list and an empty one are the same bytes to a reader and completely different
+  // facts, and the field that tells them apart is `adjudicationStatus` above.
+  impactFindings: z.array(ImpactFindingReadSchema),
   // Schema 2.0 replaced the single `symbols` list — changed symbols each carrying
   // their own references — with this normalized pair: what changed, and which FILES
   // it reaches. THE OLD SPELLING IS NOT READ, and deliberately is not: nothing can
@@ -631,12 +717,67 @@ export type ImpactSymbolDigest = {
   readonly testReferenceCount: number
 }
 
+export type ImpactRelianceDigest = {
+  /** The line IN THE DEPENDENT — always one discovery located. */
+  readonly line: number
+  readonly symbolName: string
+  /** What about the changed symbol this file was shown to rely on. */
+  readonly contractElement: string
+  /** What goes wrong if the reliance holds. Composed in code, never by a model. */
+  readonly consequence: string
+  /**
+   * Which tier reached this answer. Carried per reliance, not per finding,
+   * because one file can rely on a removed symbol (settled in code) and a
+   * modified one (settled by a model call) at once — and a reader weighing the
+   * comment needs to know which sentence cost a provider call.
+   */
+  readonly adjudicatedBy: AdjudicatedBy
+}
+
+/**
+ * A dependent shown to rely on the part of the contract that changed.
+ *
+ * A JUDGEMENT, and the one thing in the impact report that is. The symbol table
+ * beside it is the untriaged reference list — every place a changed name is
+ * mentioned — and the two must never be rendered as one thing: published rates
+ * for this task put an untriaged reference list near 90% irrelevant, which is the
+ * entire reason this layer exists.
+ */
+export type ImpactFindingDigest = {
+  readonly path: string
+  readonly destination: 'production' | 'test'
+  readonly compatibilityClass: ReportableCompatibilityClass
+  readonly reliances: readonly ImpactRelianceDigest[]
+}
+
 export type ImpactDigest = {
   readonly status: string
   readonly changedSymbolCount: number
   readonly referenceCount: number
   readonly testReferenceCount: number
   readonly symbols: readonly ImpactSymbolDigest[]
+  /**
+   * Whether the adjudicated layer ran, and — when it did and found nothing —
+   * which kind of nothing. `disabled` is the default configuration, so it is the
+   * ordinary value here and the one that renders exactly as this comment did
+   * before the layer reached it at all.
+   */
+  readonly adjudicationStatus: AdjudicationStatus
+  readonly findings: readonly ImpactFindingDigest[]
+  /**
+   * Dependent uses an adjudicator settled either way, summed from the three
+   * counters the report keeps apart. It is what separates "checked, and nothing
+   * relies on this" from "nothing was checked": both render zero findings.
+   */
+  readonly checkedPairCount: number
+  /** Dependent uses nothing settled. Absent from the findings, asserting nothing. */
+  readonly unadjudicatedPairCount: number
+  /** Model calls spent. Zero means the model tier never ran on this change. */
+  readonly adjudicationCallCount: number
+  /** Of those, the ones that threw. */
+  readonly failedAdjudicationCallCount: number
+  /** True when the call cap bound the residue, so the triage is partial. */
+  readonly adjudicationCallsTruncated: boolean
   readonly warnings: readonly string[]
 }
 
@@ -666,6 +807,29 @@ export const digestImpactReport = (raw: string): ImpactDigest => {
     symbols: symbols.filter(
       (symbol) => symbol.referenceCount > 0 || symbol.testReferenceCount > 0
     ),
+    adjudicationStatus: report.adjudicationStatus,
+    // Carried whole. Nothing is filtered out of the adjudicated layer here: the
+    // producer already refuses a finding without a named dependent, excludes
+    // `no-impact` by construction, and counts what its gate rejected. A second
+    // opinion applied in the comment's read model would be a policy nobody
+    // declared, in the one place nobody would look for it.
+    findings: report.impactFindings.map((finding) => ({
+      path: finding.path,
+      destination: finding.destination,
+      compatibilityClass: finding.compatibilityClass,
+      reliances: finding.reliances.map((reliance) => ({
+        line: reliance.line,
+        symbolName: reliance.symbolName,
+        contractElement: reliance.contractElement,
+        consequence: reliance.consequence,
+        adjudicatedBy: reliance.adjudicatedBy
+      }))
+    })),
+    checkedPairCount: settledPairCount(report.summary),
+    unadjudicatedPairCount: report.summary.unadjudicatedPairCount,
+    adjudicationCallCount: report.summary.adjudicationCallCount,
+    failedAdjudicationCallCount: report.summary.failedAdjudicationCallCount,
+    adjudicationCallsTruncated: report.summary.adjudicationCallsTruncated,
     warnings: report.warnings
   }
 }
