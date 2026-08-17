@@ -36,9 +36,9 @@ export const buildEvalRunRequest = (
     readonly generatedAt: string
     readonly evaluationElapsedMs: () => number
     // Which engine build ran the review. Read by the command rather than here
-    // because it needs a git call, and typed off `readEngineIdentity`'s own
-    // return so the two facts it records -- commit, and whether the working tree
-    // was clean -- cannot be re-spelled on the way into the report.
+    // because it needs a git call, and typed off `readRunningEngineIdentity`'s
+    // own return so the two facts it records -- commit, and whether the working
+    // tree was clean -- cannot be re-spelled on the way into the report.
     readonly engine: EngineIdentity
   }
 ): EvalRunRequest => ({
@@ -100,8 +100,9 @@ export const buildEvalRunRequest = (
     // say which one, so those figures cannot be pooled with anything; `eval
     // impact` and `eval intent` have stamped this since they existed and this
     // command, which produces every published recall and precision figure, did
-    // not. Passed straight through: the answer comes from `readEngineIdentity`
-    // and nothing here reinterprets it.
+    // not. Passed straight through: the answer comes from
+    // `readRunningEngineIdentity`, which reads the ENGINE's checkout rather than
+    // the caller's working directory, and nothing here reinterprets it.
     engine: input.engine,
     // The same effective config, read as VALUES rather than hashed. The hash
     // proves two runs shared a configuration; it cannot answer "was the fix

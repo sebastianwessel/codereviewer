@@ -291,6 +291,93 @@ const isNoMergeBaseExitStatus = (error: unknown): boolean =>
   'code' in error &&
   (error as { readonly code: unknown }).code === 1
 
+// What git printed, so the two failures a first run actually hits can be told
+// apart. `execFile` puts the subprocess stderr on `stderr` and repeats it inside
+// `message` after a `Command failed: git merge-base <base> <head>` prefix — and
+// that prefix is what a reader used to get instead of an explanation.
+const gitFailureText = (error: unknown): string => {
+  if (typeof error !== 'object' || error === null) {
+    return ''
+  }
+
+  const candidate = error as {
+    readonly stderr?: unknown
+    readonly message?: unknown
+  }
+
+  return [candidate.stderr, candidate.message]
+    .filter((value): value is string => typeof value === 'string')
+    .join('\n')
+}
+
+// Why the merge base could not be resolved, in terms the caller can act on.
+//
+// Both of these are FIRST-CONTACT failures: `docs/02-getting-started` tells a
+// reader to run `--base-ref origin/main`, which does not resolve in a repository
+// with no remote, and the CLI reviews whatever directory it is started in, which
+// is not always a repository at all. Both used to surface as the raw
+// `Command failed: git merge-base …\nfatal: …` string — the command this engine
+// ran, not anything the reader typed, and no remedy.
+//
+// Returning `undefined` for anything unrecognized is deliberate: a timeout or an
+// abort is classified by the error normalizer from its own message, and
+// rewriting every git failure into a repository error here would take
+// `repository_timeout` / `repository_cancelled` away from it.
+const mergeBaseFailureCause = (
+  error: unknown,
+  refs: { readonly baseRef: string; readonly headRef: string }
+):
+  | {
+      readonly cause: string
+      readonly explanation: string
+    }
+  | undefined => {
+  const failureText = gitFailureText(error)
+  const lowerCaseFailureText = failureText.toLowerCase()
+
+  if (lowerCaseFailureText.includes('not a git repository')) {
+    return {
+      cause: 'not_a_git_repository',
+      explanation:
+        'the working directory is not inside a git repository. This CLI always reviews the repository at its current working directory, so run it from the root of the repository you want reviewed.'
+    }
+  }
+
+  // git's wording for an unresolvable ref differs by subcommand and version, so
+  // all four spellings are matched rather than the one `merge-base` happens to
+  // use today.
+  if (
+    lowerCaseFailureText.includes('not a valid object name') ||
+    lowerCaseFailureText.includes('unknown revision') ||
+    lowerCaseFailureText.includes('bad revision') ||
+    lowerCaseFailureText.includes('ambiguous argument')
+  ) {
+    // Which of the two refs git rejected, when git named one. It stops at the
+    // first bad ref, so naming both would send the reader to check a ref that is
+    // fine — and matching against the whole failure text does exactly that,
+    // because `execFile` repeats the command (`git merge-base <base> <head>`)
+    // there. Only git's own `fatal:` lines are searched.
+    const fatalText = failureText
+      .split(/\r?\n/u)
+      .filter((line) => line.trimStart().toLowerCase().startsWith('fatal:'))
+      .join('\n')
+    const unresolvedRefs = [refs.baseRef, refs.headRef].filter((ref) =>
+      fatalText.includes(ref)
+    )
+    const subject =
+      unresolvedRefs.length === 0
+        ? `neither "${refs.baseRef}" nor "${refs.headRef}" could be resolved`
+        : `${unresolvedRefs.map((ref) => `"${ref}"`).join(' and ')} does not resolve to a commit in this repository`
+
+    return {
+      cause: 'ref_not_found',
+      explanation: `${subject}. Check the spelling with \`git rev-parse <ref>\`; a remote-tracking ref such as \`origin/main\` also needs \`git fetch origin\` first, and a repository with no remote has none at all — use a local ref like \`main\`.`
+    }
+  }
+
+  return undefined
+}
+
 // The reviewed change set is what `headRef` added since it diverged from
 // `baseRef`. Diffing the two refs directly would also surface commits that
 // landed on `baseRef` after the divergence point, inflating every review on a
@@ -312,6 +399,17 @@ const resolveMergeBase = async (
   ).catch((error: unknown) => {
     if (isNoMergeBaseExitStatus(error)) {
       return ''
+    }
+
+    const failure = mergeBaseFailureCause(error, { baseRef, headRef })
+
+    if (failure !== undefined) {
+      throw createStructuredError({
+        code: 'repository_error',
+        message: `The base and head refs could not be compared because ${failure.explanation}`,
+        category: 'repository',
+        details: { baseRef, headRef, cause: failure.cause }
+      })
     }
 
     throw error
@@ -436,6 +534,42 @@ const partitionIntakeRecords = (
   return { changedFiles, skippedFiles }
 }
 
+// Why each explicitly named file was skipped, with the knob that decided it.
+// The five reasons need five different actions — fix the path, name a text file,
+// raise a byte ceiling, adjust the path filters, name fewer files — and the
+// skipped-file record alone carries only a one-word reason code.
+const explicitSkipExplanations: Readonly<Record<SkippedFile['reason'], string>> =
+  {
+    deleted: 'is deleted, so there is no content to review',
+    binary: 'is binary',
+    'too-large': 'is larger than review.maxFileBytes',
+    'too-many-files': 'was beyond review.maxFiles',
+    excluded: 'is matched by paths.exclude, or falls outside paths.include',
+    unsupported: 'is in a language this engine does not analyse',
+    error: 'could not be read (it does not exist, or is not readable)'
+  }
+
+// Bounded: a caller who named 200 files gets the first few and a count, not a
+// message that is itself unreadable.
+const maxListedSkippedExplicitFiles = 5
+
+const describeSkippedExplicitFiles = (
+  skippedFiles: readonly SkippedFile[]
+): string => {
+  const listed = skippedFiles
+    .slice(0, maxListedSkippedExplicitFiles)
+    .map(
+      (skipped) =>
+        `"${skipped.path}" ${explicitSkipExplanations[skipped.reason]}`
+    )
+    .join('; ')
+  const remaining = skippedFiles.length - maxListedSkippedExplicitFiles
+
+  return remaining > 0
+    ? `${listed}; and ${remaining} more.`
+    : `${listed}.`
+}
+
 export const collectRepositoryIntake = async (
   options: CollectRepositoryIntakeOptions
 ): Promise<RepositoryIntake> => {
@@ -450,8 +584,10 @@ export const collectRepositoryIntake = async (
   const includeMatchers = compileGlobMatchers(options.includePatterns ?? [])
   const excludeMatchers = compileGlobMatchers(options.excludePatterns ?? [])
 
+  const usesExplicitFiles =
+    options.explicitFiles !== undefined && options.explicitFiles.length > 0
   const usesGitDiff =
-    !(options.explicitFiles !== undefined && options.explicitFiles.length > 0) &&
+    !usesExplicitFiles &&
     options.baseRef !== undefined &&
     options.headRef !== undefined
 
@@ -501,6 +637,25 @@ export const collectRepositoryIntake = async (
       enforceRealPathContainment
     })
     const { changedFiles, skippedFiles } = partitionIntakeRecords(inspectedRecords)
+
+    // The same refusal as above, for the OTHER way a run reaches every later
+    // stage with nothing to review. `--file`/`--files` bypasses the diff, so the
+    // empty-diff guard cannot see it: a named file that does not exist, is
+    // binary, is over `review.maxFileBytes`, or is matched by `paths.exclude` was
+    // recorded as skipped and the run went on to report zero findings, quality
+    // gate PASSED, exit 0. Every path here was NAMED by the caller, so none of
+    // them being reviewable is a mistake to report, never a clean result.
+    if (usesExplicitFiles && changedFiles.length === 0) {
+      throw createStructuredError({
+        code: 'no_reviewable_change',
+        message: `Every file named with --file/--files was skipped, so there is nothing to review: ${describeSkippedExplicitFiles(skippedFiles)} Refused rather than reported as a passing review over zero files.`,
+        category: 'repository',
+        details: {
+          explicitFileCount: options.explicitFiles?.length ?? 0,
+          skippedPaths: skippedFiles.map((skipped) => skipped.path)
+        }
+      })
+    }
     // Deleted paths stay in `skippedFiles` regardless: they genuinely are skipped
     // from review. `deletedFiles` is an additive second view for the consumers
     // that need them, so opting in never removes information from an existing one.

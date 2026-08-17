@@ -185,7 +185,7 @@ the block. What it was and why it went:
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `skills.enabled` | boolean | `false` | Mounts skill directories for provider-backed reviewer agents. |
-| `skills.directories` | repository-relative path[] | `[".codereviewer/skills"]` | Directories scanned for nested skill folders, each with a `SKILL.md` carrying unique `name` and `description` frontmatter. Overridable with `CODEREVIEWER_SKILLS_DIR` (which replaces the array with a single entry). |
+| `skills.directories` | repository-relative path[] | `[".codereviewer/skills"]` | Directories scanned recursively for `SKILL.md` files, each carrying unique `name` and `description` frontmatter. A `SKILL.md` directly in a configured directory is a skill; so is one in a folder nested under it. Overridable with `CODEREVIEWER_SKILLS_DIR` (which replaces the array with a single entry). |
 | `skills.allowTools` | array of `"read"` \| `"list"` \| `"grep"` | `["read", "list", "grep"]` | Read-only built-ins available to mounted skills. No other tool is permitted. |
 
 Skill bodies are never inlined into workflow input, reports, logs, traces, or

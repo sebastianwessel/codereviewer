@@ -31,6 +31,12 @@ codereviewer review --base-ref origin/main --head-ref HEAD
 (Substitute your invocation from [Install and run](install-and-run.md) — either
 `npm run cli -- review …` or `node /path/to/codereviewer/dist/cli/main.js review …`.)
 
+> **Both refs must resolve in your checkout.** `origin/main` is a
+> remote-tracking ref: it exists only after a `git fetch origin`, and not at all
+> in a repository with no remote. A ref that does not resolve fails at exit `3`
+> naming the ref and how to check it — use a local ref such as `main` if that is
+> what your repository has.
+
 On success the command prints JSON to stdout:
 
 ```json review-stdout
@@ -52,8 +58,13 @@ Files` by surprise:
 ## Scope of this search
 
 - Run: `run-3f2c…` (mode local, depth balanced)
-- Files read in full: 1 of 1 reviewable (116 of 116 bytes). Coverage status: complete — a statement that the source reached a model, not that every defect in it was found.
+- Model: none — this run performed no model search
+- Files read in full: 1 of 1 reviewable (116 of 116 bytes). Coverage status: complete — a statement that the source was read and assembled for review, not that anything searched it: this run performed no model search.
 ```
+
+The coverage sentence differs from the one a model-backed run prints, and that
+is the point: on this run `complete` means the source was gathered, not that
+anything looked at it.
 
 Getting this wrong is cheap here and expensive one step later — a scope mistake
 discovered after a paid run is the same information for money.

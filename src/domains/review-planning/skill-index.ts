@@ -119,21 +119,43 @@ export const createSkillIndex = async (
       const content = await readFile(skillFile, 'utf8')
       const metadata = parseSkillMetadata(content, skillFile)
       const skillDirectory = path.dirname(skillFile)
-      const relativeSkillDirectoryFromConfiguredRoot = toPortableRelativePath(
-        resolvedDirectory,
-        skillDirectory
+      // BOTH REPOSITORY-RELATIVE STRINGS ARE DERIVED FROM THE SKILL FILE, NEVER
+      // FROM ITS DIRECTORY, and that is the fix rather than a stylistic choice.
+      //
+      // `toPortableRelativePath` composes `path.relative` — which answers `''`
+      // for two equal paths — with `normalizeFileSystemPath`, whose emptiness
+      // check rejects `''`. So asking it for the path from a configured skills
+      // directory to a skill's directory threw `TypeError: Path value must not
+      // be empty.` for the one layout where those are the SAME directory: a
+      // `SKILL.md` placed directly in a configured skills directory, which spec
+      // 04 (*Skills*) states is a legal skill. The same throw hit
+      // `directories: ["."]` with a `SKILL.md` at the repository root, where the
+      // skill's directory equals the repository root. A `'.'` branch used to
+      // stand below to absorb exactly this case; it could never run, because the
+      // expression producing its input threw first.
+      //
+      // A skill FILE is never equal to a directory containing it, so the empty
+      // relative path is now unreachable by construction rather than
+      // special-cased — and the directory is recovered from the file's relative
+      // path, where `path.posix.dirname` already spells the repository root as
+      // the conventional `.`.
+      //
+      // The shared helper is deliberately NOT taught to answer `.` for equal
+      // paths. `eval-slice-manifest.ts` folds its result into the sha256 slice
+      // digest that decides whether two eval runs may be pooled; widening that
+      // contract to serve this caller would put a published digest at risk for
+      // no gain here. (Equal paths cannot occur there — it only ever asks for
+      // the path from the slice root to a FILE beneath it — but "cannot occur
+      // today" is not a reason to move a hashed helper's boundary.)
+      //
+      // Joining the configured `directory` back on is likewise gone: it
+      // recomputed, from a second base, a path the repository-relative form
+      // already states, and that redundancy is where the unreachable branch grew.
+      const relativeSkillFile = normalizeRepositoryRelativePath(
+        toPortableRelativePath(options.repositoryRoot, skillFile)
       )
       const relativeSkillDirectoryFromRepositoryRoot = normalizeRepositoryRelativePath(
-        toPortableRelativePath(options.repositoryRoot, skillDirectory)
-      )
-      const relativeSkillFile = normalizeRepositoryRelativePath(
-        path.posix.join(
-          normalizeRepositoryRelativePath(directory),
-          relativeSkillDirectoryFromConfiguredRoot === '.'
-            ? ''
-            : relativeSkillDirectoryFromConfiguredRoot,
-          skillFileName
-        )
+        path.posix.dirname(relativeSkillFile)
       )
 
       if (skills.some((skill) => skill.id === metadata.name)) {

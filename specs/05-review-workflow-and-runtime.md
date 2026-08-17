@@ -509,12 +509,14 @@ itself measured.
 Every discovery call shares one failure policy, so the general pass and the
 dedicated security pass cannot drift apart on what "this call failed" means.
 
-Three named failures are properties of ONE model response rather than of the run,
+Four named failures are properties of ONE model response rather than of the run,
 and MUST cost that response and nothing more: the agent exhausting its step
-allowance, output that fails the agent's own schema, and a structured object the
-provider adapter could not parse at all. A call that fails this way yields no
-findings and MUST be surfaced as a RECOVERED provider issue, so the degradation
-stays visible instead of silent.
+allowance, output that fails the agent's own schema, a structured object the
+provider adapter could not parse at all, and a response the provider stopped at
+the output-token ceiling (`provider_output_truncated`). A call that fails this way
+yields no findings and MUST be surfaced as an UNRECOVERED provider issue
+(`recovered: false`), so the degradation stays visible instead of silent and the
+quality gate has something to fire on.
 
 Letting any of them propagate would fail the whole task and lose every finding it
 had — and, in an evaluation, silently drop the case from the comparison, which is
@@ -525,6 +527,86 @@ clean review.
 
 Any other failure propagates. A hard provider failure already carries its own
 retry policy in the provider layer and MUST NOT be retried again here.
+
+#### Truncated Discovery Responses (2026-08-17)
+
+**The requirement.** A discovery response whose finish reason says generation
+stopped at the output-token ceiling costs that response and nothing more, exactly
+as the three failures above do, and is recorded as an unrecovered provider issue.
+It MUST NOT fail the run, and it MUST NOT be reported as recovered.
+
+**Why this is written down rather than left implied.** The output-truncation guard
+landed at the provider seam immediately before this amendment, where it covers
+every lane that resolves a model alias. Refutation and semantic merge catch every call failure and were
+therefore already routing it to an unrecovered provider issue. Discovery matched
+its failures by name, did not name this one, and so fell through to the closing
+"any other failure propagates" — meaning one truncated response terminated a run
+that had every other task's findings in hand. Nothing in this spec had DECIDED
+that; it was the residue of a sentence about other failures. An implied policy is
+what made this ambiguous, so the policy is now stated either way.
+
+**The decisive argument is that the alternative is arbitrary.** A truncated
+response is one provider event. Where the cut lands is not a property of the
+review: a cut mid-token yields malformed structured-object JSON, which this policy
+already names as recoverable *because it is what truncation looks like*; a cut
+after a complete array element yields a partial findings list that parses cleanly.
+Leaving truncation to propagate gives the identical provider event two different
+run-level outcomes depending on where the model happened to be mid-token, and it
+punishes the case the engine diagnoses BETTER. That cannot be the rule.
+
+**What makes it safe as well as consistent — checked, not assumed.** A partial
+review presented as complete is the defect this project keeps finding in itself,
+so the disposition has to refuse certification, not merely continue:
+
+- The quality gate fails on the presence of an unrecovered provider issue under
+  `qualityGate.failOnProviderError`, which defaults to `true`. The run exits `1`,
+  category `quality-gate`, naming no finding — the failure is that findings are
+  MISSING. An operator who sets that key to `false` has explicitly chosen to
+  accept degraded runs, and inherits that choice here as everywhere else.
+- Coverage does NOT catch this, and must not be relied on to. The coverage
+  certificate proves which source BYTES were shown to a task; a truncated ANSWER
+  about fully-shown source leaves coverage `complete`. Coverage certifies the
+  question, never the answer.
+
+So the run reports a review it states is incomplete, keeps the findings the other
+tasks produced, and fails its gate. That is strictly more information than a
+terminated run, and it is not more optimistic.
+
+**`recovered: false` is not negotiable, and it is why this is not a softening.**
+Discovery already records its recoverable failures as unrecovered
+(`discovery-call.ts`), because `recovered: true` let a provider outage read as a
+clean review and left the gate nothing to fire on. Truncation inherits that
+verbatim. "Recovered" would mean the engine coped; it did not — a partition
+contributed no candidates.
+
+**Rejected alternatives, recorded so they are not re-proposed:**
+
+- *Leave truncation propagating, so a partial review can never be printed.* This
+  was a real candidate — a partial review presented as complete is exactly this
+  project's recurring defect class. It is rejected because the refusal already
+  exists at the gate, which declines to certify, rather than at the process, which
+  discards completed work to make the same point; and because of the arbitrariness
+  argument above.
+- *Retry the call.* The guard's own module states the reason: an identical request
+  against an identical ceiling truncates identically. It would spend money to fail
+  the same way.
+- *Split the task and retry the halves.* Reactive splitting (spec 26) answers an
+  INPUT overflow, which the provider reports as `context_length_exceeded`. Output
+  truncation is a different limit with a different remedy, and treating it as
+  oversize input would divert it into a recovery path that cannot fix it. The
+  guard deliberately claims only `length` for the same reason.
+- *Salvage the findings that did arrive before the cut.* Rejected. The guard
+  refuses the whole response at the provider seam and returns nothing; harvesting a
+  prefix would mean admitting a list the model did not finish writing, with its
+  last element cut mid-object — which is the "partial presented as complete" shape
+  in miniature. The response is worth one recorded issue, not a salvage operation.
+
+**One truncated response is not the same as a truncated run.** Every OTHER lane
+that resolves a model alias still lets `provider_output_truncated` propagate, and
+that is deliberate: this policy is scoped to a discovery call, which is one of many
+per run and whose loss is bounded and countable. A lane that issues one call per
+run has nothing left when that call is truncated, so failing is the honest outcome
+there.
 
 ### Discovery Partitioning
 
@@ -965,7 +1047,9 @@ sharing a call must not make one candidate's verdict depend on another's.
   engine itself created, invisibly, because a refuted finding produces no output.
   The notice must also state what the absence does NOT mean: a claim that cannot
   be supported from what remains is `needs-more-evidence`, never `refuted`. A
-  packet that fits carries no notice.
+  packet that fits and holds whole documents carries no notice. The same field also
+  carries the per-packet excerpt statement (see *The Excerpt Premise Is Per-Packet*
+  under *Shared Context*); where both apply they compose rather than overwrite.
 - Packet fields are ordered so everything shared across batches comes first and
   the per-candidate payload last, keeping the longest possible stable prompt
   prefix for provider prompt caches.
@@ -1432,11 +1516,62 @@ holds is rendered into a model packet. Shared context must use actual
 queue/admission events and backing references rather than a single repository
 prompt.
 
-Review context documents supplied to model tasks may be partial excerpts
-selected for budget. Model instructions and refutation must not treat omitted
-file content as evidence that a file is truncated, malformed, or missing closing
-syntax. Model-only truncation or malformed-file claims require deterministic
-contradiction-safe evidence for the same path before they can become actionable.
+Model instructions and refutation must not treat omitted file content as evidence
+that a file is truncated, malformed, or missing closing syntax. Model-only
+truncation or malformed-file claims require deterministic contradiction-safe
+evidence for the same path before they can become actionable. This requirement is
+UNCONDITIONAL: it holds whether or not any excerpting occurred, because what it
+prevents is a reviewer inventing a defect out of content it was simply not shown.
+
+Whether a review context document actually IS a partial excerpt is a separate
+statement, it is per-PACKET, and it may be made only where it is true. See
+*The Excerpt Premise Is Per-Packet* below.
+
+### The Excerpt Premise Is Per-Packet (2026-08-17)
+
+Until 2026-08-17 this section opened by asserting that review context documents
+"may be partial excerpts selected for budget", and the refuter's fixed instructions
+said the same thing in almost the same words, ahead of the guard above. Two
+requirements were riding in one clause and only one of them was still true.
+
+**The premise is normally false.** Spec 26 removed proactive byte-budget splitting:
+context assembly emits each changed file as ONE document spanning the whole file.
+The only thing that can still produce a genuine excerpt is a REACTIVE split, and
+spec 26 records that the reactive split has never fired against a real provider —
+zero refusals over 21 cases up to 1.2 MB. So the standing claim was false on
+essentially every packet ever sent. A premise a reader can check and find false is
+worse than no premise, because it invites discounting the guard sentence attached
+to it.
+
+**A fixed instruction cannot express a per-packet fact, and that is the structural
+requirement here.** Harness agent instructions are fixed for a RUN; whether a
+document is an excerpt is a property of one PACKET. So:
+
+- The unconditional anti-false-positive guard stays in the instructions, where a
+  run-fixed rule belongs.
+- The excerpt premise MUST NOT appear in any fixed instruction. When it is true it
+  MUST ride in the packet, in the `budgetNotice` field the refuter is already
+  instructed to read — the field that exists precisely so a packet can declare what
+  it is short of. It MUST name the path and the line range actually shown, and MUST
+  state that the absence is an artefact of the split rather than evidence about the
+  file. A packet holding whole documents carries no such notice.
+- `budgetNotice` therefore carries every per-packet statement about what a packet is
+  short of, not only the refutation shedding ladder's. Where both apply they
+  COMPOSE; neither may overwrite the other. An excerpt statement MUST be dropped
+  once the ladder has emptied the review context it described, because it would then
+  describe documents the packet no longer holds.
+- Detection of an excerpt MUST be exact rather than heuristic. The run-wide review
+  context holds the documents assembly produced, and a reactively split document has
+  a narrower span than its assembled one; a document matching its assembled span is
+  whole by construction. Where there is nothing to compare against, no claim is
+  made — silence, never a guess.
+
+**UNMEASURED, and it claims no accuracy benefit.** This is a prompt change, and five
+pre-registered prompt-clause interventions in this engine have all measured null —
+including one derived from a correct measured diagnosis. Nothing here claims a
+recall, precision, or false-positive effect, and no document may imply one. The
+change is made because the sentence was false, which is sufficient on its own and is
+the only claim being made.
 
 It stores:
 
@@ -1927,6 +2062,9 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | The child-agent call budget scales with `maxFilesPerDiscoveryCall` and never under-reserves | harness config unit tests |
 | The change-intent brief reaches discovery and never reaches refutation | refutation packet unit tests |
 | Each refutation shedding rung names what it withheld in `budgetNotice`, and a packet that fits carries none | refutation packet unit tests |
+| A truncated discovery response costs one call, records an unrecovered provider issue, and does not fail the run | discovery call unit tests |
+| A reactively split refutation packet declares the excerpt in `budgetNotice`, composes it with a shedding notice, and drops it once the review context is shed; a whole-file packet carries none | refutation packet unit tests |
+| No fixed agent instruction asserts that review context may be a partial excerpt | agent instruction unit tests |
 | Baseline marks new/existing/resolved findings deterministically | baseline fixture tests |
 | No raw source in default logs | log snapshot/redaction test |
 | Provider task failure writes artifact-ready partial state | runner partial-failure regression test |

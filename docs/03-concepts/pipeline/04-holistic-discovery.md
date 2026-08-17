@@ -190,6 +190,7 @@ are not findings and are never reported as such.
 | Situation | Behaviour |
 | --- | --- |
 | The model returns malformed or truncated JSON | The call yields no findings and is recorded as an **unrecovered** provider issue (`recovered: false`); the task and the run continue, and the quality gate fails on the issue under the default `failOnProviderError` |
+| The response stops at the output-token ceiling (`provider_output_truncated`) | Same. It is the same provider event as the row above — where the cut lands decides whether the JSON parses, not whether the answer is complete — so it costs one call, not the run |
 | The agent exhausts its step allowance | Same: unrecovered provider issue, no findings from that call |
 | A finding points outside its partition's paths, or omits a required field | Dropped; counted in the run's debug metrics |
 | More than 12 valid findings from one call | Excess is discarded by the cap |

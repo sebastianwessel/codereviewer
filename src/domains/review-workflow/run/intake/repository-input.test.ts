@@ -93,6 +93,15 @@ describe('the reviewed diff is redacted before it can reach a model', () => {
     ].join('\n')
 
     try {
+      // The named file has to exist: intake refuses an explicit-file run in
+      // which nothing was reviewable, rather than reporting a passing review
+      // over zero files.
+      await mkdir(join(repositoryRoot, 'src'), { recursive: true })
+      await writeFile(
+        join(repositoryRoot, 'src', 'app.ts'),
+        'const token = process.env.TOKEN\n'
+      )
+
       const state = await collectReviewRunnerRepositoryIntake({
         repositoryRoot,
         config,

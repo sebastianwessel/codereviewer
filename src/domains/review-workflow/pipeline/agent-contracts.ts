@@ -608,6 +608,13 @@ export const FindingRefutationBatchInputSchema = z.strictObject({
   // The notice used to ride on the shared-context digest field, which was the only
   // free text the packet had; that field was always the same constant and is gone,
   // so the notice is declared for what it is.
+  //
+  // It carries every per-PACKET statement about what this packet is short of, not
+  // only the shedding ladder's: a reactive split (spec 26) can hand refutation part
+  // of a file, and that excerpt fact rides here too (spec 05, amended 2026-08-17).
+  // Such a fact CANNOT live in the agent instructions, which are fixed for a run
+  // while the fact is per packet — stating it there made the refuter read, on every
+  // packet of every run, a premise that was false of that packet.
   budgetNotice: z.string().optional()
 })
 

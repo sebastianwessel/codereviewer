@@ -127,7 +127,11 @@ The coverage line is the **coverage certificate**: proof of what was read.
 - `complete` means every reviewable file was fully covered — the sum of included
   source-chunk bytes equals each file's reviewable byte length. It says the
   source reached a model. It does **not** say the defects in it were found, and
-  the sentence is printed on every report so the two cannot be confused.
+  the sentence is printed on every report so the two cannot be confused. On a run
+  that performed no model search the sentence says *that* instead — `a statement
+  that the source was read and assembled for review, not that anything searched
+  it` — because the line that quantifies the run must not claim a model the
+  header two paragraphs above says never ran.
 - `incomplete` adds its reasons under **Bounds that bound**. A *completed* review
   is not supposed to reach this state; the engine fails closed on incomplete
   coverage rather than reporting success over source it never read.

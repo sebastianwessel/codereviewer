@@ -170,8 +170,12 @@ export {
 export {
   INTENT_METRICS_VERSION
 } from './intent-eval/intent-metrics-versions.js'
+// `readRunningEngineIdentity`, not `readEngineIdentity`, is the one on the
+// barrel: the CLI commands must ask for the identity of the build that is
+// EXECUTING, and the lower-level "read the identity of the checkout at this
+// path" is a detail of that answer, reachable only from inside this domain.
 export {
-  readEngineIdentity,
+  readRunningEngineIdentity,
   ENGINE_COMMIT_UNKNOWN,
   engineCommitArgs,
   engineWorkingTreeArgs,

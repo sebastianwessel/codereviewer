@@ -65,6 +65,38 @@ describe('model agent instructions', () => {
     )
   })
 
+  // Spec 05, *The Excerpt Premise Is Per-Packet* (2026-08-17). The guard against
+  // inventing truncation claims is unconditional and stays; the excerpt PREMISE it
+  // used to be welded to was false on essentially every packet after spec 26 stopped
+  // assembly splitting on bytes, and it is per-packet, so a run-fixed instruction
+  // cannot state it. It rides in `budgetNotice` instead.
+  test('the refuter is guarded against inventing truncation, without a false premise', () => {
+    expect(modelFindingRefuterInstructions).toContain(
+      'Do not infer that omitted file content is missing, truncated, or malformed unless deterministic evidence explicitly says so.'
+    )
+    expect(modelFindingRefuterInstructions).not.toContain('partial excerpt')
+    expect(modelFindingRefuterInstructions).not.toContain(
+      'selected for budget'
+    )
+    // And the channel that CAN state it truthfully is still named, or the notice it
+    // carries would reach a refuter that was never told to act on it.
+    expect(modelFindingRefuterInstructions).toContain('budgetNotice')
+  })
+
+  // No FIXED instruction may assert the excerpt premise — not the refuter's, and not
+  // any other agent's. The premise is a property of one packet, and an instruction is
+  // fixed for a run.
+  test('no fixed agent instruction claims the context may be a partial excerpt', () => {
+    for (const instructions of [
+      modelHolisticReviewerInstructions,
+      crossFileRetrievalInstructions,
+      modelSemanticMergeInstructions,
+      modelFindingRefuterInstructions
+    ]) {
+      expect(instructions).not.toContain('partial excerpt')
+    }
+  })
+
   test('the semantic merge asks only which candidates are one defect, and errs against merging', () => {
     // Spec 05: the call returns groups and is never asked what to discard, since
     // a model asked to discard will discard a real defect.

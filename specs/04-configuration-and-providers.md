@@ -489,10 +489,36 @@ scoped entry under `files` instead.
 | `allowTools` | `read | list | grep`[] | `["read", "list", "grep"]` |
 
 Default skills directory is `.codereviewer/skills` when it exists and
-`skills.enabled` is true. Skill directories may contain nested skill folders;
-each skill folder must contain a harness-compatible `SKILL.md` with `name` and
-`description` frontmatter. The frontmatter `name` is the canonical mounted skill
-ID and must be unique.
+`skills.enabled` is true. Each `SKILL.md` must be harness-compatible, with `name`
+and `description` frontmatter. The frontmatter `name`, not the folder name, is the
+canonical mounted skill ID and must be unique across all configured directories.
+
+### Skill Directory Layout
+
+Each configured directory is walked recursively, and EVERY `SKILL.md` found under
+it is one skill. A skill's mounted directory is the directory that contains its
+`SKILL.md`.
+
+Three placements are therefore all legal, and this list is exhaustive so that no
+implementation has to infer the rule:
+
+- a `SKILL.md` in a folder under the configured directory (the conventional
+  layout);
+- a `SKILL.md` in a folder nested to any depth under such a folder;
+- a `SKILL.md` placed DIRECTLY in the configured directory, whose mounted
+  directory is then the configured directory itself — including the case where
+  the configured directory is the repository root (`directories: ["."]`).
+
+A skill's mounted directory may therefore contain another skill. That is
+accepted, not overlooked: the nested layout has the same property, the mounted ID
+comes from the frontmatter rather than from position, and every configured
+directory is operator-supplied content under the repository root, so a skill
+mount can never reach material the operator did not already point the reviewer at.
+
+This layout rule is stated exhaustively because its previous silence produced a
+crash: the indexer computed a relative path between the configured directory and
+the skill's own directory, which are the same path in the third case, and rejected
+the empty result with an error naming neither the file nor a cause.
 
 Skill directories must be explicitly listed or provided by
 `CODEREVIEWER_SKILLS_DIR`. Provider-backed reviewer agents mount enabled skills

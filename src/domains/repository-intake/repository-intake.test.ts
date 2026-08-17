@@ -427,6 +427,151 @@ describe('repository intake', () => {
     })
   })
 
+  // The two failures a first run actually hits, and the two that used to be
+  // reported as the raw `Command failed: git merge-base …` string this engine
+  // built — a command the reader never typed, with git's own fatal line and no
+  // remedy attached to either.
+  test('explains an unresolvable ref instead of echoing the git command', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        baseRef: 'origin/main',
+        headRef: 'HEAD',
+        runGit: async () => {
+          throw Object.assign(
+            new Error(
+              'Command failed: git merge-base origin/main HEAD\nfatal: Not a valid object name origin/main\n'
+            ),
+            {
+              code: 128,
+              stderr: 'fatal: Not a valid object name origin/main\n'
+            }
+          )
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'repository_error',
+      category: 'repository',
+      exitCode: 3,
+      message: expect.stringContaining(
+        '"origin/main" does not resolve to a commit in this repository'
+      ),
+      details: { cause: 'ref_not_found' }
+    })
+  })
+
+  test('explains a working directory that is not a git repository', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit: async () => {
+          throw Object.assign(
+            new Error('Command failed: git merge-base main HEAD'),
+            {
+              code: 128,
+              stderr:
+                'fatal: not a git repository (or any of the parent directories): .git\n'
+            }
+          )
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'repository_error',
+      message: expect.stringContaining('not inside a git repository'),
+      details: { cause: 'not_a_git_repository' }
+    })
+  })
+
+  // A timeout or an abort is classified by the error normalizer from its own
+  // message. Rewriting every git failure into a repository error here would take
+  // `repository_timeout` away from it, so an unrecognized failure still escapes.
+  test('leaves an unrecognized git failure to its own classification', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit: async () => {
+          throw Object.assign(new Error('git timed out'), { code: 143 })
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'repository_timeout',
+      category: 'repository'
+    })
+  })
+
+  // The other way a run reaches every later stage with nothing to review.
+  // `--file`/`--files` bypasses the diff, so the empty-diff refusal above cannot
+  // see it: a named file that does not exist, is binary, or is excluded was
+  // recorded as skipped and the run reported zero findings, gate PASSED, exit 0.
+  test('refuses an explicit-file review in which nothing was reviewable', async () => {
+    const repositoryRoot = await mkdtemp(
+      path.join(tmpdir(), 'codereviewer-intake-explicit-')
+    )
+
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot,
+        explicitFiles: ['src/absent.ts'],
+        runGit: async () => {
+          throw new Error('git should not be called for explicit file intake')
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'no_reviewable_change',
+      category: 'repository',
+      exitCode: 3,
+      message: expect.stringContaining(
+        '"src/absent.ts" could not be read (it does not exist, or is not readable)'
+      )
+    })
+  })
+
+  test('names the filter that skipped every explicitly reviewed file', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        explicitFiles: ['package-lock.json'],
+        excludePatterns: ['**/package-lock.json'],
+        pathFlavor: 'posix',
+        runGit: async () => {
+          throw new Error('git should not be called for explicit file intake')
+        },
+        fileSystem: {
+          statFile: async () => ({ size: 3 }),
+          readFile: async () => Buffer.from('abc')
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'no_reviewable_change',
+      message: expect.stringContaining(
+        '"package-lock.json" is matched by paths.exclude'
+      )
+    })
+  })
+
+  // One reviewable file among skipped ones is a review, not a refusal.
+  test('reviews an explicit file list in which only some files were skipped', async () => {
+    const intake = await collectRepositoryIntake({
+      repositoryRoot: '/repo',
+      explicitFiles: ['src/app.ts', 'package-lock.json'],
+      excludePatterns: ['**/package-lock.json'],
+      pathFlavor: 'posix',
+      runGit: async () => {
+        throw new Error('git should not be called for explicit file intake')
+      },
+      fileSystem: {
+        statFile: async () => ({ size: 3 }),
+        readFile: async () => Buffer.from('abc')
+      }
+    })
+
+    expect(intake.changedFiles.map((file) => file.path)).toEqual(['src/app.ts'])
+  })
+
   test('explicit file intake needs no merge base', async () => {
     const repositoryRoot = await createFixtureRepository()
 

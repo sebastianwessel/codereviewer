@@ -33,6 +33,9 @@
 // permission for other evaluation modules to shell out.
 
 import { execFile } from 'node:child_process'
+import { stat } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { CorpusGitCommandRunner } from '../corpus/git-corpus-plumbing.js'
 
@@ -95,4 +98,105 @@ export const readEngineIdentity = async (input: {
     // either that the tree was clean or that the commit is unknown.
     return { commit }
   }
+}
+
+// WHERE THE ENGINE'S OWN CHECKOUT IS — WHICH IS NOT WHEREVER THE COMMAND WAS RUN.
+//
+// The three commands that stamp this field (`eval run`, `eval impact`, `eval
+// intent`) each passed `options.cwd`, the directory the operator invoked the CLI
+// from. In this repository that happens to be the engine checkout, so the value
+// was right; run against a corpus in any other directory it stamped THAT
+// directory's commit — some unrelated repository's HEAD — onto a report
+// describing THIS engine's behaviour. A field whose entire purpose is to say
+// which build produced a number cannot be read from a location the number does
+// not depend on.
+//
+// So the checkout is located from this module's own URL. That is stable across
+// the two layouts the code actually runs in: `src/` under `tsx` and the compiled
+// `dist/`, both of which sit inside the checkout when there is one.
+//
+// THE `node_modules` STOP IS LOAD-BEARING. Installed from npm this module lives
+// at `<consumer>/node_modules/@sebastianwessel/codereviewer/dist/...`, and an
+// unguarded walk upwards would sail past the package and find the CONSUMER's
+// `.git` — reintroducing the exact defect one directory further out, and more
+// convincingly, because the answer would look like a real commit. Halting at the
+// `node_modules` boundary means an npm-installed run reports `unknown`, which is
+// the truth: a published tarball ships no checkout, so there is no commit to name.
+//
+// `.git` is probed with `stat` rather than tested for directory-ness because in a
+// git worktree or a submodule it is a FILE pointing at the real git directory,
+// and both are checkouts whose HEAD is worth recording.
+const engineModuleDirectory = path.dirname(fileURLToPath(import.meta.url))
+
+const containsGitMarker = async (directory: string): Promise<boolean> => {
+  try {
+    await stat(path.join(directory, '.git'))
+
+    return true
+  } catch {
+    // Absent, unreadable, or denied — all of them mean "cannot claim a checkout
+    // here", and none of them may fail a run that has already been paid for.
+    return false
+  }
+}
+
+/**
+ * The root of the engine's own git checkout, or `undefined` when this build does
+ * not run from one (an npm install, a copied `dist/`, a tarball).
+ *
+ * `undefined` is a first-class answer, not a failure: the callers turn it into
+ * the `unknown` commit that the pooling guard already treats as its own identity.
+ */
+export const findEngineCheckoutRoot = async (
+  input: { readonly startDirectory?: string } = {}
+): Promise<string | undefined> => {
+  let currentDirectory = input.startDirectory ?? engineModuleDirectory
+
+  while (true) {
+    if (path.basename(currentDirectory) === 'node_modules') {
+      return undefined
+    }
+
+    if (await containsGitMarker(currentDirectory)) {
+      return currentDirectory
+    }
+
+    const parentDirectory = path.dirname(currentDirectory)
+
+    if (parentDirectory === currentDirectory) {
+      return undefined
+    }
+
+    currentDirectory = parentDirectory
+  }
+}
+
+/**
+ * The identity of the build that is executing, read from the engine's own
+ * checkout rather than from the caller's working directory.
+ *
+ * This is what `eval run`, `eval impact` and `eval intent` stamp. It never
+ * throws, for the same reason `readEngineIdentity` does not: it is read after a
+ * run has already spent money, and an unreadable identity must degrade to
+ * `unknown`, never destroy the run's results.
+ */
+export const readRunningEngineIdentity = async (
+  input: {
+    readonly runGit?: CorpusGitCommandRunner
+    readonly findCheckoutRoot?: () => Promise<string | undefined>
+  } = {}
+): Promise<EngineIdentity> => {
+  const checkoutRoot = await (input.findCheckoutRoot ?? findEngineCheckoutRoot)()
+
+  if (checkoutRoot === undefined) {
+    // No git call at all. Running `git` from a directory with no checkout would
+    // let git walk upwards on its own and answer with whatever repository it
+    // found first, which is the failure this function exists to prevent.
+    return { commit: ENGINE_COMMIT_UNKNOWN }
+  }
+
+  return readEngineIdentity({
+    repositoryRoot: checkoutRoot,
+    ...(input.runGit === undefined ? {} : { runGit: input.runGit })
+  })
 }

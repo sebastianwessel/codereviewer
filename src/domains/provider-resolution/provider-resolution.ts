@@ -84,7 +84,15 @@ const assertCredentialSources = (
     if (environmentValue(environment, credentialSource) === undefined) {
       throw createStructuredError({
         code: 'provider_credentials_missing',
-        message: `Provider credential source "${credentialSource}" is required.`,
+        // Names WHERE, not just what. The variable name alone is the half of
+        // the answer an operator already has — they are staring at the config
+        // key that produced it. What they do not know is that this engine reads
+        // a `.env` at the repository root as well as the ambient environment,
+        // which is the difference between "export it" and "it is already
+        // exported and still not found".
+        message:
+          `Provider credential source "${credentialSource}" is required, and is not set. ` +
+          `Export it in the environment, or set it in a .env file at the repository root.`,
         category: 'config',
         details: {
           provider: definition.providerId,

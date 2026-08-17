@@ -202,3 +202,83 @@ describe('runDiscoveryCall — oversized context', () => {
     expect(seenTaskIds.slice(1)).not.toContain('task_reads')
   })
 })
+
+// Spec 05, *Truncated Discovery Responses* (2026-08-17). A response the provider
+// stopped at the output-token ceiling is a property of ONE model response, so it
+// costs that response and nothing more — the same disposition the policy already
+// gives malformed structured-object JSON, which is what the SAME provider event
+// looks like when the cut lands mid-token instead of after a complete array element.
+describe('runDiscoveryCall — truncated output', () => {
+  // The shape `guardTruncatedProviderOutput` throws: a plain structured error
+  // object, deliberately not an `Error`, so the harness's retry classification
+  // cannot buy three identical truncations at three times the price.
+  const truncated = (): unknown => ({
+    code: 'provider_output_truncated',
+    message: 'Model stopped at the output-token limit.',
+    category: 'provider',
+    recoverable: true,
+    exitCode: 4,
+    details: {}
+  })
+
+  test('costs one call instead of failing the run, and is not reported as recovered', async () => {
+    const result = await runDiscoveryCall({
+      runner: async () => {
+        throw truncated()
+      },
+      taskInput,
+      buildText: () => 'review text',
+      signal: undefined,
+      stage: 'holistic_review'
+    })
+
+    expect(result.findings).toEqual([])
+    expect(result.providerIssues).toHaveLength(1)
+    expect(result.providerIssues[0]?.code).toBe('provider_output_truncated')
+    // NOT recovered. The quality gate fails on an unrecovered provider issue under
+    // the default `failOnProviderError`, which is the whole safety argument for not
+    // failing the run: the gate declines to certify a partial review rather than the
+    // process dying with every other task's findings in hand. `recovered: true`
+    // would let a truncated review read as a clean one.
+    expect(result.providerIssues[0]?.recovered).toBe(false)
+    // A call WAS issued and yielded nothing; dropping it from the denominator would
+    // inflate findings-per-call exactly when the provider is degrading.
+    expect(result.rawFindingsPerCall).toEqual([0])
+    expect(result.splitCount).toBe(0)
+  })
+
+  test('finds the truncation through a wrapping agent-loop error', async () => {
+    // Discovery runs inside an agent loop that may rewrap what it catches, so a
+    // predicate reading only the top-level error would let a wrapped truncation
+    // propagate and fail the run.
+    const result = await runDiscoveryCall({
+      runner: async () => {
+        throw new Error('agent step failed', { cause: truncated() })
+      },
+      taskInput,
+      buildText: () => 'review text',
+      signal: undefined,
+      stage: 'holistic_review'
+    })
+
+    expect(result.providerIssues[0]?.code).toBe('provider_output_truncated')
+    expect(result.providerIssues[0]?.recovered).toBe(false)
+  })
+
+  test('a genuine provider failure still propagates', async () => {
+    // The counterweight. This policy names four failures; everything else fails the
+    // task and the run, because a hard provider failure is a property of the RUN and
+    // continuing would review the rest of the change against a broken provider.
+    await expect(
+      runDiscoveryCall({
+        runner: async () => {
+          throw new Error('401 invalid api key')
+        },
+        taskInput,
+        buildText: () => 'review text',
+        signal: undefined,
+        stage: 'holistic_review'
+      })
+    ).rejects.toThrow('401 invalid api key')
+  })
+})

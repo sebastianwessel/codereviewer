@@ -14,7 +14,7 @@ import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import {
   assertBenchmarkSlicesHydrated,
-  readEngineIdentity,
+  readRunningEngineIdentity,
   runEvaluation
 } from '../../domains/evaluation/index.js'
 import { unknownCliOption } from '../args.js'
@@ -143,17 +143,17 @@ export const runEval = async (
     })
     // Read AFTER the cases have run, so it describes the tree the review
     // actually executed from rather than one an edit could have changed
-    // underneath a long run. `readEngineIdentity` never throws -- it answers
-    // `unknown` when git cannot be read -- so this cannot fail a run that has
-    // already been paid for.
+    // underneath a long run. `readRunningEngineIdentity` never throws -- it
+    // answers `unknown` when there is no checkout to read or git cannot be read
+    // -- so this cannot fail a run that has already been paid for.
     //
-    // `options.cwd`, which is the same argument `eval impact` and `eval intent`
-    // pass, deliberately rather than a second rule invented here: this
-    // repository's evals are invoked from the engine checkout, so the commit is
-    // the engine's. Run from somewhere else it answers `unknown` (no checkout)
-    // or names that checkout, and either is a recorded identity the pooling
-    // guard treats as its own -- never a claim about a build nobody verified.
-    const engine = await readEngineIdentity({ repositoryRoot: options.cwd })
+    // NO ARGUMENT: the identity is the ENGINE's, so it is resolved from the
+    // engine's own module location, not from `options.cwd`. Passing the cwd (as
+    // this and both advisory commands did) was right only because this
+    // repository's evals happen to be invoked from the engine checkout; pointed
+    // at a corpus in any other directory it stamped that directory's commit onto
+    // a report about this build.
+    const engine = await readRunningEngineIdentity()
     const result = await runEvaluation(
       buildEvalRunRequest({
         config,

@@ -3,6 +3,7 @@ import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
 import {
   FindingRefutationBatchInputSchema,
   type FindingRefutationBatchInput,
+  type ReviewContextDocument,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import {
@@ -52,6 +53,90 @@ const supportSignalCandidateSupports = (
     }
   ) ||
     candidatesShareEvidence(candidate, supportCandidate))
+
+// The excerpt statement the refuter's fixed instructions used to make on EVERY
+// packet — "review context content can be a partial excerpt selected for budget" —
+// made here instead, and only when it is true (spec 05, amended 2026-08-17).
+//
+// It could not stay in the instructions and be honest. Harness instructions are
+// fixed for a RUN; whether a document is an excerpt is a property of a PACKET. Since
+// spec 26 removed proactive byte-budget splitting, assembly emits one document per
+// whole file, so the standing claim is false on essentially every packet — and a
+// premise a reader can check and find false is worse than no premise, because it
+// invites discounting the guard sentence that follows it.
+//
+// The one thing that can still produce a genuine excerpt is a REACTIVE split (spec
+// 26): a task the provider refused, whose single file was halved into content
+// pieces. Those halves are the sub-tasks refutation adjudicates against, so this
+// stage really can be handed part of a file — and then the refuter is looking at an
+// absence the engine created, which is exactly what `budgetNotice` exists to declare.
+// Spec 26 records that this path has never fired against a real provider, so on
+// every observed run this returns `undefined` and the packet carries no notice at
+// all, which is the honest answer.
+//
+// Detection is exact rather than heuristic: the run-wide `reviewContext` holds the
+// documents ASSEMBLY produced (`workflow-input.ts` flattens the planned tasks), and
+// a reactive split narrows a span below the assembled one. A document matching its
+// assembled span is whole, by construction and not by guess. With no run-wide
+// context to compare against, no claim is made.
+const partialExcerptNotice = (
+  reviewContext: readonly ReviewContextDocument[],
+  assembledContext: readonly ReviewContextDocument[] | undefined
+): string | undefined => {
+  if (assembledContext === undefined) {
+    return undefined
+  }
+
+  const assembledSpans = new Map<string, { start: number; end: number }>()
+
+  for (const document of assembledContext) {
+    if (
+      document.kind !== 'file' ||
+      document.path === undefined ||
+      document.startLine === undefined ||
+      document.endLine === undefined
+    ) {
+      continue
+    }
+
+    const known = assembledSpans.get(document.path)
+
+    assembledSpans.set(document.path, {
+      start: Math.min(known?.start ?? document.startLine, document.startLine),
+      end: Math.max(known?.end ?? document.endLine, document.endLine)
+    })
+  }
+
+  const excerpts = reviewContext.flatMap((document) => {
+    if (
+      document.kind !== 'file' ||
+      document.path === undefined ||
+      document.startLine === undefined ||
+      document.endLine === undefined
+    ) {
+      return []
+    }
+
+    const whole = assembledSpans.get(document.path)
+
+    if (
+      whole === undefined ||
+      (document.startLine <= whole.start && document.endLine >= whole.end)
+    ) {
+      return []
+    }
+
+    return [`${document.path} (lines ${document.startLine}-${document.endLine})`]
+  })
+
+  if (excerpts.length === 0) {
+    return undefined
+  }
+
+  return `(PARTIAL EXCERPT in this refutation packet: ${excerpts.join(
+    ', '
+  )}. The provider refused the whole packet, so the file was split and only that line range is shown here. The rest of the file EXISTS and is unchanged — its absence here is an artefact of the split, NOT evidence that the file is truncated, malformed, or incomplete. A claim you cannot support from the range shown is UNPROVEN — answer needs-more-evidence rather than refuting it.)`
+}
 
 const createFindingRefutationBatchInput = (
   input: {
@@ -114,6 +199,13 @@ const createFindingRefutationBatchInput = (
   const reviewContext = taskOrWorkflowContext.filter(
     (context) => context.kind !== 'change-intent'
   )
+  // Computed before the budget ladder runs, so the notice is part of what the
+  // ladder MEASURES. A notice added afterwards would push a packet that had just
+  // been made to fit back over the budget.
+  const excerptNotice = partialExcerptNotice(
+    reviewContext,
+    input.workflowInput.reviewContext
+  )
 
   return FindingRefutationBatchInputSchema.parse({
     provenance: input.workflowInput.provenance,
@@ -144,7 +236,11 @@ const createFindingRefutationBatchInput = (
         supportSignalCandidateSupports(candidate, supportCandidate)
       )
     ),
-    candidates: input.candidates
+    candidates: input.candidates,
+    // Written last, matching where the schema declares it: `budgetNotice` is
+    // per-batch and must stay out of the stable prompt prefix the provider cache
+    // matches on.
+    ...(excerptNotice === undefined ? {} : { budgetNotice: excerptNotice })
   })
 }
 
@@ -157,11 +253,16 @@ const createFindingRefutationBatchInput = (
 // strength of an absence the engine itself created. A refuted finding produces no
 // output at all, so nothing downstream could show what had been suppressed.
 //
-// One notice, on its own `budgetNotice` field. It names what is missing AND what
-// missing must not be taken to mean — absence of support is unproven, which is
-// `needs-more-evidence`, not refuted. It rode on the shared-context digest field
-// until that field was removed for being an unread constant; the notice is the only
-// thing the field was carrying that any call actually depended on.
+// It names what is missing AND what missing must not be taken to mean — absence of
+// support is unproven, which is `needs-more-evidence`, not refuted. It rode on the
+// shared-context digest field until that field was removed for being an unread
+// constant; the notice is the only thing the field was carrying that any call
+// actually depended on.
+//
+// `budgetNotice` now carries every per-PACKET statement about what this packet is
+// short of, not only this one: the partial-excerpt notice above shares the field.
+// That is the field's job — the instructions are fixed for a run and cannot say
+// anything true about one packet — and the two compose rather than overwrite.
 const budgetOmissionNotice = (omitted: readonly string[]): string =>
   `(WITHHELD from this refutation packet to fit the provider input budget: ${omitted.join(
     ', '
@@ -231,6 +332,12 @@ const fitFindingRefutationBatchInputToBudget = (
   // finally sent accounts for all of its own omissions in one sentence — and for
   // none it did not make.
   const omitted: string[] = []
+  // Whatever the packet already said before the ladder started, which today is the
+  // partial-excerpt notice and nothing else. It is carried forward rather than
+  // overwritten: a packet that is BOTH an excerpt and shed is describing two
+  // different absences, and dropping either one leaves the refuter reading an
+  // engine-created gap as evidence.
+  const excerptNotice = refutationInput.budgetNotice
   let packet = refutationInput
 
   for (const rung of refutationBudgetRungs) {
@@ -239,10 +346,19 @@ const fitFindingRefutationBatchInputToBudget = (
     }
 
     omitted.push(rung.omissionLabel)
+    const shed = { ...packet, ...rung.shed }
     packet = FindingRefutationBatchInputSchema.parse({
-      ...packet,
-      ...rung.shed,
-      budgetNotice: budgetOmissionNotice(omitted)
+      ...shed,
+      budgetNotice: [
+        // Dropped once the review context it describes is gone: an excerpt
+        // statement about documents no longer in the packet is not a smaller
+        // truth, it is a false one, and the omission notice already covers the
+        // absence.
+        ...(excerptNotice !== undefined && shed.reviewContext.length > 0
+          ? [excerptNotice]
+          : []),
+        budgetOmissionNotice(omitted)
+      ].join(' ')
     })
 
     if (serializedBytes(packet) <= maxTaskInputBytes) {

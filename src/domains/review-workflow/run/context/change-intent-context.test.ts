@@ -229,7 +229,8 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
 
     expect(result.warnings).toEqual([
       'External change-intent model summarizer unavailable (provider_credentials_missing): ' +
-        'Provider credential source "OPENAI_API_KEY" is required. ' +
+        'Provider credential source "OPENAI_API_KEY" is required, and is not set. ' +
+        'Export it in the environment, or set it in a .env file at the repository root. ' +
         'The run used the deterministic digest instead.'
     ])
     expect(records).toEqual(

@@ -169,6 +169,35 @@ describe('Markdown reporter', () => {
     expect(rendered).toContain('- Model: none — this run performed no model search')
   })
 
+  // The coverage line is the one line that quantifies the run, and it used to
+  // end with "a statement that the source reached a model" on a run whose own
+  // header says in capitals that no model searched the change. A reader
+  // reconciling the two has to decide which surface is lying.
+  test('the coverage certificate does not claim a model on a run with no model search', () => {
+    const report = createReportFixture()
+    const { provider: _provider, model: _model, ...run } = report.run
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...run, modelSearch: 'not-performed' }
+    })
+
+    expect(rendered).toContain(
+      'a statement that the source was read and assembled for review, not that anything searched it: this run performed no model search.'
+    )
+    expect(rendered).not.toContain('a statement that the source reached a model')
+  })
+
+  test('the coverage certificate still states the model claim on a searched run', () => {
+    const rendered = renderMarkdownReport({
+      ...createReportFixture(),
+      run: { ...createReportFixture().run, modelSearch: 'performed' }
+    })
+
+    expect(rendered).toContain(
+      'a statement that the source reached a model, not that every defect in it was found.'
+    )
+  })
+
   // "No findings" and "nothing was looked for" are the two readings this section
   // must keep apart, and the sentence it prints for a searched run says the
   // measured corpus misses roughly three in ten — a figure about a search that,

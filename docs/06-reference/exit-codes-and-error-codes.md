@@ -93,15 +93,24 @@ One provider code is not derived from a failure at all:
 
 | Code | Trigger | Exit | Retried |
 | --- | --- | --- | --- |
-| `provider_output_truncated` | A *successful* response whose finish reason is `length`, meaning generation stopped at the output-token ceiling | `4` | no |
+| `provider_output_truncated` | A *successful* response whose finish reason is `length`, meaning generation stopped at the output-token ceiling | `4`, or `1` in discovery — see below | no |
 
 It is raised from a response the provider considered fine: HTTP `200`, a body,
 no error. Only the finish reason distinguishes it from a complete answer, so
 without this check a review cut off mid-answer is indistinguishable from a
 review that finished and found less. Retrying is pointless — an identical
-request against an identical ceiling truncates identically — so the run fails
-instead. Raise or unset `provider.maxOutputTokens`; when it is unset, the
-message says so and the ceiling belongs to the model or adapter default.
+request against an identical ceiling truncates identically. Raise or unset
+`provider.maxOutputTokens`; when it is unset, the message says so and the ceiling
+belongs to the model or adapter default.
+
+**What the truncation costs depends on which call was cut.** A truncated
+*discovery* call costs that call and nothing more: it yields no findings and is
+recorded as an **unrecovered** provider issue, exactly as an unparseable response
+already was. The other tasks keep their findings, and the run is still not
+certified — the quality gate fails on an unrecovered provider issue under the
+default `qualityGate.failOnProviderError`, so the run exits `1` naming no finding.
+Refutation and semantic merge behave the same way. Every other model call in the
+engine fails the run at exit `4`.
 
 Provider setup problems are **config** errors (exit `2`), not provider errors:
 
@@ -156,7 +165,8 @@ raise that cannot work.
 
 | Code | When |
 | --- | --- |
-| `repository_error` | Generic filesystem/git failure. |
+| `repository_error` | Generic filesystem/git failure. Two causes are stated rather than left as git's own output, because both are first-run failures: `details.cause` is `ref_not_found` when `baseRef` or `headRef` does not resolve to a commit (the message names which ref and how to check it), and `not_a_git_repository` when the working directory is not inside a repository at all. |
+| `no_reviewable_change` | Nothing was left to review. Either the refs differ by no files, or — on a `--file` / `--files` run, which bypasses the diff — every explicitly named file was skipped. The second message names each file and why (absent, binary, over `review.maxFileBytes`, matched by `paths.exclude`). Refused rather than reported as a passing review over zero files. |
 | `merge_base_unavailable` | No merge base exists between `baseRef` and `headRef`. |
 | `baseline_source_unavailable` | `baseline write` found no completed report, or could not read the one given via `--report`. The message states WHICH of those happened — missing, permission denied, a directory, or a path refused for resolving outside the repository — and `details.cause` carries the normalized errno (`ENOENT`, `EACCES`, `EPERM`, `EISDIR`) or `path_outside_repository`. |
 | `baseline_source_invalid` | `baseline write` read the source file, but it is not a review report (invalid JSON, or JSON that does not satisfy the report contract). |

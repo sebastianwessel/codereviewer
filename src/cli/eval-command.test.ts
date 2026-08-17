@@ -752,11 +752,17 @@ describe('eval CLI', () => {
   // WHICH ENGINE PRODUCED THE FIGURE. `eval impact` and `eval intent` have
   // stamped this since they existed; `eval run` — the source of every published
   // recall and precision number — did not, so no guard could refuse to pool two
-  // builds into one statistic. The commit is not asserted to be a real object
-  // name here: the run's cwd is a temp directory outside any checkout, so
-  // `readEngineIdentity` correctly answers `unknown`. What this pins is that the
-  // command reads the identity and the report carries it, which is what no
-  // report before this could say at all.
+  // builds into one statistic.
+  //
+  // The run's cwd is a temp directory outside any checkout, and the commit is
+  // asserted to be a REAL object name anyway. That is the whole assertion: all
+  // three commands used to read the identity from `options.cwd`, which would
+  // answer `unknown` here (and, worse, would answer some unrelated repository's
+  // HEAD whenever the corpus sat in one). The identity now comes from the
+  // engine's own module location, so a run launched from anywhere names this
+  // build. This test therefore assumes the suite runs from a git checkout, which
+  // is the only way the repository's own tests are ever run — `files` in
+  // package.json ships neither them nor `src/`.
   test('stamps the engine identity of the build that ran the review', async () => {
     const root = await createTempDir()
 
@@ -773,8 +779,7 @@ describe('eval CLI', () => {
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )
 
-      expect(typeof report.provenance.engine.commit).toBe('string')
-      expect(report.provenance.engine.commit.length).toBeGreaterThan(0)
+      expect(report.provenance.engine.commit).toMatch(/^[0-9a-f]{40}$/u)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

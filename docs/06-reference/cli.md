@@ -20,6 +20,8 @@ declaring the flags it accepts) and [`src/cli/args.ts`](../../src/cli/args.ts)
 | `review` | Run a review, write run artifacts, evaluate the quality gate. | `0`, `1`, `2`, `3`, `4`, `5` |
 | `baseline write` | Build `baseline.json` from a completed review report. | `0`, `2`, `3` |
 | `eval run` | Run the evaluation harness over eval cases and apply the regression gate. | `0`, `1`, `2`, `3`, `5` |
+| `eval impact` | Score the change-impact dependents corpus. A separate corpus and a separate artefact from `eval run` — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-impact). | `0`, `2`, `3` |
+| `eval intent` | Score the intent-fulfilment corpus. Likewise separate — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-intent). | `0`, `2`, `3` |
 | `eval compare` | Diff two eval arms (repeatable `--base` / `--head`). | `0`, `2` |
 | `eval recall-report` | Render the recall report from one or more eval reports. | `0`, `2` |
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
@@ -29,8 +31,9 @@ declaring the flags it accepts) and [`src/cli/args.ts`](../../src/cli/args.ts)
 
 Anything else exits `2` with `{"code":"usage_error", ...}` on stderr and the
 message `Expected command: config validate, review, baseline write, eval run,
-eval compare, eval recall-report, eval slice-manifest, drift check, impact
-check, or intent check`.
+eval impact, eval intent, eval compare, eval recall-report, eval slice-manifest,
+drift check, impact check, or intent check`. There is no help command: that
+message is the whole inventory, and it is what an unrecognized command prints.
 
 `review` is the only command that can fail a pipeline on what it found.
 `impact check` and `intent check` are advisory: neither can exit non-zero on

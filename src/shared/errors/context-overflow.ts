@@ -24,9 +24,8 @@
 // The harness raises `ModelError` at the provider boundary, but a discovery call runs
 // inside an agent loop that may rewrap what it catches. Reading only the top-level
 // error would therefore miss a genuine overflow whenever the loop wrapped it, so the
-// cause chain is walked. The chain is bounded because a cyclic `cause` is possible
-// (an error may be its own cause) and an unbounded walk would hang the run.
-const MAX_CAUSE_DEPTH = 10
+// cause chain is walked — bounded and cycle-safe, by the shared helper.
+import { someInCauseChain } from './cause-chain.js'
 
 const overflowReason = 'context_length_exceeded'
 
@@ -35,26 +34,5 @@ const hasOverflowReason = (value: unknown): boolean =>
   value !== null &&
   (value as { readonly reason?: unknown }).reason === overflowReason
 
-export const isContextLengthExceeded = (error: unknown): boolean => {
-  let current: unknown = error
-
-  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
-    if (hasOverflowReason(current)) {
-      return true
-    }
-
-    if (typeof current !== 'object' || current === null) {
-      return false
-    }
-
-    const next = (current as { readonly cause?: unknown }).cause
-
-    if (next === undefined || next === current) {
-      return false
-    }
-
-    current = next
-  }
-
-  return false
-}
+export const isContextLengthExceeded = (error: unknown): boolean =>
+  someInCauseChain(error, hasOverflowReason)

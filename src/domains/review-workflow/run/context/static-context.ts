@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises'
 import type { SkillsConfig } from '@purista/harness'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
+import {
+  createStructuredError,
+  isFileNotFoundError
+} from '../../../../shared/errors/error-normalizer.js'
 import { redactText } from '../../../../shared/redaction/redactor.js'
 import {
   compileGlobMatchers,
@@ -140,6 +144,39 @@ type InstructionContextLoadResult = {
   readonly scopes: readonly InstructionScope[]
 }
 
+// A configured instruction file that is not there is a CONFIGURATION mistake —
+// the operator named a path — and failing the run is right: an instruction that
+// was asked for and silently dropped is a review steered by settings nobody
+// chose. What was wrong is how it was reported. The path service's raw `ENOENT`
+// escaped every classifying boundary and printed as `unknown_error` at exit `5`,
+// the code this taxonomy reserves for a defect in this engine, with an absolute
+// host path and no statement of which setting named the file.
+//
+// `instruction_read_denied` is the code the reference already assigns to an
+// `instructions.files` entry that could not be read (`config`, exit `2`).
+const readInstructionFile = async (
+  repositoryRoot: string,
+  instructionPath: string
+): Promise<string> => {
+  try {
+    return await readFile(
+      await resolveExistingPathInsideRoot(repositoryRoot, instructionPath),
+      'utf8'
+    )
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error
+    }
+
+    throw createStructuredError({
+      code: 'instruction_read_denied',
+      message: `instructions.files names "${instructionPath}", and no such file exists in the repository. Create it, correct the path, or remove the entry — a review must not run with instructions it was told to follow and could not read.`,
+      category: 'config',
+      details: { instructionPath }
+    })
+  }
+}
+
 const loadInstructionContexts = async (
   input: {
     readonly repositoryRoot: string
@@ -160,9 +197,9 @@ const loadInstructionContexts = async (
       scopes.push({ path: fileEntry.path, scope: fileEntry.scope })
     }
 
-    const content = await readFile(
-      await resolveExistingPathInsideRoot(input.repositoryRoot, fileEntry.path),
-      'utf8'
+    const content = await readInstructionFile(
+      input.repositoryRoot,
+      fileEntry.path
     )
     const redacted = redactText(content)
     const ledgerEntry = createTextContextLedgerEntry({
@@ -204,6 +241,41 @@ const loadInstructionContexts = async (
   return { instructions, scopes }
 }
 
+// A configured skills directory that does not exist is a CONFIGURATION mistake,
+// and it is the ordinary one: `skills.enabled: true` is the whole opt-in, while
+// `skills.directories` keeps its default `.codereviewer/skills` — a directory
+// most repositories do not have. The index resolves it with the path service,
+// whose `ENOENT` escaped every classifying boundary and was reported as
+// `unknown_error` at exit `5`: the code this taxonomy reserves for a defect in
+// this engine, over a run the operator could fix in one `mkdir`.
+//
+// Only absence is reclassified. A path that resolves outside the repository root
+// is a containment refusal and keeps its own error.
+const createSkillIndexForConfiguredDirectories = async (
+  input: {
+    readonly repositoryRoot: string
+    readonly config: CodeReviewerConfig
+  }
+): Promise<Awaited<ReturnType<typeof createSkillIndex>>> => {
+  try {
+    return await createSkillIndex({
+      repositoryRoot: input.repositoryRoot,
+      directories: input.config.skills.directories
+    })
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error
+    }
+
+    throw createStructuredError({
+      code: 'config_error',
+      message: `Skills are enabled, but a configured skills directory does not exist: ${input.config.skills.directories.map((directory) => `"${directory}"`).join(', ')}. Create it, point skills.directories at a directory that exists, or set skills.enabled to false.`,
+      category: 'config',
+      details: { skillsDirectories: [...input.config.skills.directories] }
+    })
+  }
+}
+
 const loadSkillContexts = async (
   input: {
     readonly repositoryRoot: string
@@ -219,10 +291,7 @@ const loadSkillContexts = async (
     }
   }
 
-  const skillIndex = await createSkillIndex({
-    repositoryRoot: input.repositoryRoot,
-    directories: input.config.skills.directories
-  })
+  const skillIndex = await createSkillIndexForConfiguredDirectories(input)
   const skills: SkillContextDocument[] = []
   const skillDefinitions: SkillsConfig = {}
 

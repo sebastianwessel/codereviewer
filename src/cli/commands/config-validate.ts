@@ -25,7 +25,11 @@ export const runConfigValidate = async (
 
     return {
       exitCode: 0,
-      stdout: createRedactedConfigSummary(config.config),
+      // Newline-terminated, like every other command's stdout: the summary
+      // builder is a library export whose value is the document itself, so the
+      // terminator belongs to the CLI that prints it. Without it the closing
+      // brace and the next shell prompt share a line.
+      stdout: `${createRedactedConfigSummary(config.config)}\n`,
       stderr: ''
     }
   } catch (error) {

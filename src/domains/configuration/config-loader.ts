@@ -77,11 +77,40 @@ const rejectPollutionKeysReviver = (key: string, value: unknown): unknown => {
   return value
 }
 
-const parseJsonObject = (content: string): JsonObject => {
-  const parsed: unknown = JSON.parse(content, rejectPollutionKeysReviver)
+// A malformed config file is a day-one failure — a trailing comma, an unclosed
+// brace — and it used to surface as `JSON.parse`'s own message and nothing else:
+// `"Unexpected end of JSON input"`, with no file name, no statement that the
+// configuration was what failed, and no remedy. The reader was left to guess
+// which of the several JSON documents this engine reads was meant.
+//
+// Only a `SyntaxError` is rewritten. The reviver rejects prototype-pollution
+// keys with a `TypeError` naming the offending key, and reporting that as a
+// syntax problem would send the reader looking for a missing brace.
+const parseJsonObject = (content: string, configPath: string): JsonObject => {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(content, rejectPollutionKeysReviver)
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+
+    throw createStructuredError({
+      code: 'config_error',
+      message: `The configuration file "${configPath}" is not valid JSON, so no setting in it could be read: ${error.message}. Fix the syntax (a trailing comma and an unclosed brace are the usual causes), or delete the file to run on built-in defaults.`,
+      category: 'config',
+      details: { configPath }
+    })
+  }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new TypeError('Config file must contain a JSON object.')
+    throw createStructuredError({
+      code: 'config_error',
+      message: `The configuration file "${configPath}" is valid JSON but is not a JSON object, so it carries no settings. It must be a single \`{ … }\` object whose keys are configuration sections.`,
+      category: 'config',
+      details: { configPath }
+    })
   }
 
   return parsed as JsonObject
@@ -110,7 +139,8 @@ const readConfigFile = async (
       await readFile(
         await resolveExistingPathInsideRoot(repositoryRoot, configPath),
         'utf8'
-      )
+      ),
+      configPath
     )
   } catch (error) {
     if (isFileNotFoundError(error)) {

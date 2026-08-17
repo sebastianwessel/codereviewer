@@ -174,6 +174,22 @@ recursively and picks up every `SKILL.md` it finds:
     SKILL.md
 ```
 
+A skill's **mounted directory** is the directory holding its `SKILL.md`. Folders
+may nest to any depth, and a `SKILL.md` placed directly in a configured
+directory is a skill too — its mounted directory is then that configured
+directory:
+
+```
+.codereviewer/skills/
+  SKILL.md            <- a skill; mounted directory is .codereviewer/skills
+  tenancy-rules/
+    SKILL.md          <- a skill; mounted directory is .../tenancy-rules
+```
+
+The folder name means nothing to the engine: the mounted skill ID is the
+frontmatter `name`, so it does not have to match the folder, and a skill's
+mounted directory is allowed to contain another skill.
+
 The frontmatter contract is strict:
 
 ```markdown

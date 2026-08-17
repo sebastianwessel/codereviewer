@@ -98,9 +98,46 @@ describe('review runner static context', () => {
         instructions: { files: [{ path: 'missing.md' }] }
       })
 
+      // Failing is right — a review must not run with instructions it was told
+      // to follow and could not read. It has to fail as the CONFIGURATION
+      // mistake it is: this used to print `unknown_error` at exit 5 with a raw
+      // `ENOENT` and an absolute host path, naming no setting.
       await expect(
         loadStaticReviewContext({ repositoryRoot: root, config })
-      ).rejects.toThrow()
+      ).rejects.toMatchObject({
+        code: 'instruction_read_denied',
+        category: 'config',
+        exitCode: 2,
+        message: expect.stringContaining('instructions.files names "missing.md"')
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // `skills.enabled: true` is the whole opt-in, and `skills.directories` keeps
+  // its default `.codereviewer/skills` — a directory most repositories do not
+  // have. The path service's `ENOENT` used to escape every classifying boundary
+  // and print `unknown_error` at exit 5: the code reserved for a defect in this
+  // engine, over a configuration mistake fixed by one `mkdir`.
+  test('a missing skills directory is a configuration error, not an internal one', async () => {
+    const root = await createTempDir()
+
+    try {
+      const config = CodeReviewerConfigSchema.parse({
+        skills: { enabled: true, directories: ['.codereviewer/skills'] }
+      })
+
+      await expect(
+        loadStaticReviewContext({ repositoryRoot: root, config })
+      ).rejects.toMatchObject({
+        code: 'config_error',
+        category: 'config',
+        exitCode: 2,
+        message: expect.stringContaining(
+          'a configured skills directory does not exist: ".codereviewer/skills"'
+        )
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

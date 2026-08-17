@@ -357,6 +357,48 @@ describe('configuration loader', () => {
     }
   })
 
+  // A malformed config file is a first-hour failure, and it used to surface as
+  // `JSON.parse`'s own message alone — "Unexpected end of JSON input", with no
+  // file name, no statement that configuration was what failed, and no remedy.
+  test('names the file and the remedy when a config file is not valid JSON', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(join(root, 'config.json'), '{ "provider": ')
+
+      await expect(
+        loadCodeReviewerConfig({ repositoryRoot: root, configPath: 'config.json' })
+      ).rejects.toMatchObject({
+        code: 'config_error',
+        category: 'config',
+        exitCode: 2,
+        message: expect.stringContaining(
+          'The configuration file "config.json" is not valid JSON'
+        ),
+        details: { configPath: 'config.json' }
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('names the file when a config file holds JSON that is not an object', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(join(root, 'config.json'), '[]')
+
+      await expect(
+        loadCodeReviewerConfig({ repositoryRoot: root, configPath: 'config.json' })
+      ).rejects.toMatchObject({
+        code: 'config_error',
+        message: expect.stringContaining('is not a JSON object')
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('shows provider baseUrl by host only in the config summary', async () => {
     const result = await loadCodeReviewerConfig({
       repositoryRoot: await createTempDir(),

@@ -102,7 +102,28 @@ export const modelFindingRefuterInstructions = [
   'Use only the provided candidates, reviewedDiffRanges, evidence, reviewContext, supportSignalCandidates, instructions, skills metadata, and provenance. When a budgetNotice field is present it names what the provider input budget forced out of this packet; treat what it names as unavailable rather than as absent evidence.',
   'When reviewedDiffRanges are present, a real defect anywhere in a changed file is in scope: decide the verdict on correctness and reachability whether the defect lives on the changed lines (introduced) or elsewhere in a changed file that the change reaches, exposes, or alters (exposed). Do not return "needs-more-evidence" solely because the defect sits outside the exact changed lines; treat only genuinely unrelated concerns in files with no reviewed change as out of scope.',
   'reviewedDiffRanges are change metadata; changeKind "new" means candidate defects inside that range were introduced by the change.',
-  'Review context content can be a partial excerpt selected for budget. Do not infer that omitted file content is missing, truncated, or malformed unless deterministic evidence explicitly says so.',
+  // This clause used to open with "Review context content can be a partial excerpt
+  // selected for budget." That premise is normally FALSE: spec 26 removed proactive
+  // byte-budget splitting, so assembly sends each changed file as ONE document
+  // spanning the whole file, and the only thing that can hand this stage an excerpt
+  // is a reactive split — which spec 26 records as never having fired against a real
+  // provider (zero refusals over 21 cases up to 1.2 MB). A standing instruction
+  // stating it told the refuter, on every packet of every run, something untrue of
+  // that packet.
+  //
+  // The two jobs are now separated (spec 05, amended 2026-08-17). What survives here
+  // is the anti-false-positive guard, which holds whether or not any excerpting
+  // happened: without it a reviewer invents truncation and malformed-file claims out
+  // of content it simply was not shown. The excerpt PREMISE is per-PACKET while these
+  // instructions are fixed per RUN, so it cannot be expressed here at all; it rides
+  // in `budgetNotice`, which the refuter is told to read two clauses above and which
+  // appears only when the packet really is short of something.
+  //
+  // UNMEASURED, and it claims no accuracy benefit. This project has five
+  // pre-registered prompt-clause interventions that all measured null, and it does
+  // not claim recall or precision effects it has not measured. The change is made
+  // because the sentence was false, which is reason enough on its own.
+  'Do not infer that omitted file content is missing, truncated, or malformed unless deterministic evidence explicitly says so.',
   'Return "needs-more-evidence" for pre-existing general cleanup, portability, documentation, or testing concerns unless the changed range itself creates the concrete failure.',
   'A candidate can be proved from reviewContext even when no exact task evidence ID is attached.',
   'Return verdict "proved" only when the provided context proves the finding and its impact.',

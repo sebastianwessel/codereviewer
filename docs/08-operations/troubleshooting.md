@@ -130,12 +130,20 @@ directories fail the run.
 
 ### `no_reviewable_change` — exit 3
 
-The base and head refs differ by **no files**, so there was nothing to review.
+Nothing was left to review. Two different runs reach it.
 
-Almost always one of two things:
+**From a diff:** the base and head refs differ by **no files**. Almost always one
+of two things:
 
 - `--base-ref` and `--head-ref` are the wrong way round;
 - the head branch is already contained in the base (behind it, or already merged).
+
+**From an explicit file list:** `--file` / `--files` bypasses the diff, and every
+file you named was skipped. The message names each one and why — it does not
+exist or could not be read, it is binary, it is over `review.maxFileBytes`, or
+`paths.exclude` matched it (lock files, minified bundles, source maps and
+snapshots are excluded by default, so `--file package-lock.json` lands here).
+Fix the path, or drop the filter that removed it.
 
 This is refused rather than reported, deliberately. An empty change set otherwise
 travels through every later stage looking exactly like a clean one — zero files read,
@@ -193,9 +201,18 @@ which distinguishes a wrong-file mistake from a truncated report.
 
 ### `repository_error` / `repository_timeout` — exit 3
 
-A filesystem or git operation failed. Check that the working directory is a git
-repository, that the artifact directory is writable, and that no path in the
-configuration points outside the repository root.
+A filesystem or git operation failed. Two causes are named outright, because both
+are things a first run hits and neither is worth reading git's own output for.
+`details.cause` says which:
+
+| `details.cause` | Message says | Do this |
+| --- | --- | --- |
+| `ref_not_found` | a named ref does not resolve to a commit in this repository | Check it with `git rev-parse <ref>`. A remote-tracking ref such as `origin/main` needs `git fetch origin` first, and does not exist at all in a repository with no remote — use a local ref like `main`. |
+| `not_a_git_repository` | the working directory is not inside a git repository | The CLI always reviews the repository at its current working directory. Run it from that repository's root. |
+
+Anything else is a generic failure: check that the artifact directory is
+writable, and that no path in the configuration points outside the repository
+root.
 
 ---
 

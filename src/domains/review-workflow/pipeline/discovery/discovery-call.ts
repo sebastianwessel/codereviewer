@@ -13,28 +13,48 @@ import {
 import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { isContextLengthExceeded } from '../../../../shared/errors/context-overflow.js'
+import {
+  isProviderOutputTruncated,
+  providerOutputTruncationOrSelf
+} from '../../../../shared/errors/output-truncation.js'
 import { reduceActiveReadBudget } from './cross-file-tools.js'
 import { holisticReviewInputFor } from './review-packet.js'
 import { MAX_REACTIVE_SPLIT_DEPTH, splitTaskInputInHalf } from './reactive-split.js'
 
-// Two ways a discovery CALL can fail without the review being broken: the agent
+// Ways a discovery CALL can fail without the review being broken: the agent
 // exhausts its step allowance (a tool-enabled call whose model keeps requesting
-// reads instead of answering), or the model returns output that does not validate
-// (a truncated or malformed response, which grows more likely as the packet grows).
-// Both are properties of one model response, not of the run. Letting either
-// propagate fails the whole TASK and loses every finding it had — and, in an
-// evaluation, silently drops the case from the comparison, which is how a
-// measurement starts lying. Such a call yields no findings and is surfaced as a
-// recovered provider issue so the degradation stays visible instead of silent.
-// Failures that cost this task its findings but must not take the run down with
-// them. Malformed structured-object JSON belongs here: it is what a response
-// truncated mid-array looks like, and one over-long file should degrade to a
-// recorded provider issue rather than fail an entire review or evaluation.
+// reads instead of answering), the model returns output that does not validate,
+// the adapter cannot parse a structured object at all, or the response stopped at
+// the output-token ceiling. Each is a property of one model response, not of the
+// run. Letting any of them propagate fails the whole TASK and loses every finding
+// it had — and, in an evaluation, silently drops the case from the comparison,
+// which is how a measurement starts lying. Such a call yields no findings and is
+// surfaced as a provider issue so the degradation stays visible instead of silent.
+// Malformed structured-object JSON belongs here for a specific reason: it is what a
+// response truncated mid-array looks like, and one over-long file should degrade to
+// a recorded provider issue rather than fail an entire review or evaluation.
+//
+// `provider_output_truncated` (spec 05, amended 2026-08-17) is the same provider
+// event, better diagnosed. `finishReason: 'length'` says the response was cut short
+// whether the cut landed mid-token — producing the malformed JSON already listed
+// above — or after a complete array element, producing a partial findings list that
+// parses cleanly. Splitting one provider event into two run-level outcomes on where
+// the cut happened to land is arbitrary, and it punishes the case the engine
+// diagnoses better. So the truncated response costs this response, and nothing more.
+//
+// It is NOT recovered, and that is the whole safety argument: the issue below
+// carries `recovered: false`, the quality gate fails on an unrecovered provider
+// issue under the default `qualityGate.failOnProviderError`, and a partial review is
+// therefore never certified as a clean one. The refusal is the gate declining to
+// certify, not the process dying with every other task's completed work in hand.
+// Coverage does NOT catch this — it certifies which source BYTES were shown, and a
+// truncated answer about fully-shown source leaves coverage `complete`.
 const isRecoverableDiscoveryFailure = (error: unknown): boolean =>
-  error instanceof Error &&
-  /agent loop budget exceeded|iterations_exceeded|agent output validation failed|malformed structured object json/iu.test(
-    error.message
-  )
+  isProviderOutputTruncated(error) ||
+  (error instanceof Error &&
+    /agent loop budget exceeded|iterations_exceeded|agent output validation failed|malformed structured object json/iu.test(
+      error.message
+    ))
 
 export type DiscoveryCallResult = {
   readonly findings: readonly unknown[]
@@ -156,8 +176,17 @@ export const runDiscoveryCall = async (
     // Reporting that as recovered told a reader the run had coped, and left the
     // quality gate — which fails on an unrecovered issue — with nothing to fire
     // on, so a provider outage read as a clean review.
+    // Unwrapped before it is normalized. The normalizer reads the outermost error,
+    // and the agent loop may have rewrapped a truncation in a generic failure — in
+    // which case the issue would be recorded as `provider_error` and the operator
+    // would lose the one remedy that fixes it. Every other failure is passed through
+    // unchanged.
     return emptyResult([
-      providerIssueForError({ error, stage: input.stage, recovered: false })
+      providerIssueForError({
+        error: providerOutputTruncationOrSelf(error),
+        stage: input.stage,
+        recovered: false
+      })
     ])
   }
 }

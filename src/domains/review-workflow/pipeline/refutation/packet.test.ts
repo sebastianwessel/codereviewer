@@ -404,6 +404,138 @@ describe('finding refutation packet', () => {
   })
 })
 
+// Spec 05, *The Excerpt Premise Is Per-Packet* (2026-08-17). The refuter's fixed
+// instructions used to open the guard clause with "review context content can be a
+// partial excerpt selected for budget" — a claim that is false on essentially every
+// packet since spec 26 stopped assembly splitting on bytes. The premise is a
+// property of ONE packet, so it now rides in the packet, and only when true.
+describe('finding refutation packet — partial-excerpt notice', () => {
+  // Assembly's own output: one document per whole file, with the span it occupies.
+  const assembled = (
+    endLine: number,
+    path = 'src/app.ts'
+  ): ReviewContextDocument => ({
+    kind: 'file',
+    path,
+    content: 'whole file',
+    startLine: 1,
+    endLine,
+    ledgerEntryId: 'ctx_aaaaaaaa'
+  })
+
+  const workflowInputWithAssembledContext = (
+    context: readonly ReviewContextDocument[],
+    maxTaskInputBytes?: number
+  ): ReviewWorkflowInput =>
+    ReviewWorkflowInputSchema.parse({
+      ...workflowInput(
+        maxTaskInputBytes === undefined ? {} : { maxTaskInputBytes }
+      ),
+      reviewContext: [...context]
+    })
+
+  test('says nothing when the task holds the whole file', () => {
+    // THE ONLY PATH ANY REAL RUN HAS TAKEN. Spec 26 records zero provider refusals
+    // over 21 cases up to 1.2 MB, so the reactive split has never fired and every
+    // observed packet is this one. Silence is the correct answer, and the old
+    // instruction said the opposite on every one of them.
+    const whole = assembled(400)
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([whole]),
+      task: task([whole]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+  })
+
+  test('declares the excerpt, its path, and its line range when a split fired', () => {
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half',
+      startLine: 201,
+      endLine: 400
+    }
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)]),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('src/app.ts (lines 201-400)')
+    // The operative half: the refuter must not read the missing 200 lines as a
+    // statement about the file, and must not refute on their absence.
+    expect(packet.budgetNotice).toContain('artefact of the split')
+    expect(packet.budgetNotice).toContain('needs-more-evidence')
+  })
+
+  test('makes no claim when there is no assembled context to compare against', () => {
+    // Detection is exact or absent — never a guess. A caller that supplies no
+    // run-wide context gives this nothing to measure a span against, and the honest
+    // output is silence rather than a heuristic.
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([{ ...assembled(400), startLine: 201 }]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+  })
+
+  test('composes the excerpt notice with a shedding notice rather than replacing it', () => {
+    // Two different absences, both engine-created, both of which the refuter has to
+    // know about: half the file was never shown, and the support signals were shed
+    // to fit the budget. Overwriting either leaves an absence reading as evidence.
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half',
+      startLine: 201,
+      endLine: 400
+    }
+    const supportCandidates = Array.from({ length: 40 }, (_, index) => ({
+      ...supportCandidate,
+      id: `cand_support${index}`
+    }))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)], 10000),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, ...supportCandidates]
+    })
+
+    expect(packet.supportSignalCandidates).toEqual([])
+    expect(packet.reviewContext).toEqual([half])
+    expect(packet.budgetNotice).toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('the deterministic support signals')
+  })
+
+  test('drops the excerpt notice once the review context it describes is shed', () => {
+    // An excerpt statement about documents the packet no longer holds is not a
+    // smaller truth, it is a false one. The omission notice already covers the
+    // absence, and it covers ALL of it.
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half '.repeat(1200),
+      startLine: 201,
+      endLine: 400
+    }
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)], 10000),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.reviewContext).toEqual([])
+    expect(packet.budgetNotice).not.toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('the review context')
+  })
+})
+
 // The change-intent exclusion is a BLOCKLIST — `kind !== 'change-intent'` — so
 // every other reviewContext kind reaches refutation by default. That is fail-open,
 // and TypeScript cannot catch it: the comparison compiles unchanged however many

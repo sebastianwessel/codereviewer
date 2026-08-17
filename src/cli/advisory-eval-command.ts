@@ -25,7 +25,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { LaneUsage } from '../domains/costs/index.js'
 import {
-  readEngineIdentity,
+  readRunningEngineIdentity,
   selectCorpusCases
 } from '../domains/evaluation/index.js'
 import type { Logger } from '../domains/observability/index.js'
@@ -62,7 +62,7 @@ type CommandCliConfig = NonNullable<
   NonNullable<Parameters<typeof loadConfigForCommand>[2]>['cliConfig']
 >
 
-type EngineIdentity = Awaited<ReturnType<typeof readEngineIdentity>>
+type EngineIdentity = Awaited<ReturnType<typeof readRunningEngineIdentity>>
 
 // What both report contracts record about which cases this run covered. The
 // arrays are mutable because both `selection` contracts are Zod-inferred and
@@ -324,7 +324,14 @@ export const runAdvisoryEvalCommand = async <
       }
     }
 
-    const engine = await readEngineIdentity({ repositoryRoot: options.cwd })
+    // NO ARGUMENT. `eval impact` and `eval intent` are the two commands this
+    // function serves, and both used to pass `options.cwd` here: the directory
+    // the operator ran the CLI from, which is the engine checkout only by the
+    // accident of how this repository's own evals are invoked. Pointed at a
+    // corpus elsewhere it stamped that directory's commit — or `unknown` — onto
+    // a report describing THIS build. The identity is resolved from the engine's
+    // own module location instead; see `readRunningEngineIdentity`.
+    const engine = await readRunningEngineIdentity()
     const providerConfig = loadedConfig.config.provider
     const provenance: AdvisoryEvalProvenance = {
       configHash: stableJsonDigest(loadedConfig.config),

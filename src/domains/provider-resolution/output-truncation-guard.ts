@@ -41,6 +41,14 @@
 // looking at it, and retrying an identical request against an identical ceiling
 // truncates identically — it would only spend money to fail the same way. The
 // value here is entirely in refusing to pass the response off as complete.
+//
+// It also does not decide what the loss COSTS. That is per-stage and belongs to
+// the stage: discovery names this failure in its own failure policy (spec 05,
+// *Truncated Discovery Responses*, 2026-08-17) so it costs one response
+// and is surfaced as an UNRECOVERED provider issue, which fails the quality gate
+// by default; refutation and semantic merge already treat any call failure that
+// way. Every other lane still lets it propagate. What this module guarantees
+// everywhere is only that the truncation is never silent.
 
 import type {
   FinishReason,
@@ -50,6 +58,7 @@ import type {
   ObjectResponse
 } from '@purista/harness'
 import { createStructuredError } from '../../shared/errors/error-normalizer.js'
+import { PROVIDER_OUTPUT_TRUNCATED_CODE } from '../../shared/errors/output-truncation.js'
 
 // `'length'` is the harness's normalized "token budget reached", and it is the
 // only finish reason this guard claims. Neighbouring values are deliberately left
@@ -77,14 +86,24 @@ const assertNotTruncated = (input: {
   // `OperationTimeoutError`: the harness classifies retries off exactly those two
   // types, so this shape is guaranteed to fail fast instead of buying three
   // identical truncations at three times the price.
+  // The code is imported, not spelled here: the discovery call failure policy
+  // (spec 05) recognises this exact error to decide that a truncated response
+  // costs one response rather than the whole run, and a producer and consumer
+  // holding separate copies of an error code fail silently in the direction that
+  // restores the unbounded failure.
   throw createStructuredError({
-    code: 'provider_output_truncated',
+    code: PROVIDER_OUTPUT_TRUNCATED_CODE,
     message:
       `Model "${input.model}" stopped at the output-token limit after ` +
       `${input.outputTokens} output tokens, so the response is incomplete. ` +
+      // Naming the ceiling is not enough on its own: the two cases have
+      // DIFFERENT remedies, and an operator who reads only "the limit bound"
+      // cannot tell which knob is theirs to turn. A configured value is raised
+      // or unset; a model default is not theirs at all, and the fix is a model
+      // with more output room or a smaller review unit.
       (input.maxOutputTokens === undefined
-        ? 'No provider.maxOutputTokens is configured, so this is the model or adapter default ceiling.'
-        : `provider.maxOutputTokens is set to ${input.maxOutputTokens}.`) +
+        ? 'No provider.maxOutputTokens is configured, so this is the model or adapter default ceiling: choose a model with more output room, or review fewer files per call (review.maxFilesPerDiscoveryCall).'
+        : `provider.maxOutputTokens is set to ${input.maxOutputTokens}: raise it, or remove it to use the model's own ceiling.`) +
       ' A truncated response is not treated as a complete answer, because a partial list of findings is indistinguishable from a short one.',
     category: 'provider',
     details: {

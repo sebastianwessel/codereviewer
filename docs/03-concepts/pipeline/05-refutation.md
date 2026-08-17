@@ -133,6 +133,15 @@ not fit, the batch is **split in half and each half retried**. An oversized task
 than losing its candidates. A single candidate that still does not fit is a
 genuine packet failure.
 
+`budgetNotice` also carries the other thing a packet may be short of. Files are
+normally shown whole, but a task the provider refused as oversized is split into
+line ranges, and refutation then adjudicates against part of a file. When that
+happens the notice names the path and the range actually shown, and says that the
+rest of the file exists — so the refuter cannot read a gap the engine created as
+evidence against a candidate. A packet holding whole files carries no notice at
+all. This statement lives in the packet rather than in the refuter's standing
+instructions because it is true of one packet, not of a run.
+
 ### Output-validation retry
 
 A call that fails because the model's response did not validate — the harness's
