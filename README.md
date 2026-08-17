@@ -20,8 +20,11 @@ provider errors, against `openai/gpt-5.3-codex`. 2026-07-31; it supersedes every
 earlier figure this project has published. **Every model-backed rate and cost
 quoted on this page is a property of that model**, not of the engine — a
 different model changes what is found and what is proved, not only what it costs.
-The one exception is `impact check`, which makes no provider call, so its figure
-below is model-independent.
+The one exception is `impact check`, which with its adjudication layer off — its
+default — makes no provider call at all, so its figure below is
+model-independent. Turning `changeImpact.adjudication.enabled` on adds a model
+call per dependent whose symbol's behaviour changed, and that arm is a property
+of the model like everything else here.
 
 | | |
 | --- | ---: |
@@ -155,8 +158,16 @@ codereviewer review --base-ref origin/main --head-ref HEAD
 { "runId": "run-fb8f5cc8…", "qualityGatePassed": true, "artifactDir": ".codereviewer/runs/run-fb8f5cc8…" }
 ```
 
-Open `.codereviewer/runs/<run-id>/report.md` and check that **Coverage** lists the
-files you expected and **Skipped Files** holds no surprises.
+Open `.codereviewer/runs/<run-id>/report.md` and read the **`## Scope of this
+search`** section at the top. Its *"Files read in full: N of M reviewable"* bullet
+is the one to check: `M` is the change the run actually assembled, so if that
+number is not the change you expected, your refs or `paths.include` are wrong.
+Two more bullets appear in that same section **only when they apply** — files
+excluded before review began, and files never reviewed at all — and each points at
+the `## Skipped Files` section, which is likewise printed **only when something
+was skipped**. Its absence is the good outcome. (There is no `## Coverage`
+section; coverage is that one bullet. This step used to name two sections the
+report does not have.)
 
 **2.** Name a provider and a model in `.codereviewer/config.json`, replacing the
 `aiReview.enabled: false` from step 1. That is the whole configuration — every
@@ -196,8 +207,8 @@ gate ordering — in the right order.
 | Command | What it does | Can it block? |
 | --- | --- | --- |
 | `review` | The review. Discovery → refutation → admission → report → quality gate, plus both advisory lanes below in the same process. | **Yes**, exit `1` |
-| `intent check` | Maps a stated intent to the change: obligations, and the changed lines that evidence each. Also a lane inside `review`. | No, always exits `0` |
-| `impact check` | Deterministic reference report for the symbols the change touched. Makes no provider call. Also a lane inside `review`. | No |
+| `intent check` | Maps a stated intent to the change: obligations, and the changed lines that evidence each. Also a lane inside `review`. | No — **nothing it reports** can set a non-zero exit. It does exit `4` when it refuses to judge an input it could not see whole, and `2`/`3` on a configuration or repository failure |
+| `impact check` | Deterministic reference report for the symbols the change touched. No provider call with `changeImpact.adjudication.enabled` off, which is the default; the adjudication layer costs one call per dependent of a symbol whose behaviour changed. Also a lane inside `review`. | No |
 | `config validate` | Prints the fully merged configuration with secrets masked. | — |
 | `baseline write` | Writes the fingerprints of a completed report's findings to the baseline. | — |
 | `drift check` | The deterministic docs/spec/generated-artifact drift check, on its own. | Yes, exit `1` |

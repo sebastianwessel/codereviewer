@@ -1,8 +1,23 @@
 # Spec 30 — Review Conversation
 
-Status: approved; **being implemented** (2026-08-09). Written before any code so the
-threat model is settled by decision rather than by whatever the first implementation
-happens to do.
+Status: approved; **shipped, disabled by default** (implementation landed by
+2026-08-14; status line corrected 2026-08-17, having still read *"being
+implemented"*). Written before any code so the threat model is settled by decision
+rather than by whatever the first implementation happens to do.
+
+What is in the tree: the `pull_request_review_comment: [created]` trigger and the
+`concurrency` group (`.github/workflows/code-review.yml`), the fingerprint-only
+event boundary and the held / no-longer-reported / undecided comparison
+(`scripts/github/review-conversation.ts`, `review-conversation.test.ts`), the
+entry-point and pipeline wiring (`scripts/github/main.ts`, `pipeline.ts`), the
+reported outcome (`scripts/github/summary-comment.ts`), and the single
+`reviewConversation.enabled` key, default `false`, in the config schema.
+
+Two things are **not** shipped, and neither is a coding gap left open by accident:
+**requirement 5's bound is unsatisfied** — see the amendment below, which records
+why the workflow's `concurrency` group is not it — and **the measurement instrument
+does not exist**, which is why "ships disabled until measured" currently means
+"ships disabled". Both are decisions this spec records rather than work in flight.
 
 **Implementation, and a mis-scoping worth recording.** I first judged this unbuildable
 without new engine plumbing, on the reasoning that detection lives in the GitHub

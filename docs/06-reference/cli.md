@@ -10,7 +10,13 @@ Every command is a fixed word pair or single word. There is no `--help` and no
 Source of truth: [`src/cli/index.ts`](../../src/cli/index.ts) (command dispatch),
 [`src/cli/commands/`](../../src/cli/commands/) (one module per command, each
 declaring the flags it accepts) and [`src/cli/args.ts`](../../src/cli/args.ts)
-(parsers). Only the flags listed below are parsed.
+(parsers). Only the flags listed below are parsed, and every command in the table
+above has a section below naming its own. That claim did not hold when it was
+first written: `eval run --capability` had no row, and `eval impact` / `eval
+intent` had no section at all while accepting five flags between them.
+`src/cli/cli-reference.test.ts` now pins the command inventory and the logging
+flags against the code, because a completeness claim nobody checks is one that
+drifts.
 
 ## Commands
 
@@ -20,8 +26,8 @@ declaring the flags it accepts) and [`src/cli/args.ts`](../../src/cli/args.ts)
 | `review` | Run a review, write run artifacts, evaluate the quality gate. | `0`, `1`, `2`, `3`, `4`, `5` |
 | `baseline write` | Build `baseline.json` from a completed review report. | `0`, `2`, `3` |
 | `eval run` | Run the evaluation harness over eval cases and apply the regression gate. | `0`, `1`, `2`, `3`, `5` |
-| `eval impact` | Score the change-impact dependents corpus. A separate corpus and a separate artefact from `eval run` — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-impact). | `0`, `2`, `3` |
-| `eval intent` | Score the intent-fulfilment corpus. Likewise separate — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-intent). | `0`, `2`, `3` |
+| `eval impact` | Score the change-impact dependents corpus. A separate corpus and a separate artefact from `eval run` — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-impact). | `0`, `1`, `2`, `3`, `5` |
+| `eval intent` | Score the intent-fulfilment corpus. Likewise separate — see [Running an evaluation](../05-quality/running-an-evaluation.md#eval-intent). | `0`, `1`, `2`, `3`, `5` |
 | `eval compare` | Diff two eval arms (repeatable `--base` / `--head`). | `0`, `2` |
 | `eval recall-report` | Render the recall report from one or more eval reports. | `0`, `2` |
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
@@ -58,11 +64,10 @@ full mapping.
 
 | Rule | Detail |
 | --- | --- |
-| Unknown flags | **Rejected before the command does any work**, with exit `2` and `{"code":"usage_error"}` naming the flag. Every command declares its own option set; a flag one command accepts is still unknown to another. A parser that ignored a flag it does not implement would let a run proceed as though the flag had been honoured, which this project paid for twice. Only `--config` is global. `--debug` / `--log-level` / `--log-file` are declared by `review` and `eval run` alone — the five other commands reject them with exit `2`, because being told an option is unknown beats being silently ignored. |
+| Unknown flags | **Rejected before the command does any work**, with exit `2` and `{"code":"usage_error"}` naming the flag. Every command declares its own option set; a flag one command accepts is still unknown to another. A parser that ignored a flag it does not implement would let a run proceed as though the flag had been honoured, which this project paid for twice. Only `--config` is global. `--debug` / `--log-level` / `--log-file` are declared by the **four** commands that read them — `review`, `eval run`, `eval impact` and `eval intent` — and the other **eight** of the twelve above reject them with exit `2`, because being told an option is unknown beats being silently ignored. (This row used to say the logging flags were declared by `review` and `eval run` alone and that "the five other commands" rejected them. Both halves were wrong: there are twelve commands, not seven, and `eval impact` / `eval intent` declare the logging flags through the body they share.) |
 | Flag/value form | `--flag value` and `--flag=value` are equivalent, for every flag on every command, including `--config` and `--file`. The joined form used to be accepted by the unknown-flag check and then dropped by the value parsers, so `--config=path` passed validation and the run proceeded on defaults at exit `0`; the parsers now read both spellings. |
 | Missing value | Throws a usage/config error → exit `2` with `code: "config_error"` (the CLI classifies raw `TypeError` from parsing as a config error). An empty joined value (`--config=`) is a missing value, not an empty string. |
-| Repeated flags | Only `--file`, `--case`, and `eval recall-report --report` accept repetition. For all others the **first** occurrence wins, and a joined occurrence wins over a space-separated one wherever both appear. |
-| Leading-dash values | In the **space-separated** form, rejected for `--config`, `--log-level`, `--log-file`, `--case`, `eval recall-report --report`, `--review-mode`, `--review-depth`, `--max-concurrent-tasks`, `--gate-profile`; accepted (and passed through to validation) for `--base-ref`, `--head-ref`, `--file`, `--files`, `--slice-root`, `--base`, `--head`, `baseline write --report`. The check exists to stop the next flag being eaten as a value, which the joined form cannot do, so `--flag=-x` is generally passed through to the value's own validation instead. A git ref starting with `-` is rejected by the schema either way. |
+| Repeatable flags **and** leading-dash values | **One property, one cause** — stated once here because the two used to be two hand-maintained lists on this page, and they had already drifted into contradicting each other and the code. Exactly six flags read their values with `parseOptionValues` ([`src/cli/args.ts`](../../src/cli/args.ts)): `--file`, `--case`, `--capability`, `eval recall-report --report`, and `eval compare`'s `--base` and `--head`. That one parser both **collects every occurrence** — so those six, and only those six, repeat — and **refuses a space-separated value starting with `-`** (`<flag> requires a value`, exit `2`), so the next flag cannot be swallowed as a value. Every other flag reads its value with `parseOptionValue`: one value, **first occurrence wins**, a joined occurrence winning over a space-separated one wherever both appear, and a leading dash **not** rejected by the option parser — it is handed to the value's own validation. That validation is what still refuses `--config -x` (checked by hand), `--log-level` / `--log-file`, and every enum or integer flag (`--review-mode`, `--review-depth`, `--max-concurrent-tasks`, `--gate-profile`, `--format`, `--adjudication`, `--max-adjudication-calls`); and what lets `--base-ref -x` through to the git-ref schema, which rejects it anyway. `--files`, `--slice-root`, `--case-root`, `--manifest` and `baseline write --report` take the dash and fail, or not, on what the value turns out to name. The joined form cannot swallow a following token, so `--flag=-x` is passed through even for the six. (Corrects two earlier rows: they named three repeatable flags rather than six, and listed `--file`, `--base` and `--head` as **accepting** a leading dash when the parser they share rejects it.) |
 | Output | Success payloads go to **stdout**; errors go to **stderr** as a single JSON object `{ "code": ..., "message": ... }`. |
 
 ## `codereviewer config validate`
@@ -150,6 +155,7 @@ report. A source it cannot validate never yields an empty baseline and exit `0`.
 
 ```
 codereviewer eval run [--config <path>] [--slice-root <dir>] [--case <id>]...
+                      [--capability <flag>=<true|false>]...
                       [--review-mode <mode>] [--review-depth <depth>]
                       [--max-concurrent-tasks <n>] [--gate-profile <profile>]
                       [--debug | --log-level <level>] [--log-file <path>]
@@ -160,6 +166,7 @@ codereviewer eval run [--config <path>] [--slice-root <dir>] [--case <id>]...
 | `--config` | path | no | Config file path override. |
 | `--slice-root` | repository-relative directory | no | Load eval cases from a benchmark slice directory instead of the bundled fixtures. |
 | `--case` | eval case id | yes | Restrict the run to the listed case ids. No match → exit `2`, `usage_error: eval run selected no cases`. |
+| `--capability` | `<flag>=true` or `<flag>=false` | yes | Deliberately departs from one pinned capability for this run. `eval run` measures a **committed** capability set rather than whatever the schema defaults hold today, and the pin table is [`src/domains/evaluation/run/eval-capability-pins.ts`](../../src/domains/evaluation/run/eval-capability-pins.ts) — the parser reads the accepted flag names off that table, so a flag outside it is refused (exit `2`) rather than folded into the config. Anything but `true`/`false` is refused too. An override that departs from the pin raises the run warning *"this run is not comparable to a pinned baseline"*, and `provenance.capabilities` in the saved report is read from the configuration the cases actually ran under — so an arm that is not the pinned engine says so in its own artifact. |
 | `--review-mode` | `local`\|`ci`\|`pr`\|`full` | no | CLI-precedence override of `review.mode`. |
 | `--review-depth` | `fast`\|`balanced`\|`thorough` | no | CLI-precedence override of `review.depth`. |
 | `--max-concurrent-tasks` | integer 1–32 | no | CLI-precedence override of `review.maxConcurrentTasks`. Out of range → exit `2`. |
@@ -201,6 +208,64 @@ trustworthiness (`scoring.judgeTrustworthy`) rather than failing the run.
 Stdout is the rendered `eval-summary.md`. Artifacts are written to
 `.codereviewer/eval/` and a timestamped archive under
 `.codereviewer/eval/runs/<UTC-timestamp>-<uuid>/` — outside `paths.artifactDir`.
+
+## `codereviewer eval impact`
+
+```
+codereviewer eval impact [--config <path>] [--manifest <path>] [--case-root <dir>]
+                         [--case <id>]... [--adjudication on|off]
+                         [--max-adjudication-calls <n>]
+                         [--debug | --log-level <level>] [--log-file <path>]
+```
+
+| Flag | Value | Repeatable | Effect |
+| --- | --- | --- | --- |
+| `--config` | path | no | Config file path override. |
+| `--manifest` | repository-relative path | no | The corpus manifest. Defaults to the change-impact corpus manifest; a path that does not exist is a `config_error` at exit `2` rather than an empty run. |
+| `--case-root` | repository-relative directory | no | Where the hydrated cases live. |
+| `--case` | corpus case id | yes | Restrict the run to the listed case ids. No match → exit `2`, `usage_error: eval impact selected no cases`. |
+| `--adjudication` | `on` (default), `off` | no | `off` scores the deterministic reference arm alone — no provider call, no spend — and the adjudicated arm then reports **not measured** rather than measured at zero. |
+| `--max-adjudication-calls` | integer 1–500 | no | Per-case cap on model adjudication calls, so a measurement run can lift the config default instead of discovering afterwards that the adjudicated arm could not be read. |
+| `--debug` / `--log-level` / `--log-file` | as for `review` | no | Same semantics. |
+
+`--slice-root` is **not** accepted here, deliberately: spec 22 forbids pooling this
+corpus with the one `eval run` scores, so the flag that selects that corpus is
+unknown to this command and a typo exits `2` instead of silently measuring the
+wrong thing. Both change-impact switches are forced on for the run.
+
+Stdout is the rendered summary. `change-impact-eval-report.json` and
+`change-impact-eval-summary.md` are written to `.codereviewer/eval/change-impact/`
+— its own root, never a sibling of `eval run`'s report — and to a timestamped
+archive under `runs/` beneath it. **Exit `1` when no case could be scored** — an
+un-hydrated corpus is not a result, and exiting `0` with an all-unmeasured report
+would let one look like a completed measurement.
+
+## `codereviewer eval intent`
+
+```
+codereviewer eval intent [--config <path>] [--manifest <path>] [--case-root <dir>]
+                         [--case <id>]...
+                         [--debug | --log-level <level>] [--log-file <path>]
+```
+
+| Flag | Value | Repeatable | Effect |
+| --- | --- | --- | --- |
+| `--config` | path | no | Config file path override. |
+| `--manifest` | repository-relative path | no | The corpus manifest. Defaults to the intent-fulfilment corpus manifest; a path that does not exist is a `config_error` at exit `2`. |
+| `--case-root` | repository-relative directory | no | Where the hydrated cases live. |
+| `--case` | corpus case id | yes | Restrict the run to the listed case ids. No match → exit `2`, `usage_error: eval intent selected no cases`. |
+| `--debug` / `--log-level` / `--log-file` | as for `review` | no | Same semantics. |
+
+There is no `--adjudication` equivalent and no zero-spend arm: this lane's
+cheapest honest run still spends one extraction call, one judgement call per
+obligation and one explanation call, so a run without a provider scores nothing
+and says so. `--slice-root` is unknown here too, for the same reason as above.
+
+Stdout is the rendered summary; `intent-eval-report.json` and
+`intent-eval-summary.md` go to `.codereviewer/eval/intent-fulfilment/` and to a
+timestamped archive under `runs/` beneath it. **Exit `1` when no case could be
+scored** — including when no provider was configured, since a lane that read
+nothing measured nothing.
 
 ## `codereviewer eval compare`
 

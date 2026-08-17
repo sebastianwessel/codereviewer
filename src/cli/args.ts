@@ -6,11 +6,16 @@ import { ReviewLogLevelSchema } from '../domains/observability/index.js'
 // Options every command accepts, wherever they appear in the argument list.
 //
 // Only `--config` is genuinely global: every command loads configuration. The
-// logging flags used to sit here too, which made all seven commands ACCEPT
+// logging flags used to sit here too, which made all twelve commands ACCEPT
 // them while only `review` and `eval run` read them -- so `intent check
 // --log-level debug` exited 0 having logged nothing, the accept-and-ignore
 // failure the comment below says this project has already paid for twice.
-// They are declared by the two commands that implement them instead.
+// They are declared by the commands that implement them instead, which is now
+// four of the twelve: `review`, `eval run`, and `eval impact`/`eval intent`
+// through the shared advisory-eval body. (This comment said "all seven
+// commands" and "the two commands that implement them"; both counts were
+// stale, and `src/cli/cli-reference.test.ts` now pins the second one against
+// the code so it cannot drift again.)
 export const globalCliOptions: readonly string[] = ['--config']
 
 // The logging flags, for the commands that honour them. A command that does not
