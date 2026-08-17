@@ -128,6 +128,36 @@ const renderLocation = (finding: AdmittedFinding): string => {
   return `${inlineCode(span)} (${safeText(location.side)} side)`
 }
 
+// One evidence id, resolved into the line a reader sees. Shared by the admitted
+// and the unresolved sections.
+//
+// It was written twice, and the two copies had diverged in the worst possible
+// direction: the unresolved variant dropped the record's LOCATION. An unresolved
+// finding is precisely the one a human has to go and check by hand, so the address
+// is the part they need most, and nothing recorded the omission as deliberate. The
+// fallback string for a dangling id was identical in both, which is how the
+// divergence stayed invisible — the two looked like the same code.
+const renderEvidenceLine = (
+  evidenceId: string,
+  evidenceById: ReadonlyMap<string, EvidenceRecord>
+): string => {
+  const record = evidenceById.get(evidenceId)
+
+  if (record === undefined) {
+    // Named rather than dropped. An evidence id with no record in this report is a
+    // hole in the audit trail, and a hole a reader cannot see is worse than one
+    // they can.
+    return `  - ${inlineCode(evidenceId)}: no evidence record for this id is present in this report`
+  }
+
+  const where =
+    record.location === undefined
+      ? ''
+      : ` at ${inlineCode(`${record.location.path}:${record.location.startLine}`)}`
+
+  return `  - ${safeText(record.kind)}${where}: ${safeText(record.summary)}`
+}
+
 // The answer to "why should I believe this?", per finding, in the reader's line of
 // sight. Both halves used to exist only as bare ids: `evidenceIds` pointed into a
 // list this document never rendered at all, and `refutationId` pointed into a flat
@@ -163,26 +193,7 @@ const renderProof = (
   lines.push('- Evidence this rests on:')
 
   for (const evidenceId of finding.evidenceIds) {
-    const record = evidenceById.get(evidenceId)
-
-    if (record === undefined) {
-      // Named rather than dropped. An evidence id with no record in this report
-      // is a hole in the audit trail, and a hole a reader cannot see is worse
-      // than one they can.
-      lines.push(
-        `  - ${inlineCode(evidenceId)}: no evidence record for this id is present in this report`
-      )
-      continue
-    }
-
-    const where =
-      record.location === undefined
-        ? ''
-        : ` at ${inlineCode(`${record.location.path}:${record.location.startLine}`)}`
-
-    lines.push(
-      `  - ${safeText(record.kind)}${where}: ${safeText(record.summary)}`
-    )
+    lines.push(renderEvidenceLine(evidenceId, evidenceById))
   }
 
   return lines
@@ -305,13 +316,11 @@ const renderUnresolvedFinding = (
       ? []
       : [
           '- Evidence gathered so far:',
-          ...finding.evidenceIds.map((evidenceId) => {
-            const record = input.evidenceById.get(evidenceId)
-
-            return record === undefined
-              ? `  - ${inlineCode(evidenceId)}: no evidence record for this id is present in this report`
-              : `  - ${safeText(record.kind)}: ${safeText(record.summary)}`
-          })
+          // Rendered by the same helper the admitted section uses, which is what
+          // restores the location this section used to drop.
+          ...finding.evidenceIds.map((evidenceId) =>
+            renderEvidenceLine(evidenceId, input.evidenceById)
+          )
         ]),
     '',
     safeText(finding.description),

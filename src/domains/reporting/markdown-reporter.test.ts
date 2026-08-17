@@ -349,6 +349,31 @@ describe('Markdown reporter', () => {
     )
   })
 
+  test('an UNRESOLVED finding gets the same evidence line, location included', () => {
+    // This section rendered its own evidence lines and had drifted: it dropped the
+    // record's location. An unresolved finding is precisely the one a human has to
+    // go and open, so the address is the part they need most — and because the
+    // dangling-id fallback string was identical in both copies, the two looked like
+    // the same code.
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      admittedFindings: [
+        // `artifact-only` is what routes a finding into the unresolved section.
+        {
+          ...report.admittedFindings[0]!,
+          reporterEligibility: 'artifact-only'
+        }
+      ]
+    })
+
+    expect(rendered).toContain('## Unresolved - Needs Human Decision')
+    expect(rendered).toContain('- Evidence gathered so far:')
+    expect(rendered).toContain(
+      '- file at `src/app.ts:4`: Changed branch can return an incorrect value.'
+    )
+  })
+
   test('names an evidence id whose record is missing rather than dropping it', () => {
     const report = createReportFixture()
     const rendered = renderMarkdownReport({
