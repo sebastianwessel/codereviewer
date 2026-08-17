@@ -113,8 +113,10 @@ describe('expected-condition disclosure', () => {
     // security invariant breach, and softening it into a tool result the model
     // shrugs off would be worse than the unexplained failure it replaces.
     const faults = [
-      new TypeError('Path target must resolve inside the root.'),
-      new TypeError('Path value must resolve inside the root.'),
+      new TypeError(
+        'Path value "a.ts" is inside the root, but the file it points at is not.'
+      ),
+      new TypeError('Path value "../a.ts" resolves outside the root it must stay inside.'),
       new TypeError('No active mediated repository tools are registered for this call.'),
       new Error('EACCES: permission denied'),
       'not even an error'
@@ -134,9 +136,12 @@ describe('expected-condition disclosure', () => {
 
     await expect(
       withDisclosedRetrievalCondition('repo_read', async () => {
-        throw new TypeError('Path target must resolve inside the root.')
+        throw new TypeError(
+          'Path value "a.ts" is inside the root, but the file it points at is not.'
+        )
       })
-    ).rejects.toThrow(/resolve inside the root/u)
+      // Pinned on the path the refusal names, not on its wording.
+    ).rejects.toThrow(/"a\.ts"/u)
 
     expect(
       (

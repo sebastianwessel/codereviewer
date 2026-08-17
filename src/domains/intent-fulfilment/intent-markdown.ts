@@ -261,7 +261,11 @@ const renderUsage = (report: IntentFulfilmentReport): readonly string[] => {
     // function: a lane that priced its own call still owes the reader the same
     // account of it, and an undeterminable price must not read as a free run on
     // one document and as no run at all on the other.
-    ...renderUsageLines(usage),
+    // This lane exists only to place model calls — obligation extraction, the
+    // per-obligation judgement, the explanation — so a run that reaches this
+    // section made them. An absent cost here really is a price that could not be
+    // determined, never a run that never spent.
+    ...renderUsageLines(usage, { modelCallsMade: true }),
     ''
   ]
 }

@@ -117,7 +117,9 @@ describe('cross-file discovery tools', () => {
     // the engine actually failed.
     const failing = {
       read: async () => {
-        throw new TypeError('Path target must resolve inside the root.')
+        throw new TypeError(
+          'Path value "x" is inside the root, but the file it points at is not.'
+        )
       },
       list: async () => {
         throw new TypeError('unused')
@@ -136,7 +138,7 @@ describe('cross-file discovery tools', () => {
       },
         () => runRead('x')
       )
-    ).rejects.toThrow(/resolve inside the root/u)
+    ).rejects.toThrow(/is inside the root, but the file it points at is not/u)
   })
 
   test('gives concurrent scopes independent tools and budgets', async () => {
@@ -326,7 +328,8 @@ describe('expected retrieval conditions reach the model as content', () => {
         runInScope(root, { maxReads: 4, maxSearches: 2 }, () =>
           runRead('src/escape.ts')
         )
-      ).rejects.toThrow(/resolve inside the root/iu)
+        // The refusal names the path it refused, which is what makes it usable.
+      ).rejects.toThrow(/"src\/escape\.ts"/u)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })

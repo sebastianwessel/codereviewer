@@ -98,8 +98,23 @@ export const resolvePathInsideRoot = (
   const normalizedRoot = normalizeFileSystemPath(rootPath, { flavor })
   const normalizedRequest = normalizeFileSystemPath(requestedPath, { flavor })
 
+  // The REQUESTED path is quoted, never the resolved one.
+  //
+  // These four messages used to name nothing at all — "Path value must be relative
+  // to the root." — and they surface directly to CLI users, who then have no idea
+  // which of several paths was refused, or what "the root" is. Every caller passes
+  // a different kind of value (a `--file`, a `--config`, a configured artifact, an
+  // instruction file), so the caller is the only layer that can name the flag; this
+  // layer can at least name the value and state the rule.
+  //
+  // `requestedPath` is what the caller supplied, so quoting it echoes the user's own
+  // input back. The RESOLVED path is deliberately not quoted: it is an absolute host
+  // path this engine computed, and putting one in a user-facing message is the leak
+  // that made the `realpath` errno unusable elsewhere.
   if (pathApi.isAbsolute(normalizedRequest)) {
-    throw new TypeError('Path value must be relative to the root.')
+    throw new TypeError(
+      `Path value "${requestedPath}" is absolute. Paths are resolved inside a fixed root and must be given relative to it, so that nothing can be pointed outside the repository under review.`
+    )
   }
 
   const resolvedPath = pathApi.resolve(normalizedRoot, normalizedRequest)
@@ -109,7 +124,9 @@ export const resolvePathInsideRoot = (
     (!relativePath.startsWith('..') && !pathApi.isAbsolute(relativePath))
 
   if (!isInsideRoot) {
-    throw new TypeError('Path value must resolve inside the root.')
+    throw new TypeError(
+      `Path value "${requestedPath}" resolves outside the root it must stay inside.`
+    )
   }
 
   return resolvedPath
@@ -131,15 +148,20 @@ export const resolveExistingPathInsideRoot = async (
     (!relativeTarget.startsWith('..') && !pathApi.isAbsolute(relativeTarget))
 
   if (!isTargetInsideRoot) {
-    throw new TypeError('Path target must resolve inside the root.')
+    throw new TypeError(
+      `Path value "${requestedPath}" is inside the root, but the file it points at is not: it resolves through a link to a target outside the root.`
+    )
   }
 
   return resolvedPath
 }
 
+// `requestedPath` is carried in purely to name the offending value in the two
+// refusals below. It is the caller's own string; nothing here resolves against it.
 const realpathExistingAncestor = async (
   candidatePath: string,
   rootPath: string,
+  requestedPath: string,
   flavor: FileSystemFlavor
 ): Promise<string> => {
   const pathApi = pathApiByFlavor[flavor]
@@ -157,13 +179,17 @@ const realpathExistingAncestor = async (
     const parentPath = pathApi.dirname(currentPath)
 
     if (parentPath === currentPath) {
-      throw new TypeError('Write path parent must resolve inside the root.')
+      throw new TypeError(
+        `Write path "${requestedPath}" has no parent directory inside the root.`
+      )
     }
 
     currentPath = parentPath
 
     if (pathApi.relative(rootPath, currentPath).startsWith('..')) {
-      throw new TypeError('Write path parent must resolve inside the root.')
+      throw new TypeError(
+        `Write path "${requestedPath}" has a parent directory that resolves outside the root.`
+      )
     }
   }
 }
@@ -180,6 +206,7 @@ export const resolveWritePathInsideRoot = async (
   const realParent = await realpathExistingAncestor(
     pathApi.dirname(resolvedPath),
     rootPath,
+    requestedPath,
     flavor
   )
   const relativeParent = pathApi.relative(realRoot, realParent)
@@ -188,7 +215,9 @@ export const resolveWritePathInsideRoot = async (
     (!relativeParent.startsWith('..') && !pathApi.isAbsolute(relativeParent))
 
   if (!isInsideRoot) {
-    throw new TypeError('Write path parent must resolve inside the root.')
+    throw new TypeError(
+      `Write path "${requestedPath}" has a parent directory that resolves outside the root.`
+    )
   }
 
   try {

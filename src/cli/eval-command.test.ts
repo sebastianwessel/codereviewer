@@ -2085,6 +2085,33 @@ describe('eval CLI', () => {
     }
   })
 
+  test('a mistyped slice root says so instead of leaking an errno', async () => {
+    // The other spelling of the same mistake. Omitting `--slice-root` produced the
+    // usable message above, while mistyping it produced
+    // `repository_error: ENOENT: no such file or directory, realpath
+    // '<absolute host path>'` — a raw errno, a path belonging to the machine rather
+    // than the repository, and a category meaning the repository UNDER REVIEW is
+    // broken, for a typo in an argument.
+    const root = await createTempDir()
+
+    try {
+      const result = await runCli(
+        ['eval', 'slice-manifest', '--slice-root', 'eval/typo'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('eval/typo')
+      expect(result.stderr).toContain('--slice-root')
+      expect(result.stderr).not.toContain('ENOENT')
+      expect(result.stderr).not.toContain('realpath')
+      // The host path the errno carried. A CLI message must not publish one.
+      expect(result.stderr).not.toContain(root)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('fails when eval case filters select no loaded cases', async () => {
     const root = await createTempDir()
 

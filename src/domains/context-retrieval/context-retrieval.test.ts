@@ -158,7 +158,7 @@ describe('context retrieval', () => {
 
       await expect(
         retriever.readRepositoryFile({ path: '../outside.ts' })
-      ).rejects.toThrow(/inside the root|traverse/iu)
+      ).rejects.toThrow(/"\.\.\/outside\.ts"/u)
       await retriever.readRepositoryFile({ path: 'src/app.ts' })
       await expect(
         retriever.readRepositoryFile({ path: 'src/other.ts' })
@@ -562,7 +562,7 @@ describe('context retrieval', () => {
 
       expect(thrown).toBeInstanceOf(Error)
       expect(isContextRetrievalConditionError(thrown)).toBe(false)
-      expect((thrown as Error).message).toMatch(/resolve inside the root/iu)
+      expect((thrown as Error).message).toMatch(/"src\/escape\.ts"/u)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(outside, { recursive: true, force: true })

@@ -633,20 +633,6 @@ const renderTestAdequacy = (report: ReviewReport): readonly string[] => {
   ]
 }
 
-// Spend and tokens, stated on every report rather than left to a JSON field. This
-// engine bills a provider per run and the reader is the person paying, so the
-// amount belongs beside the findings — the same place the pull-request comment
-// already puts it.
-//
-// Tokens are reported alongside because cost alone cannot be acted on: input
-// dominates output by roughly 23:1 here, so a reader deciding whether to narrow
-// `paths.include` needs to see WHICH side is large. How each of those three
-// figures is written, and what an unmeasured one says instead, is
-// `renderUsageLines`: this document and the intent-fulfilment report print the
-// same numbers and must not describe a missing one differently.
-//
-// Duration is this section's own, and stays here: it is timing rather than spend,
-// and the other surface has no equivalent.
 // What DISCOVERY produced, before refutation and admission decided what survived.
 //
 // This reached `report.json` and no human surface at all: the markdown reporter
@@ -711,6 +697,20 @@ const renderDiscovery = (report: ReviewReport): readonly string[] => {
   ]
 }
 
+// Spend and tokens, stated on every report rather than left to a JSON field. This
+// engine bills a provider per run and the reader is the person paying, so the
+// amount belongs beside the findings — the same place the pull-request comment
+// already puts it.
+//
+// Tokens are reported alongside because cost alone cannot be acted on: input
+// dominates output by roughly 23:1 here, so a reader deciding whether to narrow
+// `paths.include` needs to see WHICH side is large. How each of those three
+// figures is written, and what an unmeasured one says instead, is
+// `renderUsageLines`: this document and the intent-fulfilment report print the
+// same numbers and must not describe a missing one differently.
+//
+// Duration is this section's own, and stays here: it is timing rather than spend,
+// and the other surface has no equivalent.
 const renderCost = (report: ReviewReport): readonly string[] => {
   const { run } = report
 
@@ -720,7 +720,12 @@ const renderCost = (report: ReviewReport): readonly string[] => {
     // The model this cost was paid to is on the scope line above, not repeated
     // here: one statement of run identity, in the section that states it.
     `- Duration: ${run.durationMs.toLocaleString('en-US')} ms`,
-    ...renderUsageLines(run),
+    // The same predicate the header uses to print NO MODEL SEARCHED THIS CHANGE,
+    // so the top and the bottom of the report cannot disagree about whether a
+    // model ran.
+    ...renderUsageLines(run, {
+      modelCallsMade: !performedNoModelSearch(report)
+    }),
     ''
   ]
 }

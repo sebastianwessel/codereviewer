@@ -542,6 +542,25 @@ describe('Markdown reporter', () => {
     expect(rendered).not.toContain('- Output tokens:')
   })
 
+  test('a run that placed no model call reports zero, not an unavailable price', () => {
+    // The one absent cost that is NOT unmeasured. With `aiReview.enabled: false`
+    // the run makes no model call at all, so its spend is zero by construction —
+    // and the report already says NO MODEL SEARCHED THIS CHANGE in its first
+    // paragraph. It used to close with "unavailable (token counts or model prices
+    // were missing)", which reads as a pricing table this engine failed to load
+    // and sends the reader to chase a configuration defect that is not there.
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...report.run, modelSearch: 'not-performed' }
+    })
+
+    expect(rendered).toContain('- Cost: $0.0000 — this run placed no model call')
+    expect(rendered).not.toContain('model prices were missing')
+    // Still no invented token counts: nobody counted them either.
+    expect(rendered).not.toContain('- Input tokens:')
+  })
+
   test('measured spend prints the cached tokens beside the input count they are part of', () => {
     const report = createReportFixture()
     const rendered = renderMarkdownReport({

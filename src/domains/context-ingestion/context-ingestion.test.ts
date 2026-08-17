@@ -283,8 +283,12 @@ describe('inbox provider', () => {
         maxFileBytes: 64_000
       })
 
+      // Asserted on the offending VALUE, not on the refusal's wording. These
+      // assertions used to match `/resolve inside the root/`, which broke the day
+      // the messages started naming the path they refused — the property worth
+      // pinning is that they name it.
       await expect(provider.gather(gatherInput(root))).rejects.toThrow(
-        /resolve inside the root/iu
+        /"context"/u
       )
     } finally {
       await rm(root, { recursive: true, force: true })

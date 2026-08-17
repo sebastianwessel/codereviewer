@@ -62,16 +62,30 @@ tool read.
 
 ### What is rejected
 
+Every containment refusal **quotes the path it refused**, because these messages
+reach CLI users directly and a run can carry several paths at once — a `--config`,
+a `--file`, configured analyzer artifacts, instruction files. They quote the value
+the caller supplied, never the absolute path this engine resolved it to: an
+absolute host path in a user-facing message is a leak, not a diagnosis.
+
+They do **not** name the flag. This layer does not know which one it was; the
+caller is the only place that does, and the commands that read an operator-supplied
+path add it (`baseline write --report`, `eval impact`/`eval intent --manifest`).
+
 | Input | Result |
 | --- | --- |
-| `../../etc/passwd` | `Path value must resolve inside the root.` |
-| `/etc/passwd` | `Path value must be relative to the root.` |
-| `C:\Windows\system32` | `Path value must be relative to the root.` (POSIX and Windows path APIs are both applied) |
+| `../../etc/passwd` | `Path value "../../etc/passwd" resolves outside the root it must stay inside.` |
+| `/etc/passwd` | `Path value "/etc/passwd" is absolute. Paths are resolved inside a fixed root and must be given relative to it, …` |
+| `C:\Windows\system32` | The same absolute-path refusal (POSIX and Windows path APIs are both applied) |
 | `file\u0000.ts` | `Path value must not contain NUL bytes.` |
 | `""` or `"   "` | `Path value must not be empty.` |
-| A symlink pointing outside the root | `Path target must resolve inside the root.` |
+| A symlink pointing outside the root | `Path value "<value>" is inside the root, but the file it points at is not: …` |
 | A write destination that is a symlink | `Write path target must not be a symlink.` |
-| A write whose parent chain resolves outside the root | `Write path parent must resolve inside the root.` |
+| A write whose parent chain resolves outside the root | `Write path "<value>" has a parent directory that resolves outside the root.` |
+
+The two that still name nothing are the two that cannot: `normalizeFileSystemPath`
+rejects a NUL byte or an empty string before there is a printable value to quote,
+and quoting a NUL byte into a JSON error message is its own problem.
 
 Path handling is Windows- and POSIX-aware: normalization uses the platform's
 `node:path` flavor, and repository-facing identifiers (report paths, SARIF

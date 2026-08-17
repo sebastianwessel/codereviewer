@@ -108,6 +108,18 @@ export const pluralize = (
  * never an addition, and is shown beside it because a warm cache changes spend
  * severalfold with no change to the output.
  *
+ * THAT RULE HAS AN EXCEPTION, and leaving it out made the line wrong in the one
+ * case a reader can verify by hand. A run with `aiReview.enabled: false` places no
+ * model call at all, so its cost is not unmeasured — it is zero, by construction —
+ * and the report that says "NO MODEL SEARCHED THIS CHANGE" at the top said
+ * "unavailable (token counts or model prices were missing)" at the bottom. That
+ * reads as a pricing table this engine failed to load, sending the reader to chase
+ * a configuration defect that is not there.
+ *
+ * `modelCallsMade` is a required argument rather than an inferred one: absent cost
+ * plus absent tokens is also what a run that failed before its first call looks
+ * like, and only the caller can tell the two apart.
+ *
  * The caller supplies its own heading and any run identity around these lines: what
  * the numbers are is one rule, where they sit is each document's own.
  */
@@ -117,11 +129,17 @@ export const renderUsageLines = (
     readonly inputTokens?: number | undefined
     readonly cachedInputTokens?: number | undefined
     readonly outputTokens?: number | undefined
+  },
+  options: {
+    /** False only when the run is KNOWN to have placed no model call. */
+    readonly modelCallsMade: boolean
   }
 ): readonly string[] => {
   const lines: string[] = [
     usage.costUsd === undefined
-      ? '- Cost: unavailable (token counts or model prices were missing)'
+      ? options.modelCallsMade
+        ? '- Cost: unavailable (token counts or model prices were missing)'
+        : '- Cost: $0.0000 — this run placed no model call'
       : `- Cost: $${usage.costUsd.toFixed(4)}`
   ]
 
