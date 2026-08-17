@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
+import { documentIssueSchema } from './document-issue.js'
 import { collectTextFiles, type TextFile } from './markdown-sources.js'
 
 // Validates every configuration document this repository ships — the JSON examples
@@ -31,16 +32,11 @@ export const ConfigExampleIssueKindSchema = z.enum([
   'no-examples-found'
 ])
 
-export const ConfigExampleIssueSchema = z.strictObject({
-  kind: ConfigExampleIssueKindSchema,
-  // Repository-relative, POSIX-separated, so a message is copy-pasteable on any
-  // platform.
-  path: z.string().min(1),
-  // 1-based line of the block's OPENING fence. A `no-examples-found` issue points
-  // at line 1 of the root it scanned, which is the only line it can name.
-  line: z.int().min(1),
-  message: z.string().min(1)
-})
+// `line` is the block's OPENING fence. A `no-examples-found` issue points at
+// line 1 of the root it scanned, which is the only line it can name.
+export const ConfigExampleIssueSchema = documentIssueSchema(
+  ConfigExampleIssueKindSchema
+)
 
 export const ConfigExampleCheckResultSchema = z.strictObject({
   // Fenced blocks whose info string starts with `json`, across every scanned root.
@@ -176,7 +172,17 @@ export const extractJsonBlocks = (file: TextFile): readonly JsonBlock[] => {
   return blocks
 }
 
-const parseJson = (body: string): { readonly value: unknown } | { readonly error: string } => {
+/**
+ * Parses one block body, reporting the parser's own complaint rather than
+ * throwing.
+ *
+ * Exported for `artifact-example-checker.ts`, which parses the same fenced
+ * blocks out of the same extractor and needs the same message when one does not
+ * parse. The two had a byte-identical copy each; the sibling already reads
+ * `extractJsonBlocks` and `isConfigExampleValue` from here, so this was the one
+ * piece of that pipeline that was simply never exported.
+ */
+export const parseJson = (body: string): { readonly value: unknown } | { readonly error: string } => {
   try {
     return { value: JSON.parse(body) as unknown }
   } catch (error) {
@@ -420,11 +426,3 @@ export const checkConfigExamples = async (
     issues
   })
 }
-
-/** One human-readable line per issue, for a test failure message or a console. */
-export const renderConfigExampleIssues = (
-  issues: readonly ConfigExampleIssue[]
-): string =>
-  issues
-    .map((issue) => `${issue.path}:${issue.line} [${issue.kind}] ${issue.message}`)
-    .join('\n')

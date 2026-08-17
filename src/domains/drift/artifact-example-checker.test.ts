@@ -8,10 +8,10 @@ import {
   artifactScanRoots,
   checkArtifactExamples,
   checkArtifactExamplesInFile,
-  findArtifactExampleProblems,
-  renderArtifactExampleIssues
+  findArtifactExampleProblems
 } from './artifact-example-checker.js'
 import { extractJsonBlocks } from './config-example-checker.js'
+import { renderDocumentIssues } from './document-issue.js'
 import { collectTextFiles } from './markdown-sources.js'
 
 const repositoryRoot = path.resolve(
@@ -37,7 +37,7 @@ describe('documented artifact examples', () => {
   test('every artifact example in the scanned roots matches the contract it declares', async () => {
     const result = await checkArtifactExamples({ repositoryRoot })
 
-    expect(renderArtifactExampleIssues(result.issues)).toBe('')
+    expect(renderDocumentIssues(result.issues)).toBe('')
     expect(result.issues).toEqual([])
   })
 
@@ -234,7 +234,11 @@ describe('the contract registry', () => {
       markdown('docs/example.md', ['```json review-summary', '{}', '```'])
     )
 
-    expect(result.checkedExampleCount).toBe(1)
+    // NOT counted as a checked example. `checkedExampleCount` is the blocks
+    // walked against a contract, and this one reached no contract to be walked
+    // against; it was counted on entry to the walk until 2026-08-17, which said
+    // a block nothing could check had been checked.
+    expect(result.checkedExampleCount).toBe(0)
     expect(result.issues[0]?.kind).toBe('unknown-contract')
     expect(result.issues[0]?.message).toContain('review-report')
   })
@@ -414,6 +418,38 @@ describe('accounting for every block', () => {
     expect(result.issues[0]?.kind).toBe('unexplained-exemption')
   })
 
+  // `checkedExampleCount` says "declared a contract and was walked against it",
+  // and the buckets are asserted above to partition the blocks. Counting a block
+  // on entry broke both at once: an unparseable block and one naming no contract
+  // were reported AND counted as walked, so they sat in two buckets each.
+  test('a block that reached no contract is reported without being counted as walked', () => {
+    const result = checkArtifactExamplesInFile(
+      markdown('docs/example.md', [
+        '```json impact-report',
+        '{ "impactFindings": [ … ] }',
+        '```',
+        '```json review-summary',
+        '{}',
+        '```',
+        '```json impact-report',
+        '{ "summary": { "impactFindingCount": 1 } }',
+        '```'
+      ])
+    )
+
+    expect(result.issues.map((issue) => issue.kind)).toEqual([
+      'unparseable',
+      'unknown-contract'
+    ])
+    expect(result.checkedExampleCount).toBe(1)
+    expect(
+      result.checkedExampleCount +
+        result.exemptedBlockCount +
+        result.configBlockCount +
+        result.issues.length
+    ).toBe(result.jsonBlockCount)
+  })
+
   test('a root with no markdown at all reports nothing, because there was nothing to extract', async () => {
     const result = await checkArtifactExamples({
       repositoryRoot,
@@ -427,6 +463,60 @@ describe('accounting for every block', () => {
       configBlockCount: 0,
       issues: []
     })
+  })
+})
+
+describe('what the walk hands back', () => {
+  // A VALUE HAS NO FILE AND NO LINE. The walk reports the path INSIDE the
+  // example, which is the only location it knows.
+  //
+  // It used to return `ArtifactExampleIssue`s with `path` set to the contract tag
+  // and `line` set to 1 — two fields whose schema says "repository-relative,
+  // POSIX-separated" and "the block's OPENING fence" — while dropping the
+  // structural path it had just computed, which survived only inside the prose
+  // message. `checkBlock` overwrote both fields immediately, so the lie was
+  // invisible there and shipped to every other caller.
+  test('a problem is located by its path inside the example, not by a file and a line', () => {
+    expect(
+      findArtifactExampleProblems(
+        { summary: { impactedSymbolCount: 1 } },
+        'impact-report'
+      )
+    ).toEqual([
+      {
+        kind: 'unknown-key',
+        path: ['summary', 'impactedSymbolCount'],
+        message: expect.stringContaining('summary.impactedSymbolCount') as string
+      }
+    ])
+  })
+
+  test('an unknown contract tag is a problem at the root of the example', () => {
+    expect(findArtifactExampleProblems({}, 'review-summary')).toEqual([
+      {
+        kind: 'unknown-contract',
+        path: [],
+        message: 'No contract named review-summary'
+      }
+    ])
+  })
+
+  // The file and the fence line come from the block, and `checkBlock` is the one
+  // thing that holds one — which is why it is the only constructor of an issue.
+  test('the file and the fence line are the block’s, on every issue', () => {
+    const result = checkArtifactExamplesInFile(
+      markdown('docs/06-reference/example.md', [
+        '# Heading',
+        '',
+        '```json impact-report',
+        '{ "summary": { "impactedSymbolCount": 1 } }',
+        '```'
+      ])
+    )
+
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0]?.path).toBe('docs/06-reference/example.md')
+    expect(result.issues[0]?.line).toBe(3)
   })
 })
 

@@ -33,10 +33,18 @@ import {
   RunSummarySchema
 } from '../../shared/contracts/report/review-report.schema.js'
 import {
+  definitionOf,
+  unwrapSchema,
+  type SchemaDef
+} from '../../shared/zod/schema-internals.js'
+import {
   extractJsonBlocks,
   isConfigExampleValue,
+  parseJson,
   type JsonBlock
 } from './config-example-checker.js'
+import { minimumExemptionReasonLength } from './declared-exemption.js'
+import { documentIssueSchema } from './document-issue.js'
 import { collectTextFiles, type TextFile } from './markdown-sources.js'
 
 // Validates every JSON ARTIFACT example printed in this repository's Markdown
@@ -113,15 +121,12 @@ export const ArtifactExampleIssueKindSchema = z.enum([
   'shape-mismatch'
 ])
 
-export const ArtifactExampleIssueSchema = z.strictObject({
-  kind: ArtifactExampleIssueKindSchema,
-  // Repository-relative, POSIX-separated, so a message is copy-pasteable on any
-  // platform.
-  path: z.string().min(1),
-  // 1-based line of the block's OPENING fence.
-  line: z.int().min(1),
-  message: z.string().min(1)
-})
+// `line` is the block's OPENING fence, and `path` the file the block is in. Both
+// are set by `checkBlock`, which is the only thing that constructs an issue: it
+// is the only place that holds a block to attribute one to.
+export const ArtifactExampleIssueSchema = documentIssueSchema(
+  ArtifactExampleIssueKindSchema
+)
 
 export const ArtifactExampleCheckResultSchema = z.strictObject({
   // Fenced blocks whose info string starts with `json`, across every scanned
@@ -177,11 +182,6 @@ export type ArtifactExampleCheckResult = z.infer<
 // this mechanism exists, because CI tells them, names the block and lists the
 // tags. The cost is paid once, on the blocks that were here when it landed.
 const exemptionTag = 'no-contract'
-
-// A reason short enough to be a shrug is not a reason. `no-contract x` would
-// make the escape hatch a silent skip list with extra characters, which is
-// exactly what this must not become.
-const minimumExemptionReasonLength = 20
 
 type ArtifactContract = {
   readonly schema: ZodType
@@ -308,76 +308,14 @@ export const artifactContracts: Readonly<Record<string, ArtifactContract>> = {
 
 export const artifactContractTags = Object.keys(artifactContracts).sort()
 
-// Zod's internal node shape, read rather than reimplemented. Only the fields
-// this walk needs are named; every schema class exposes its structure through
-// `_zod.def` and there is no public accessor that covers unwrapping, unions and
-// catchalls uniformly.
-type SchemaDef = {
-  readonly type: string
-  readonly innerType?: ZodType
-  readonly getter?: () => ZodType
-  readonly in?: ZodType
-  readonly shape?: Readonly<Record<string, ZodType>>
-  readonly catchall?: ZodType
-  readonly element?: ZodType
-  readonly items?: readonly ZodType[]
-  readonly rest?: ZodType
-  readonly valueType?: ZodType
-  readonly options?: readonly ZodType[]
-  readonly discriminator?: string
-  readonly entries?: Readonly<Record<string, string | number>>
-  readonly values?: readonly unknown[]
-  readonly left?: ZodType
-  readonly right?: ZodType
-}
-
-const definitionOf = (schema: ZodType): SchemaDef =>
-  (schema as unknown as { readonly _zod: { readonly def: SchemaDef } })._zod.def
-
-// Wrappers that add a rule without adding or removing a key: unwrapping them
-// leaves the shape the example has to match.
-//
-// A `pipe` is unwrapped to its INPUT side, which matters for the two evaluation
-// case contracts: `EvalSliceCaseSchema` is a raw object plus a transform that
-// derives tags, and a documented `slice.json` is the file an author writes, not
-// the value the loader hands on.
-const unwrapSchema = (schema: ZodType): ZodType => {
-  let node = schema
-
-  for (;;) {
-    const def = definitionOf(node)
-
-    if (def.type === 'lazy' && def.getter !== undefined) {
-      node = def.getter()
-      continue
-    }
-
-    if (def.type === 'pipe' && def.in !== undefined) {
-      node = def.in
-      continue
-    }
-
-    if (def.innerType === undefined) {
-      return node
-    }
-
-    switch (def.type) {
-      case 'optional':
-      case 'nullable':
-      case 'nonoptional':
-      case 'default':
-      case 'prefault':
-      case 'catch':
-      case 'readonly':
-        node = def.innerType
-        break
-      default:
-        return node
-    }
-  }
-}
-
-type Problem = {
+/**
+ * One defect the walk found in an example, located by its path INSIDE the value.
+ *
+ * Separate from `ArtifactExampleIssue`, which locates a defect in a FILE. The
+ * walk knows where in the example it stands and nothing about the block it came
+ * from; only `checkBlock` holds the file and the fence line.
+ */
+export type ArtifactExampleProblem = {
   readonly kind: ArtifactExampleIssueKind
   readonly path: readonly string[]
   readonly message: string
@@ -391,14 +329,22 @@ const isPlainObject = (value: unknown): value is Readonly<Record<string, unknown
 const describePath = (path: readonly string[]): string =>
   path.length === 0 ? '(root)' : path.join('.')
 
-const describeValue = (value: unknown): string =>
+// A scalar as it reads inside a message: a string keeps its quotes, so `"1.0"`
+// cannot be mistaken for `1.0` and an enum member reads the way the contract
+// spells it.
+//
+// NOT the same function as `config-default-table-checker.ts`'s
+// `describeValueAsJson`, which serialises whole values with `JSON.stringify`.
+// Both were called `describeValue`, in one folder, with different semantics —
+// one wrong import away from a message that quotes nothing.
+const describeValueQuotingStrings = (value: unknown): string =>
   typeof value === 'string' ? `"${value}"` : String(value)
 
 const shapeMismatch = (
   value: unknown,
   path: readonly string[],
   expected: string
-): Problem => ({
+): ArtifactExampleProblem => ({
   kind: 'shape-mismatch',
   path,
   message: `${describePath(path)} is ${Array.isArray(value) ? 'an array' : typeof value} in the example but ${expected} in the contract`
@@ -425,7 +371,7 @@ const walkValue = (
   value: unknown,
   schema: ZodType,
   path: readonly string[]
-): readonly Problem[] => {
+): readonly ArtifactExampleProblem[] => {
   // A null in an example says "this field can be empty here", which carries no
   // keys to check and no enum member to be wrong about.
   if (value === null || value === undefined) {
@@ -448,8 +394,8 @@ const walkValue = (
         kind: isSchemaVersion ? 'stale-schema-version' : 'unknown-enum-value',
         path,
         message: isSchemaVersion
-          ? `${describePath(path)} is ${describeValue(value)} but the producer emits ${closedValues.map(describeValue).join(' or ')}`
-          : `${describePath(path)} is ${describeValue(value)}, which is not one of ${closedValues.map(describeValue).join(', ')}`
+          ? `${describePath(path)} is ${describeValueQuotingStrings(value)} but the producer emits ${closedValues.map(describeValueQuotingStrings).join(' or ')}`
+          : `${describePath(path)} is ${describeValueQuotingStrings(value)}, which is not one of ${closedValues.map(describeValueQuotingStrings).join(', ')}`
       }
     ]
   }
@@ -495,7 +441,7 @@ const walkObject = (
   value: unknown,
   def: SchemaDef,
   path: readonly string[]
-): readonly Problem[] => {
+): readonly ArtifactExampleProblem[] => {
   const shape = def.shape
 
   if (shape === undefined) {
@@ -544,7 +490,7 @@ const walkTuple = (
   value: unknown,
   def: SchemaDef,
   path: readonly string[]
-): readonly Problem[] => {
+): readonly ArtifactExampleProblem[] => {
   if (!Array.isArray(value)) {
     return [shapeMismatch(value, path, 'a list')]
   }
@@ -589,7 +535,7 @@ const walkUnion = (
   value: unknown,
   def: SchemaDef,
   path: readonly string[]
-): readonly Problem[] => {
+): readonly ArtifactExampleProblem[] => {
   const options = def.options ?? []
 
   if (options.length === 0) {
@@ -613,7 +559,7 @@ const walkUnion = (
         {
           kind: 'unknown-enum-value',
           path: [...path, discriminator],
-          message: `${describePath([...path, discriminator])} is ${describeValue(declared)}, which selects no member of the contract's union`
+          message: `${describePath([...path, discriminator])} is ${describeValueQuotingStrings(declared)}, which selects no member of the contract's union`
         }
       ]
     }
@@ -640,40 +586,33 @@ const walkUnion = (
  * Exported so the walk can be exercised on values whose defects are known: a
  * checker whose walk silently descends into nothing would otherwise report a
  * clean result for a repository full of stale examples.
+ *
+ * It returns PROBLEMS, not issues, because a value on its own has no file and no
+ * line. It used to return `ArtifactExampleIssue`s carrying `path: <contract tag>`
+ * and `line: 1` — two fields whose own contract says "repository-relative path"
+ * and "the block's opening fence" — and it dropped the path the walk had just
+ * computed, which survived only inside the prose message. `checkBlock` overwrote
+ * both fields immediately; every other caller got the values that lied.
  */
 export const findArtifactExampleProblems = (
   value: unknown,
   contractTag: string
-): readonly ArtifactExampleIssue[] => {
+): readonly ArtifactExampleProblem[] => {
   const contract = artifactContracts[contractTag]
 
   if (contract === undefined) {
     return [
       {
         kind: 'unknown-contract',
-        path: contractTag,
-        line: 1,
+        // The root of the example: an unknown tag is not a defect at any
+        // position inside the value.
+        path: [],
         message: `No contract named ${contractTag}`
       }
     ]
   }
 
-  return walkValue(value, contract.schema, []).map((problem) => ({
-    kind: problem.kind,
-    path: contractTag,
-    line: 1,
-    message: problem.message
-  }))
-}
-
-const parseJson = (
-  body: string
-): { readonly value: unknown } | { readonly error: string } => {
-  try {
-    return { value: JSON.parse(body) as unknown }
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'not valid JSON' }
-  }
+  return walkValue(value, contract.schema, [])
 }
 
 // The tag list is deliberately NOT in this message. It is the same twenty-two
@@ -681,7 +620,15 @@ const parseJson = (
 // `unknown-contract`, which is where a guess lands.
 const undeclaredMessage = `Block declares no contract, and its content is not a configuration example, so nothing checks it. Tag the opening fence with the artifact it shows (\`\`\`json <contract-tag>) or, if no contract describes it, with \`\`\`json ${exemptionTag} <reason>. See docs/09-contributing/running-tests-and-checks.md.`
 
-const checkBlock = (block: JsonBlock): readonly ArtifactExampleIssue[] => {
+type BlockResult = {
+  // Whether the block was WALKED AGAINST A CONTRACT, which is what
+  // `checkedExampleCount` counts. A block that does not parse, or whose tag names
+  // no contract, never reached a contract to be walked against.
+  readonly checked: boolean
+  readonly issues: readonly ArtifactExampleIssue[]
+}
+
+const checkBlock = (block: JsonBlock): BlockResult => {
   const at = (
     kind: ArtifactExampleIssueKind,
     message: string
@@ -694,31 +641,41 @@ const checkBlock = (block: JsonBlock): readonly ArtifactExampleIssue[] => {
   const parsed = parseJson(block.body)
 
   if ('error' in parsed) {
-    return [
-      at(
-        'unparseable',
-        `Block is tagged \`json ${block.marker}\` but is not valid JSON: ${parsed.error}. An artifact example must be a document a reader can paste into a parser; elide a value, not the syntax.`
-      )
-    ]
+    return {
+      checked: false,
+      issues: [
+        at(
+          'unparseable',
+          `Block is tagged \`json ${block.marker}\` but is not valid JSON: ${parsed.error}. An artifact example must be a document a reader can paste into a parser; elide a value, not the syntax.`
+        )
+      ]
+    }
   }
 
   const contract = artifactContracts[block.marker]
 
   if (contract === undefined) {
-    return [
-      at(
-        'unknown-contract',
-        `Block is tagged \`json ${block.marker}\`, which names no contract. Use one of: ${artifactContractTags.join(', ')}.`
-      )
-    ]
+    return {
+      checked: false,
+      issues: [
+        at(
+          'unknown-contract',
+          `Block is tagged \`json ${block.marker}\`, which names no contract. Use one of: ${artifactContractTags.join(', ')}.`
+        )
+      ]
+    }
   }
 
-  return findArtifactExampleProblems(parsed.value, block.marker).map((issue) =>
-    at(
-      issue.kind,
-      `Example of ${contract.producedBy} does not match its contract — ${issue.message}`
+  return {
+    checked: true,
+    issues: findArtifactExampleProblems(parsed.value, block.marker).map(
+      (problem) =>
+        at(
+          problem.kind,
+          `Example of ${contract.producedBy} does not match its contract — ${problem.message}`
+        )
     )
-  )
+  }
 }
 
 type FileResult = {
@@ -785,8 +742,16 @@ export const checkArtifactExamplesInFile = (file: TextFile): FileResult => {
       continue
     }
 
-    checkedExampleCount += 1
-    issues.push(...checkBlock(block))
+    const result = checkBlock(block)
+
+    // Counted AFTER the block was walked, not before it was tried. Counting on
+    // entry made `checkedExampleCount` mean "declared a tag that is not an
+    // exemption", so an unparseable block and one naming no contract were both
+    // reported AND counted as walked against a contract — the one thing they
+    // provably were not. It also put those blocks in two of the four buckets at
+    // once, which the accounting says partition the blocks.
+    checkedExampleCount += result.checked ? 1 : 0
+    issues.push(...result.issues)
   }
 
   return {
@@ -864,11 +829,3 @@ export const checkArtifactExamples = async (input: {
     issues
   })
 }
-
-/** One human-readable line per issue, for a test failure message or a console. */
-export const renderArtifactExampleIssues = (
-  issues: readonly ArtifactExampleIssue[]
-): string =>
-  issues
-    .map((issue) => `${issue.path}:${issue.line} [${issue.kind}] ${issue.message}`)
-    .join('\n')

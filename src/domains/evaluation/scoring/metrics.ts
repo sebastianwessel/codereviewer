@@ -28,62 +28,49 @@ const allTiers = ExpectedFindingTierSchema.options
 const allSecurityMechanisms = SecurityMechanismSchema.options
 const allSecurityContextDepths = SecurityContextDepthSchema.options
 
-export type TierFindingCounts = {
+// Matched/expected pair for one key of a paired-recall breakdown: tier (spec
+// 06), security mechanism and security context depth (spec 15), diff scope
+// (spec 17). One shape for all four, because they differ only in their key set
+// and in what an empty denominator means — and that second difference is stated
+// by each aggregate at its call site (`ratio(..., 1)` vs `rateOrNull`) rather
+// than baked into the counts.
+//
+// There is no precision here: an admitted finding carries no tier, mechanism,
+// depth or scope label, so only recall (and its denominator) is derivable per
+// spec 15. The denominator is what makes the paired rate readable: `0.0%` over
+// 81 expectations and `n/a` over none are opposite statements about the engine.
+export type PairedFindingCounts = {
   readonly expected: number
   readonly matched: number
 }
 
-// Matched/expected pair for a single security mechanism or context depth. There
-// is no precision here: an admitted finding carries no mechanism label, so only
-// recall (and its denominator) is derivable per spec 15.
-export type SecurityFindingCounts = {
-  readonly expected: number
-  readonly matched: number
-}
+// The single place the `Object.fromEntries` assertion is written. `fromEntries`
+// widens its key type to `string`, so the assertion cannot be avoided; writing
+// it once keeps it from being re-derived — and mis-keyed — per breakdown.
+const emptyPairedCounts = <Key extends string>(
+  keys: readonly Key[]
+): Record<Key, PairedFindingCounts> =>
+  Object.fromEntries(
+    keys.map((key) => [key, { expected: 0, matched: 0 }])
+  ) as Record<Key, PairedFindingCounts>
 
 export const emptyTierCounts = (): Record<
   ExpectedFindingTier,
-  TierFindingCounts
-> =>
-  Object.fromEntries(
-    allTiers.map((tier) => [tier, { expected: 0, matched: 0 }])
-  ) as Record<ExpectedFindingTier, TierFindingCounts>
+  PairedFindingCounts
+> => emptyPairedCounts(allTiers)
 
 export const emptySecurityMechanismCounts = (): Record<
   SecurityMechanism,
-  SecurityFindingCounts
-> =>
-  Object.fromEntries(
-    allSecurityMechanisms.map((mechanism) => [
-      mechanism,
-      { expected: 0, matched: 0 }
-    ])
-  ) as Record<SecurityMechanism, SecurityFindingCounts>
+  PairedFindingCounts
+> => emptyPairedCounts(allSecurityMechanisms)
 
 export const emptySecurityContextDepthCounts = (): Record<
   SecurityContextDepth,
-  SecurityFindingCounts
-> =>
-  Object.fromEntries(
-    allSecurityContextDepths.map((depth) => [depth, { expected: 0, matched: 0 }])
-  ) as Record<SecurityContextDepth, SecurityFindingCounts>
+  PairedFindingCounts
+> => emptyPairedCounts(allSecurityContextDepths)
 
-// Matched/expected pair per diff scope (spec 17). Same shape as the tier and
-// security records, and the denominator is what makes the paired recall rate
-// readable: `0.0%` over 81 expectations and `n/a` over none are opposite
-// statements about the engine.
-export type DiffScopeFindingCounts = {
-  readonly expected: number
-  readonly matched: number
-}
-
-export const emptyDiffScopeCounts = (): Record<
-  DiffScope,
-  DiffScopeFindingCounts
-> =>
-  Object.fromEntries(
-    allDiffScopes.map((scope) => [scope, { expected: 0, matched: 0 }])
-  ) as Record<DiffScope, DiffScopeFindingCounts>
+export const emptyDiffScopeCounts = (): Record<DiffScope, PairedFindingCounts> =>
+  emptyPairedCounts(allDiffScopes)
 
 const clampRate = (value: unknown): unknown =>
   typeof value === 'number' && Number.isFinite(value)
@@ -110,7 +97,10 @@ const TierRateSchema = z
     >
   )
 
-const SecurityFindingCountsSchema = z.strictObject({
+// Wire shape of `PairedFindingCounts`, shared by every paired-recall breakdown
+// for the same reason the type is: a mechanism's counts and a diff scope's
+// counts are the same fact about a different key set.
+const PairedFindingCountsSchema = z.strictObject({
   expected: z.int().min(0),
   matched: z.int().min(0)
 })
@@ -143,7 +133,7 @@ const SecurityMechanismRateSchema = z
   )
 
 const SecurityMechanismCountsSchema = z
-  .record(SecurityMechanismSchema, SecurityFindingCountsSchema)
+  .record(SecurityMechanismSchema, PairedFindingCountsSchema)
   .default(() => emptySecurityMechanismCounts())
 
 const SecurityFindingMechanismCountsSchema = z.strictObject({
@@ -195,13 +185,8 @@ const SecurityContextDepthRateSchema = z
   )
 
 const SecurityContextDepthCountsSchema = z
-  .record(SecurityContextDepthSchema, SecurityFindingCountsSchema)
+  .record(SecurityContextDepthSchema, PairedFindingCountsSchema)
   .default(() => emptySecurityContextDepthCounts())
-
-const DiffScopeFindingCountsSchema = z.strictObject({
-  expected: z.int().min(0),
-  matched: z.int().min(0)
-})
 
 // Diff-scope recall (spec 17) is NULLABLE per scope, unlike the tier and
 // security records, and that is the whole point of the field. The engine's
@@ -220,7 +205,7 @@ const DiffScopeRateSchema = z
   )
 
 const DiffScopeCountsSchema = z
-  .record(DiffScopeSchema, DiffScopeFindingCountsSchema)
+  .record(DiffScopeSchema, PairedFindingCountsSchema)
   .default(() => emptyDiffScopeCounts())
 
 const severityWeights: Readonly<Record<Severity, number>> = {
@@ -615,18 +600,15 @@ export type EvalMetricCaseResult = {
   // Numerator/denominator of fixApplyFailureRate.
   readonly fixApplyFailedCount: number
   readonly fixApplyAttemptedCount: number
-  readonly tierCounts: Record<ExpectedFindingTier, TierFindingCounts>
+  readonly tierCounts: Record<ExpectedFindingTier, PairedFindingCounts>
   // Security-dimension tallies (spec 15): matched/expected counts for the
   // case's security-category expected findings, bucketed by mechanism and by
   // context depth. Derived from the match result joined to the labelled expected
   // findings. Non-security expected findings never appear here.
-  readonly securityMechanismCounts: Record<
-    SecurityMechanism,
-    SecurityFindingCounts
-  >
+  readonly securityMechanismCounts: Record<SecurityMechanism, PairedFindingCounts>
   readonly securityContextDepthCounts: Record<
     SecurityContextDepth,
-    SecurityFindingCounts
+    PairedFindingCounts
   >
   // Per-mechanism precision tallies over the case's ADMITTED findings (spec 15).
   // Built by `securityFindingMechanismCountsForCase`; see that function for the
@@ -638,7 +620,7 @@ export type EvalMetricCaseResult = {
   // Diff-scope tallies (spec 17): matched/expected per in-diff, out-of-diff and
   // undetermined, derived from the case's own reviewed diff joined to the match
   // result. Aggregated exactly like `tierCounts`.
-  readonly diffScopeCounts: Record<DiffScope, DiffScopeFindingCounts>
+  readonly diffScopeCounts: Record<DiffScope, PairedFindingCounts>
   readonly noFindingZoneFalsePositiveCount: number
   readonly changedLineCount: number
   readonly diffHunkCount: number
@@ -854,9 +836,61 @@ const severityWeightTotals = (
   }
 }
 
+/**
+ * Sum one paired-recall breakdown across cases: a rate per key and the counts
+ * the rate was computed from.
+ *
+ * `rate` is a PARAMETER rather than a fixed choice because the empty-denominator
+ * decision is the only genuine difference between the four breakdowns, and it is
+ * a measurement decision each caller must state out loud. `ratio(m, e, 1)` says
+ * "nothing expected means nothing was missed"; `rateOrNull` says "nobody
+ * measured this", which is what keeps a mechanism the corpus never tested from
+ * reading like one the reviewer missed every time. Burying either in a shared
+ * body would make one of those statements by default.
+ */
+const pairedTotals = <Key extends string, Rate extends number | null>(
+  keys: readonly Key[],
+  caseResults: readonly EvalMetricCaseResult[],
+  select: (result: EvalMetricCaseResult) => Record<Key, PairedFindingCounts>,
+  rate: (matched: number, expected: number) => Rate
+): {
+  readonly rates: Record<Key, Rate>
+  readonly counts: Record<Key, PairedFindingCounts>
+} => {
+  const counts = Object.fromEntries(
+    keys.map((key) => [
+      key,
+      {
+        expected: sum(caseResults.map((result) => select(result)[key].expected)),
+        matched: sum(caseResults.map((result) => select(result)[key].matched))
+      }
+    ])
+  ) as Record<Key, PairedFindingCounts>
+
+  return {
+    rates: Object.fromEntries(
+      keys.map((key) => [key, rate(counts[key].matched, counts[key].expected)])
+    ) as Record<Key, Rate>,
+    counts
+  }
+}
+
+// The product tiers as a set OF TIERS, so a member that is not a real tier fails
+// to compile. `productRecallTiers.includes(tier)` cannot express that: its
+// parameter is the narrow tuple union, so it rejects the wider
+// `ExpectedFindingTier` and needs a `readonly string[]` cast that throws the
+// check away along with the error.
+const productRecallTierSet: ReadonlySet<ExpectedFindingTier> = new Set(
+  productRecallTiers
+)
+
 // Tier recall (spec 06). One aggregation feeds all three published fields, so
 // the per-tier rates, the product roll-up and the nit rate can never disagree
 // about the same tier's counts.
+//
+// The empty value is 1, matching `recall` and `TierRateSchema`'s own
+// non-nullable default, rather than the `rateOrNull` the security and
+// diff-scope breakdowns use. That difference is stated at the call site below.
 const tierRecallTotals = (
   caseResults: readonly EvalMetricCaseResult[]
 ): {
@@ -864,33 +898,21 @@ const tierRecallTotals = (
   readonly productRecall: number
   readonly nitRecall: number
 } => {
-  const tierTotals = allTiers.map((tier) => {
-    const expected = sum(
-      caseResults.map((result) => result.tierCounts[tier].expected)
-    )
-    const matched = sum(
-      caseResults.map((result) => result.tierCounts[tier].matched)
-    )
-
-    return { tier, expected, matched }
-  })
   // Rate fields are clamped to [0,1] by RateSchema at validation, so these
   // ratios are written plainly; see RateSchema for why clamping is required.
-  const recallByTier = Object.fromEntries(
-    tierTotals.map(({ tier, expected, matched }) => [
-      tier,
-      ratio(matched, expected, 1)
-    ])
-  ) as Record<ExpectedFindingTier, number>
-  const productTierTotals = tierTotals.filter((entry) =>
-    (productRecallTiers as readonly string[]).includes(entry.tier)
+  const { rates: recallByTier, counts } = pairedTotals(
+    allTiers,
+    caseResults,
+    (result) => result.tierCounts,
+    (matched, expected) => ratio(matched, expected, 1)
   )
+  const productTiers = allTiers.filter((tier) => productRecallTierSet.has(tier))
 
   return {
     recallByTier,
     productRecall: ratio(
-      sum(productTierTotals.map((entry) => entry.matched)),
-      sum(productTierTotals.map((entry) => entry.expected)),
+      sum(productTiers.map((tier) => counts[tier].matched)),
+      sum(productTiers.map((tier) => counts[tier].expected)),
       1
     ),
     nitRecall: recallByTier.nit
@@ -904,38 +926,18 @@ const securityMechanismRecallTotals = (
   caseResults: readonly EvalMetricCaseResult[]
 ): {
   readonly securityRecallByMechanism: Record<SecurityMechanism, number | null>
-  readonly securityMechanismCounts: Record<
-    SecurityMechanism,
-    SecurityFindingCounts
-  >
+  readonly securityMechanismCounts: Record<SecurityMechanism, PairedFindingCounts>
 } => {
-  const securityMechanismTotals = allSecurityMechanisms.map((mechanism) => ({
-    mechanism,
-    expected: sum(
-      caseResults.map(
-        (result) => result.securityMechanismCounts[mechanism].expected
-      )
-    ),
-    matched: sum(
-      caseResults.map(
-        (result) => result.securityMechanismCounts[mechanism].matched
-      )
-    )
-  }))
+  const { rates, counts } = pairedTotals(
+    allSecurityMechanisms,
+    caseResults,
+    (result) => result.securityMechanismCounts,
+    rateOrNull
+  )
 
   return {
-    securityRecallByMechanism: Object.fromEntries(
-      securityMechanismTotals.map(({ mechanism, expected, matched }) => [
-        mechanism,
-        rateOrNull(matched, expected)
-      ])
-    ) as Record<SecurityMechanism, number | null>,
-    securityMechanismCounts: Object.fromEntries(
-      securityMechanismTotals.map(({ mechanism, expected, matched }) => [
-        mechanism,
-        { expected, matched }
-      ])
-    ) as Record<SecurityMechanism, SecurityFindingCounts>
+    securityRecallByMechanism: rates,
+    securityMechanismCounts: counts
   }
 }
 
@@ -951,56 +953,41 @@ const securityContextDepthRecallTotals = (
   >
   readonly securityContextDepthCounts: Record<
     SecurityContextDepth,
-    SecurityFindingCounts
+    PairedFindingCounts
   >
   readonly securityObviousRecall: number | null
   readonly securityHardRecall: number | null
   readonly securityObviousCount: number
   readonly securityHardCount: number
 } => {
-  const securityContextDepthTotals = allSecurityContextDepths.map((depth) => ({
-    depth,
-    expected: sum(
-      caseResults.map(
-        (result) => result.securityContextDepthCounts[depth].expected
-      )
-    ),
-    matched: sum(
-      caseResults.map(
-        (result) => result.securityContextDepthCounts[depth].matched
-      )
-    )
-  }))
-  const obviousDepthTotals = securityContextDepthTotals.filter((entry) =>
-    isObviousSecurityContextDepth(entry.depth)
+  const { rates, counts } = pairedTotals(
+    allSecurityContextDepths,
+    caseResults,
+    (result) => result.securityContextDepthCounts,
+    rateOrNull
   )
-  const hardDepthTotals = securityContextDepthTotals.filter(
-    (entry) => !isObviousSecurityContextDepth(entry.depth)
+  const obviousDepths = allSecurityContextDepths.filter(
+    isObviousSecurityContextDepth
+  )
+  const hardDepths = allSecurityContextDepths.filter(
+    (depth) => !isObviousSecurityContextDepth(depth)
   )
   const securityObviousExpected = sum(
-    obviousDepthTotals.map((entry) => entry.expected)
+    obviousDepths.map((depth) => counts[depth].expected)
   )
-  const securityHardExpected = sum(hardDepthTotals.map((entry) => entry.expected))
+  const securityHardExpected = sum(
+    hardDepths.map((depth) => counts[depth].expected)
+  )
 
   return {
-    securityRecallByContextDepth: Object.fromEntries(
-      securityContextDepthTotals.map(({ depth, expected, matched }) => [
-        depth,
-        rateOrNull(matched, expected)
-      ])
-    ) as Record<SecurityContextDepth, number | null>,
-    securityContextDepthCounts: Object.fromEntries(
-      securityContextDepthTotals.map(({ depth, expected, matched }) => [
-        depth,
-        { expected, matched }
-      ])
-    ) as Record<SecurityContextDepth, SecurityFindingCounts>,
+    securityRecallByContextDepth: rates,
+    securityContextDepthCounts: counts,
     securityObviousRecall: rateOrNull(
-      sum(obviousDepthTotals.map((entry) => entry.matched)),
+      sum(obviousDepths.map((depth) => counts[depth].matched)),
       securityObviousExpected
     ),
     securityHardRecall: rateOrNull(
-      sum(hardDepthTotals.map((entry) => entry.matched)),
+      sum(hardDepths.map((depth) => counts[depth].matched)),
       securityHardExpected
     ),
     securityObviousCount: securityObviousExpected,
@@ -1099,31 +1086,18 @@ const diffScopeRecallTotals = (
   caseResults: readonly EvalMetricCaseResult[]
 ): {
   readonly recallByDiffScope: Record<DiffScope, number | null>
-  readonly diffScopeCounts: Record<DiffScope, DiffScopeFindingCounts>
+  readonly diffScopeCounts: Record<DiffScope, PairedFindingCounts>
 } => {
-  const diffScopeTotals = allDiffScopes.map((scope) => ({
-    scope,
-    expected: sum(
-      caseResults.map((result) => result.diffScopeCounts[scope].expected)
-    ),
-    matched: sum(
-      caseResults.map((result) => result.diffScopeCounts[scope].matched)
-    )
-  }))
+  const { rates, counts } = pairedTotals(
+    allDiffScopes,
+    caseResults,
+    (result) => result.diffScopeCounts,
+    rateOrNull
+  )
 
   return {
-    recallByDiffScope: Object.fromEntries(
-      diffScopeTotals.map(({ scope, expected, matched }) => [
-        scope,
-        rateOrNull(matched, expected)
-      ])
-    ) as Record<DiffScope, number | null>,
-    diffScopeCounts: Object.fromEntries(
-      diffScopeTotals.map(({ scope, expected, matched }) => [
-        scope,
-        { expected, matched }
-      ])
-    ) as Record<DiffScope, DiffScopeFindingCounts>
+    recallByDiffScope: rates,
+    diffScopeCounts: counts
   }
 }
 

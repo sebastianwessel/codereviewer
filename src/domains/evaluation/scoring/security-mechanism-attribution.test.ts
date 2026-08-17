@@ -105,6 +105,27 @@ describe('security mechanism attribution', () => {
     expect(counts.injection.matched).toBe(1)
   })
 
+  // The one input on which the tally and the attribution helper were free to
+  // disagree while the tally kept its own copy of the precedence rule: an
+  // expectation that states no mechanism, on a finding whose CWE does. Neither
+  // half counts it — a CWE cannot supply a label the ground truth withheld, and
+  // a matched finding never reaches the false-positive denominator even when it
+  // is listed there.
+  test('leaves a matched finding whose expectation states no mechanism uncounted', () => {
+    const counts = securityFindingMechanismCountsForCase({
+      admittedFindings: [finding({ id: 'f1', cwe: ['CWE-918'] })],
+      expectedFindings: [expected()],
+      matches: [{ expectedIndex: 0, findingId: 'f1' }],
+      genuineFalsePositiveFindingIds: ['f1']
+    })
+
+    expect(counts.ssrf).toEqual({ matched: 0, genuineFalsePositive: 0 })
+    expect(counts[UNATTRIBUTED_SECURITY_MECHANISM]).toEqual({
+      matched: 0,
+      genuineFalsePositive: 0
+    })
+  })
+
   test('buckets an unattributable genuine false positive under unknown', () => {
     const counts = securityFindingMechanismCountsForCase({
       admittedFindings: [finding({ id: 'f1' })],

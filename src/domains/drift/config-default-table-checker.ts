@@ -1,5 +1,12 @@
+import type { ZodType } from 'zod'
 import { z } from 'zod'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
+import {
+  definitionOf,
+  unwrapSchemaOnce
+} from '../../shared/zod/schema-internals.js'
+import { minimumExemptionReasonLength } from './declared-exemption.js'
+import { documentIssueSchema } from './document-issue.js'
 import { collectTextFiles, type TextFile } from './markdown-sources.js'
 
 // Checks the DEFAULT COLUMN of the configuration reference tables against the
@@ -46,16 +53,11 @@ export const ConfigDefaultTableIssueKindSchema = z.enum([
   'no-tables-found'
 ])
 
-export const ConfigDefaultTableIssueSchema = z.strictObject({
-  kind: ConfigDefaultTableIssueKindSchema,
-  // Repository-relative, POSIX-separated.
-  path: z.string().min(1),
-  // 1-based line of the table row. An `undocumented-schema-key` issue has no row
-  // to point at and names line 1 of the reference root, which is the only line it
-  // can name.
-  line: z.int().min(1),
-  message: z.string().min(1)
-})
+// `line` is the table row. An `undocumented-schema-key` issue has no row to point
+// at and names line 1 of the reference root, which is the only line it can name.
+export const ConfigDefaultTableIssueSchema = documentIssueSchema(
+  ConfigDefaultTableIssueKindSchema
+)
 
 export const ConfigDefaultTableCheckResultSchema = z.strictObject({
   // Tables whose header is `Key | Type | Default | ...`, across every scanned
@@ -146,11 +148,6 @@ const noLiteralDefaultTag = 'no-literal-default'
 const coversSubtreeTag = 'covers-subtree'
 const exemptionPattern = /<!--\s*(no-literal-default|covers-subtree)\b([^]*?)-->/u
 
-// A reason short enough to be a shrug is not a reason. The length is
-// `artifact-example-checker.ts`'s, for its reason: without it the escape hatch
-// becomes a silent skip list with extra characters.
-const minimumExemptionReasonLength = 20
-
 // The two spellings that assert the schema carries NO default. They are distinct
 // claims and are checked as such: `*required*` also asserts the key must be
 // supplied, which `*unset*` denies.
@@ -176,18 +173,6 @@ export type SchemaLeaf = {
   // A leaf with neither a default nor an `optional` wrapper must be supplied.
   readonly required: boolean
 }
-
-type ZodInternals = {
-  readonly def: {
-    readonly type: string
-    readonly innerType?: unknown
-    readonly defaultValue?: unknown
-  }
-  readonly shape?: Record<string, unknown>
-  readonly unwrap?: () => unknown
-}
-
-const internals = (schema: unknown): ZodInternals => schema as ZodInternals
 
 export type SchemaInventory = {
   readonly leaves: readonly SchemaLeaf[]
@@ -227,16 +212,28 @@ export const configSchemaInventory = (): SchemaInventory => {
   const leaves: SchemaLeaf[] = []
   const objectPaths = new Set<string>()
 
-  const visit = (schema: unknown, prefix: string): void => {
+  const visit = (schema: ZodType, prefix: string): void => {
     let node = schema
     let hasDefault = false
     let defaultValue: unknown
-    let optional = false
+    // Undefined until a wrapper says. The OUTERMOST claim wins, as the default's
+    // does; while every wrapper this loop read could only make a key optional,
+    // "the first one seen" and "any one seen" were the same rule.
+    let optional: boolean | undefined
 
-    // Peel `optional`, `default` and `prefault` until an object or a leaf is
-    // reached. The OUTERMOST default wins, which is the one Zod applies.
+    // Peel wrappers until an object or a leaf is reached, reading what each layer
+    // claims on the way past. The OUTERMOST default wins, which is the one Zod
+    // applies.
+    //
+    // The peel set is `shared/zod/schema-internals.ts`'s, which is WIDER than the
+    // `default | prefault | optional | nullable` this loop used to stop at. No
+    // configuration key reaches one of the additional wrappers today, so the
+    // inventory is unchanged; the day one does — a `.readonly()`, a `.catch()`, a
+    // pipe at an object position — the old loop would have stopped at the wrapper
+    // and recorded a leaf with no default, firing `undocumented-schema-key` and
+    // `documented-default-mismatch` on a page that was correct.
     for (;;) {
-      const { def, unwrap } = internals(node)
+      const def = definitionOf(node)
 
       if (def.type === 'default' || def.type === 'prefault') {
         if (!hasDefault) {
@@ -247,28 +244,35 @@ export const configSchemaInventory = (): SchemaInventory => {
               : def.defaultValue
         }
 
-        optional = true
+        optional ??= true
       } else if (def.type === 'optional' || def.type === 'nullable') {
-        optional = true
-      } else {
+        optional ??= true
+      } else if (def.type === 'nonoptional') {
+        // The one wrapper in the wider set that RETRACTS what an inner one says.
+        // Walking past it unread would report
+        // `z.string().optional().nonoptional()` as optional on the strength of
+        // the wrapper it overrides; the loop used to stop at it and call the key
+        // required, which is what Zod does.
+        optional ??= false
+      }
+
+      const inner = unwrapSchemaOnce(node)
+
+      if (inner === undefined) {
         break
       }
 
-      if (unwrap === undefined) {
-        break
-      }
-
-      node = unwrap.call(node)
+      node = inner
     }
 
-    const { def, shape } = internals(node)
+    const def = definitionOf(node)
 
-    if (def.type === 'object' && shape !== undefined) {
+    if (def.type === 'object' && def.shape !== undefined) {
       if (prefix !== '') {
         objectPaths.add(prefix)
       }
 
-      for (const [key, child] of Object.entries(shape)) {
+      for (const [key, child] of Object.entries(def.shape)) {
         visit(child, prefix === '' ? key : `${prefix}.${key}`)
       }
 
@@ -279,7 +283,7 @@ export const configSchemaInventory = (): SchemaInventory => {
       key: prefix,
       hasDefault,
       defaultValue,
-      required: !optional
+      required: optional !== true
     })
   }
 
@@ -512,7 +516,15 @@ const sameJsonValue = (left: unknown, right: unknown): boolean => {
   )
 }
 
-const describeValue = (value: unknown): string => JSON.stringify(value) ?? 'undefined'
+// A default as it reads inside a message: the whole value, serialised, because a
+// documented default may be an object or a list and `String({})` says nothing.
+// `undefined` has no JSON spelling, and a leaf carrying no default is exactly the
+// case a mismatch message has to name.
+//
+// NOT the same function as `artifact-example-checker.ts`'s
+// `describeValueQuotingStrings`, which quotes strings and stringifies the rest.
+// Both were called `describeValue`, in one folder, with different semantics.
+const describeValueAsJson = (value: unknown): string => JSON.stringify(value) ?? 'undefined'
 
 /**
  * Compares one documented row against the schema.
@@ -620,7 +632,7 @@ export const checkDocumentedDefaultRow = (
           {
             ...at,
             kind: 'documented-default-mismatch',
-            message: `\`${row.key}\` is documented as ${claim.kind === 'unset' ? unsetDefaultCell : requiredDefaultCell} but the schema defaults it to ${describeValue(leaf.defaultValue)}.`
+            message: `\`${row.key}\` is documented as ${claim.kind === 'unset' ? unsetDefaultCell : requiredDefaultCell} but the schema defaults it to ${describeValueAsJson(leaf.defaultValue)}.`
           }
         ]
       }
@@ -651,7 +663,7 @@ export const checkDocumentedDefaultRow = (
         {
           ...at,
           kind: 'documented-default-mismatch',
-          message: `\`${row.key}\` is documented with the default ${describeValue(claim.value)} but the schema carries no default for it — it is ${leaf.required ? requiredDefaultCell : unsetDefaultCell}.`
+          message: `\`${row.key}\` is documented with the default ${describeValueAsJson(claim.value)} but the schema carries no default for it — it is ${leaf.required ? requiredDefaultCell : unsetDefaultCell}.`
         }
       ]
     }
@@ -667,7 +679,7 @@ export const checkDocumentedDefaultRow = (
           {
             ...at,
             kind: 'documented-default-mismatch',
-            message: `\`${row.key}\` is documented with the default ${describeValue(claim.value)} but the schema's default is ${describeValue(leaf.defaultValue)}.`
+            message: `\`${row.key}\` is documented with the default ${describeValueAsJson(claim.value)} but the schema's default is ${describeValueAsJson(leaf.defaultValue)}.`
           }
         ]
       }
@@ -787,11 +799,3 @@ export const countKeyTables = (file: TextFile): number =>
 
       return alignmentRowPattern.test(lines[index + 1] ?? '')
     }).length
-
-/** One human-readable line per issue, for a test failure message or a console. */
-export const renderConfigDefaultTableIssues = (
-  issues: readonly ConfigDefaultTableIssue[]
-): string =>
-  issues
-    .map((issue) => `${issue.path}:${issue.line} [${issue.kind}] ${issue.message}`)
-    .join('\n')

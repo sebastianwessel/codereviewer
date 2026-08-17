@@ -8,9 +8,9 @@ import {
   checkConfigExamples,
   checkConfigExamplesInFile,
   configScanRoots,
-  extractJsonBlocks,
-  renderConfigExampleIssues
+  extractJsonBlocks
 } from './config-example-checker.js'
+import { renderDocumentIssues } from './document-issue.js'
 import { collectTextFiles } from './markdown-sources.js'
 
 const repositoryRoot = path.resolve(
@@ -35,7 +35,7 @@ describe('documented configuration examples', () => {
   test('every configuration example and document in the scanned roots validates against the real schema', async () => {
     const result = await checkConfigExamples({ repositoryRoot })
 
-    expect(renderConfigExampleIssues(result.issues)).toBe('')
+    expect(renderDocumentIssues(result.issues)).toBe('')
     expect(result.issues).toEqual([])
   })
 

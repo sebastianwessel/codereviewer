@@ -10,9 +10,9 @@ import {
   configSchemaInventory,
   countKeyTables,
   extractDocumentedDefaultRows,
-  renderConfigDefaultTableIssues,
   type DocumentedDefaultRow
 } from './config-default-table-checker.js'
+import { renderDocumentIssues } from './document-issue.js'
 import type { TextFile } from './markdown-sources.js'
 
 const repositoryRoot = path.resolve(
@@ -52,7 +52,7 @@ describe('documented configuration defaults', () => {
   test('every documented default on the reference pages matches the schema', async () => {
     const result = await checkConfigDefaultTables({ repositoryRoot })
 
-    expect(renderConfigDefaultTableIssues(result.issues)).toBe('')
+    expect(renderDocumentIssues(result.issues)).toBe('')
     expect(result.issues).toEqual([])
   })
 

@@ -10,7 +10,7 @@ export {
   checkArtifactExamples,
   checkArtifactExamplesInFile,
   findArtifactExampleProblems,
-  renderArtifactExampleIssues
+  type ArtifactExampleProblem
 } from './artifact-example-checker.js'
 export {
   checkConfigDocumentFile,
@@ -19,7 +19,7 @@ export {
   checkConfigExamplesInFile,
   configScanRoots,
   extractJsonBlocks,
-  renderConfigExampleIssues,
+  parseJson,
   type JsonBlock
 } from './config-example-checker.js'
 export {
@@ -29,11 +29,15 @@ export {
   configSchemaInventory,
   countKeyTables,
   extractDocumentedDefaultRows,
-  renderConfigDefaultTableIssues,
   type DocumentedDefaultRow,
   type SchemaInventory,
   type SchemaLeaf
 } from './config-default-table-checker.js'
+// One renderer for all three checkers' issues, which share one shape.
+export {
+  renderDocumentIssues,
+  type DocumentIssue
+} from './document-issue.js'
 export type {
   TextFile
 } from './markdown-sources.js'

@@ -255,14 +255,28 @@ export const securityFindingMechanismCountsForCase = (input: {
 
   for (const finding of input.admittedFindings) {
     const matchedExpected = expectedByFindingId.get(finding.id)
+    // The precedence rule lives in `attributeSecurityMechanism` and nowhere
+    // else. This loop used to reimplement its matched-expectation branch inline,
+    // which left the two free to drift with a green suite; both halves of the
+    // decision below are read off the ONE attribution.
+    const { bucket, source } = attributeSecurityMechanism({
+      matchedExpected,
+      cwe: finding.cwe
+    })
 
     if (matchedExpected !== undefined) {
-      if (matchedExpected.securityMechanism === undefined) {
+      // A matched expectation that states no mechanism is not counted: its CWE
+      // fallback would credit the numerator with a mechanism the ground truth
+      // never claimed, and `securityRecallByMechanism` — the other half of this
+      // ratio — counts the same pair only under the label the expectation
+      // carries. `source` is what says the label came from the expectation
+      // itself; the bucket alone cannot.
+      if (source !== 'expectation') {
         continue
       }
 
-      const current = counts[matchedExpected.securityMechanism]
-      counts[matchedExpected.securityMechanism] = {
+      const current = counts[bucket]
+      counts[bucket] = {
         ...current,
         matched: current.matched + 1
       }
@@ -276,7 +290,6 @@ export const securityFindingMechanismCountsForCase = (input: {
       continue
     }
 
-    const { bucket } = attributeSecurityMechanism({ cwe: finding.cwe })
     const current = counts[bucket]
     counts[bucket] = {
       ...current,
