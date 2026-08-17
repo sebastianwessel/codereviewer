@@ -6,21 +6,29 @@ Date: 2026-06-22
 ## Dependency Evidence
 
 Ranges are the committed `package.json`; versions, licenses, and engines are the
-resolved packages in the committed lockfile, read on 2026-07-31.
+resolved packages in the committed lockfile.
+
+**This table is pinned by `src/dependency-evidence.test.ts`**, which reads both
+files and fails when a cell disagrees with them, or when a declared package has
+no row at all. It is therefore no longer a dated snapshot — the read date it used
+to carry has been removed, because a table that cannot be stale has no reason to
+say when it was last true. The two exceptions the test does not pin are the
+license and engine of a package the lockfile does not install; those two cells
+belong to the uninstalled optional peers below and remain author-stated.
 
 | Package | Role | Declared Range | Resolved Version | License | Engine |
 | --- | --- | --- | --- | --- | --- |
-| `@purista/harness` | Workflow/agent runtime | `^1.7.1` | `1.7.1` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-openai` | Optional OpenAI adapter; optional peer, and dev-installed for this repository's local OpenAI eval/review setup | `^1.7.1` | `1.7.1` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-bedrock` | Optional Bedrock adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-azure-foundry` | Optional Azure adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness` | Workflow/agent runtime | `^1.7.3` | `1.7.3` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-openai` | Optional OpenAI adapter; optional peer, and dev-installed for this repository's local OpenAI eval/review setup | `^1.7.3` | `1.7.3` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-bedrock` | Optional Bedrock adapter; optional peer, not installed here | `^1.7.3` | not installed | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-azure-foundry` | Optional Azure adapter; optional peer, not installed here | `^1.7.3` | not installed | Apache-2.0 | `>=24.15.0` |
 | `zod` | Runtime schemas | `^4.4.3` | `4.4.3` | MIT | not declared |
-| `typescript` | Compiler and typechecker; development only | `^7.0.2` | `7.0.2` | Apache-2.0 | `>=20.0.0` |
-| `vitest` | Test runner | `^4.1.10` | `4.1.10` | MIT | `^20.0.0 || ^22.0.0 || >=24.0.0` |
+| `typescript` | Compiler and typechecker; development only | `^7.0.2` | `7.0.2` | Apache-2.0 | `>=16.20.0` |
+| `vitest` | Test runner | `^4.1.10` | `4.1.10` | MIT | `^20.0.0 \|\| ^22.0.0 \|\| >=24.0.0` |
 | `@vitest/coverage-v8` | Test coverage provider | `^4.1.10` | `4.1.10` | MIT | not declared |
-| `tsx` | Dev runner | `^4.23.1` | `4.23.1` | MIT | `>=18.0.0` |
-| `@types/node` | Node types | `^26.1.2` | `26.1.2` | MIT | not declared |
-| `@ast-grep/napi` | Optional local structural parsing layer for deterministic support signals | `^0.45.0` | `0.45.0` | MIT | `>= 10` |
+| `tsx` | Dev runner | `^4.23.12` | `4.23.12` | MIT | `>=18.0.0` |
+| `@types/node` | Node types | `^26.2.0` | `26.2.0` | MIT | not declared |
+| `@ast-grep/napi` | Optional local structural parsing layer for deterministic support signals | `^0.45.1` | `0.45.1` | MIT | `>= 10` |
 | `@ast-grep/lang-python` | Python dynamic AST grammar | `^0.0.6` | `0.0.6` | ISC | not declared |
 | `@ast-grep/lang-go` | Go dynamic AST grammar | `^0.0.6` | `0.0.6` | ISC | not declared |
 | `@ast-grep/lang-rust` | Rust dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
@@ -67,10 +75,17 @@ routine. Verified on `7.0.2`: typecheck, 1 532 tests, build, schema check and
 drift check all pass, and a published consumer compiles against the emitted
 declarations on TypeScript 6 **and** 7.
 
-The optional provider-adapter peer ranges stay at `^1.6.0` even though the
-resolved adapters are `1.7.1`. A peer range states what a host tolerates, and
-`^1.6.0` already admits `1.7.1`; narrowing it would reject working `1.6.x`
-adapters for no benefit.
+The optional provider-adapter peer ranges track the harness range itself, at
+`^1.7.3`. An adapter is loaded into this engine's own harness runtime, so the
+range a consumer is held to is the range the runtime is held to; letting the two
+drift apart would admit an adapter pairing the engine never runs.
+
+**Corrected 2026-08-17.** This paragraph said the peer ranges "stay at `^1.6.0`"
+and argued that narrowing them "would reject working `1.6.x` adapters for no
+benefit". They had already been narrowed to `^1.7.3` on 2026-06-23, five weeks
+before this section was last edited — so the spec was arguing against a
+`package.json` that had already decided otherwise, and nobody noticed because
+nothing read both. `src/dependency-evidence.test.ts` now does.
 
 ## Version Policy
 
@@ -100,10 +115,13 @@ per the evidence table above. `.nvmrc` must contain `24.15.0`, and `package.json
 table does not resolve — it resolved `1.7.1` when read on 2026-07-31, and the
 lockfile now resolves `1.7.3`. The floor is unaffected, because every harness version
 in the table declares the same `>=24.15.0`; citing the table rather than a pinned
-version is what stops the justification going stale again. The table itself is a
-dated snapshot and its refresh is owed under *Dependency updates require … dependency
-evidence refresh in this spec*; no automated check covers that drift, which
-`00-stack.md` already records about its own version table.
+version is what stops the justification going stale again.
+
+This paragraph used to end "The table itself is a dated snapshot and its refresh is
+owed …; no automated check covers that drift." That was true, and by 2026-08-17 eight
+of the table's sixteen rows had drifted. `src/dependency-evidence.test.ts` now covers
+it, so the table is a checked statement rather than a snapshot. `00-stack.md` records
+the same gap about its own version table and still has it.
 
 ## Supply Chain Requirements
 

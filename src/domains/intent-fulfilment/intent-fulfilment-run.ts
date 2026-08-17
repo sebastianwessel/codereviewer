@@ -411,9 +411,30 @@ const resolveCitedObligations = (
   // REFUSE rather than report a short checklist. Reporting the first
   // `maxObligations` under-reports what is left, which is the one direction this
   // command must not err in — see `intent-limits.ts`.
-  if (cited.length >= maxObligations) {
+  //
+  // Measured on `extracted`, NOT on `cited`. `maxObligations` is the ceiling the
+  // EXTRACTION prompt was given (`obligationExtractionInputFor`), so the question
+  // this guard asks is "did the model hit its ceiling?" — and only `extracted`
+  // still answers it. `cited` is what survived the citation filter above, so a
+  // single uncitable obligation took a capped run from `maxObligations` down to
+  // `maxObligations - 1` and the refusal did not fire. The run then published
+  // `obligationsTruncated: false` over a checklist that really was cut off, which
+  // is the exact claim `intent-fulfilment-report.ts` calls always-false on the
+  // grounds that a bound run throws here.
+  //
+  // Not hypothetical: the note beside that flag records that 24 of 28 runs on the
+  // 2026-08-01 corpus returned EXACTLY the cap, so the only thing standing between
+  // the common case and a silently short checklist was every obligation citing
+  // cleanly.
+  //
+  // One filter remains upstream and is left deliberately: `normalizeObligationExtraction`
+  // drops entries with a blank statement or an unusable line before this function
+  // sees them. Closing that too would mean widening `ObligationExtractionRunner` to
+  // report a raw count, and a malformed entry is a model emitting garbage rather
+  // than an obligation the cap suppressed.
+  if (extracted.length >= maxObligations) {
     throw tooManyObligationsError({
-      obligationCount: cited.length,
+      obligationCount: extracted.length,
       maxObligations
     })
   }

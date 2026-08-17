@@ -510,6 +510,52 @@ describe('intent fulfilment run', () => {
     }
   })
 
+  test('one uncitable obligation does not hide the cap binding', async () => {
+    // The refusal above was measured on the obligations that SURVIVED citation
+    // resolution, and the cap is the ceiling the extraction prompt was given. One
+    // obligation citing a line that does not exist therefore took a capped run
+    // from `maxObligations` to `maxObligations - 1`, the refusal did not fire, and
+    // the report published `obligationsTruncated: false` over a checklist that was
+    // genuinely cut short — the one direction this command must not err in.
+    //
+    // The window is not narrow: 24 of 28 runs on the 2026-08-01 corpus returned
+    // exactly the cap, so the only thing preventing this was every obligation
+    // citing cleanly.
+    const root = await createRepository()
+
+    try {
+      const agents = scriptedAgents({
+        obligations: [
+          // Line 1 of the ticket body. Cites cleanly.
+          { origin: 'inbox:tracker/A-1', line: 1, statement: 'First.' },
+          // The ticket body has two lines, so this one resolves to nothing and is
+          // dropped before the old guard counted.
+          { origin: 'inbox:tracker/A-1', line: 99, statement: 'Uncitable.' }
+        ],
+        judgements: [{ status: 'not-evidenced' }, { status: 'not-evidenced' }]
+      })
+
+      await expect(
+        run(root, {
+          config: configWith({
+            intentFulfilment: { enabled: true, maxObligations: 2 }
+          }),
+          agents
+        })
+      ).rejects.toMatchObject({
+        code: 'intent_too_many_obligations',
+        exitCode: 4,
+        // The count reported is what the model returned, which is what the cap
+        // bound — not the one that happened to cite.
+        details: { obligationCount: 2, maxObligations: 2 }
+      })
+
+      expect(agents.judgementPackets).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   // The sibling of the unreadable-file warning, which has counted from the start.
   // A changed file the diff parser produced no hunks for was dropped in silence:
   // it contributes no citable line AND no extra-scope row, so a file the change
