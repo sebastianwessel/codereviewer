@@ -127,8 +127,8 @@ These candidates were neither proved nor disproved from the available context, m
 - Proposed by: review-agent
 - Why unresolved: needs-more-evidence - Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
 - Evidence gathered so far:
-  - citation: audit: \${message.trim\\(\\)}
-  - model-rationale: Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
+  - citation at \`src/audit.ts:2\`: audit: \${message.trim\\(\\)}
+  - model-rationale at \`src/audit.ts:2\`: Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
 
 auditLine now trims the message, so a caller that pads it loses the padding.
 

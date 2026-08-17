@@ -150,8 +150,13 @@ jobs:
       - name: Typecheck
         run: npm run lint
 
+      # `test:coverage`, not `test`. The thresholds in `vitest.config.ts` were
+      # configured and then run by nothing — no npm script and no workflow step —
+      # so the docs said coverage was "enforced at 80%" while a change could drop
+      # it to any figure and stay green. Same suite, same runtime; the only
+      # difference is that the floor now has something standing on it.
       - name: Test
-        run: npm test
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build

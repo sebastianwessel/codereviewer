@@ -345,11 +345,21 @@ artifact turns the check into the thing it replaced.
 ## Coverage
 
 ```bash
-npx vitest run --coverage
+npm run test:coverage
 ```
 
-Thresholds are enforced at 80% for lines, branches, functions and statements
-over `src/**/*.ts`, excluding test files and `src/cli/main.ts`.
+The same suite as `npm test`, with the thresholds in `vitest.config.ts` applied.
+**This is what CI runs** — `pr-checks.yml` and `publish.yml` both call it in place
+of `npm test`, so the floors below are a gate rather than a preference.
+
+They were neither until 2026-08-17: the thresholds were configured, no script and
+no workflow step ever ran them, and this page said they were "enforced at 80%".
+
+Floors are set just under the measured figures rather than at a round number.
+Measured 2026-08-17 over 2 862 tests: statements 96.48%, branches 87.69%,
+functions 97.64%, lines 96.49%. The floors are 95% for lines, functions and
+statements and 85% for branches, over `src/**/*.ts`, excluding test files and
+`src/cli/main.ts`. A floor at 80% against a real 96% is a gate that cannot fire.
 
 ---
 
@@ -472,7 +482,6 @@ npm run cli -- eval recall-report --report .codereviewer/eval/eval-report.json
 | `npm run provider:install:openai` | Install `@purista/harness-openai` |
 | `npm run provider:install:bedrock` | Install `@purista/harness-bedrock` |
 | `npm run provider:install:azure` | Install `@purista/harness-azure-foundry` |
-| `npm run dev` | Run `src/index.ts` under `tsx` |
 
 ---
 
