@@ -21,7 +21,7 @@
 // write into the other's tree or read the other's manifest. What is shared is the
 // procedure, which is the part that must not drift; what is separate is the data,
 // which is the part that must not be pooled.
-import { readFile, writeFile } from 'node:fs/promises'
+import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { LaneUsage } from '../domains/costs/index.js'
 import {
@@ -30,7 +30,6 @@ import {
 } from '../domains/evaluation/index.js'
 import type { Logger } from '../domains/observability/index.js'
 import type { ProviderImport } from '../domains/provider-resolution/index.js'
-import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
 import type { CodeReviewerConfig } from '../shared/contracts/index.js'
 import { stableJsonDigest } from '../shared/json/stable-json-digest.js'
 import type { AdvisoryModelLane } from './advisory-lane.js'
@@ -49,6 +48,7 @@ import {
   type LoadedCodeReviewerConfig
 } from './command-config.js'
 import { createCliLogger, resolveLogSink } from './command-logging.js'
+import { readCorpusManifest } from './corpus-manifest-source.js'
 import { createEvalRunArchiveId } from './eval-run-archive-id.js'
 import {
   ensureDirectory,
@@ -251,10 +251,12 @@ export const runAdvisoryEvalCommand = async <
       sink: await resolveLogSink(options, logFileOverride.logFile)
     })
     const manifest = descriptor.parseManifest(
-      await readFile(
-        await resolveExistingPathInsideRoot(options.cwd, manifestPath),
-        'utf8'
-      )
+      await readCorpusManifest({
+        cwd: options.cwd,
+        manifestPath,
+        commandName: descriptor.name,
+        isDefaultPath: parseOptionValue(corpusArgs, '--manifest') === undefined
+      })
     )
     const selectedCases = selectCorpusCases(manifest.cases, caseFilters)
 
