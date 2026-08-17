@@ -105,6 +105,35 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
     ])
   })
 
+  test('stays quiet when the model summary was never asked for and model review is off', async () => {
+    // `summary.mode` omitted with a provider configured resolves to `model` HERE,
+    // in `selectSummarizer`, not in anything the operator wrote. Reporting the
+    // digest as a degradation from that is a warning about a request nobody made
+    // — and `provider` + `aiReview.enabled: false` is an ordinary
+    // deterministic-only run, not a misconfiguration.
+    const config = CodeReviewerConfigSchema.parse({
+      provider: { id: 'openai', model: 'gpt-x' },
+      aiReview: { enabled: false },
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }]
+      }
+    })
+    const { logger } = createCapturingLogger()
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger
+    })
+
+    expect(result.warnings).toEqual([])
+  })
+
   test('stays quiet when the digest is the deliberate choice', async () => {
     // The counterweight: a warning that fires on a setting the operator chose on
     // purpose trains people to ignore warnings.
@@ -398,6 +427,109 @@ describe('prepareReviewRunnerChangeIntentContext — provider bounds', () => {
     ])
 
     expect(result.warnings).toEqual([])
+  })
+})
+
+// A PROVIDER THAT GATHERED NOTHING: the same run, twice, differing only in
+// whether the operator wrote `contextSources.providers` down.
+//
+// Both providers are on by default since 2026-08-11 and both find nothing on a
+// repository with no `.codereviewer/context` directory and a change touching no
+// markdown, which is nearly every repository. The warning therefore fired twice
+// on nearly every run, in `report.md`'s "Bounds that bound" — the section that
+// means "reasons this review was thinner than usual". What it guards against, a
+// mistyped directory looking exactly like an absent one, is preserved by the
+// explicitness signal instead: a typo is always something a human typed.
+describe('prepareReviewRunnerChangeIntentContext — a provider that gathered nothing', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'change-intent-empty-'))
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const runWith = async (explicitlyConfigured: boolean | undefined) => {
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        // The directory does not exist under `root`: the provider resolves
+        // nothing, matches nothing and does not fail — the shape a mistyped
+        // `dir` produces and the shape an ordinary repository produces.
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+
+    return prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      ...(explicitlyConfigured === undefined
+        ? {}
+        : { contextProvidersExplicitlyConfigured: explicitlyConfigured }),
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger: createCapturingLogger().logger
+    })
+  }
+
+  test('says nothing when the provider set was defaulted', async () => {
+    expect((await runWith(false)).warnings).toEqual([])
+  })
+
+  test('reads a missing flag as defaulted, like the baseline flag does', async () => {
+    expect((await runWith(undefined)).warnings).toEqual([])
+  })
+
+  test('still names the provider when the operator configured it', async () => {
+    const result = await runWith(true)
+
+    expect(result.warnings).toEqual([
+      'External change-intent provider "inbox:.codereviewer/context" found no change-intent source, so the review ran without one. This provider is configured in this repository, so check where it points if you expected content.'
+    ])
+  })
+
+  test('counts the quiet provider in observability whether or not it warned', async () => {
+    // The count and the warning answer different questions, and after this
+    // amendment they no longer agree. `unusedProviders` says what happened;
+    // the warning says what was worth telling a human. Deriving the first from
+    // the second — which is how it used to be computed — would report the
+    // ordinary run as having no unused provider at all.
+    const observability = createNoContentEventRecorder()
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      contextProvidersExplicitlyConfigured: false,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability,
+      logger: createCapturingLogger().logger
+    })
+
+    expect(result.warnings).toEqual([])
+    expect(
+      observability
+        .snapshot()
+        .events.find(
+          (event) =>
+            event.type === 'step-ended' && event.step === 'context_ingestion'
+        )
+    ).toMatchObject({
+      attributes: { failedProviders: 0, unusedProviders: 1 }
+    })
   })
 })
 

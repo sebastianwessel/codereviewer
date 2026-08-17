@@ -33,6 +33,22 @@ type LoadedConfig = {
   // True when the user explicitly provided baseline settings (file/env/CLI),
   // so a missing baseline file should be reported rather than silently ignored.
   readonly baselineExplicitlyConfigured: boolean
+  // True when the user explicitly listed `contextSources.providers`
+  // (file/env/CLI), so a provider that gathers nothing is a source they asked
+  // for and did not get, rather than a schema default finding the ordinary
+  // absence it was promoted over. Same purpose as the flag above, and it exists
+  // for the same reason: after `CodeReviewerConfigSchema.parse`, a defaulted
+  // provider set and one the user restated verbatim are the same value.
+  //
+  // KEYED ON `providers`, NOT ON `enabled` — which is where it differs from the
+  // baseline flag, deliberately. `baseline.enabled` names the same single file
+  // `baseline.path` already points at, so switching it on IS asking for that
+  // file. `contextSources.enabled` names no source at all: it turns on a
+  // DEFAULTED set, so an operator who wrote only `enabled: true` still asked for
+  // nothing in particular. Every mistyped directory or glob lives inside a
+  // `providers` entry, so keying on that key is exactly what keeps a typo
+  // diagnosable.
+  readonly contextProvidersExplicitlyConfigured: boolean
 }
 
 const defaultReviewConfigPath = '.codereviewer/config.json'
@@ -417,6 +433,11 @@ export const loadCodeReviewerConfig = async (
   const baselineExplicitlyConfigured =
     isJsonObject(baselineRaw) &&
     ('path' in baselineRaw || 'enabled' in baselineRaw)
+  const contextSourcesRaw = mergedConfig.contextSources
+  // Read off the MERGED raw object, before the schema fills its defaults in —
+  // the only point on this path where "the user wrote this" is still visible.
+  const contextProvidersExplicitlyConfigured =
+    isJsonObject(contextSourcesRaw) && 'providers' in contextSourcesRaw
   const config = CodeReviewerConfigSchema.parse(mergedConfig)
 
   // The one effect this loader has beyond returning a value, and it is here
@@ -432,6 +453,7 @@ export const loadCodeReviewerConfig = async (
     config,
     environment,
     warnings,
-    baselineExplicitlyConfigured
+    baselineExplicitlyConfigured,
+    contextProvidersExplicitlyConfigured
   }
 }

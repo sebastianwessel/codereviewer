@@ -55,6 +55,8 @@ export const runSelectedEvalCases = async (
         configWarnings: input.loadedConfig.warnings,
         baselineExplicitlyConfigured:
           input.loadedConfig.baselineExplicitlyConfigured,
+        contextProvidersExplicitlyConfigured:
+          input.loadedConfig.contextProvidersExplicitlyConfigured,
         environment: input.loadedConfig.environment,
         evalCase,
         logger: input.logger.child({

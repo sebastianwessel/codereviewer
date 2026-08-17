@@ -54,8 +54,12 @@ flowchart LR
   never a review target, contributes no task path, seeds no candidate, and a finding
   located on it is discarded.
 - Only the brief is injected; raw fragments are not.
-- Every provider is optional and non-fatal: a missing directory, unreadable file, or
-  empty result surfaces as a run warning and the review proceeds without it.
+- Every provider is optional and non-fatal: a missing directory, an unreadable file
+  or an empty result leaves the review running without the brief. A provider that
+  failed always warns. A provider that simply found nothing warns only when you
+  listed `contextSources.providers` yourself — with the defaulted set, finding no
+  written change intent is the ordinary state of most repositories and is reported
+  nowhere.
 
 ## Orientation, not authorization
 

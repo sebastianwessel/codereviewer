@@ -293,19 +293,20 @@ is injected as **untrusted, informational context**. It cannot approve a
 finding, change a severity, or affect the baseline or the gate. See
 [prompt-injection-and-untrusted-input.md](../07-security/prompt-injection-and-untrusted-input.md).
 
-**Check `run.warnings` if you expected a brief and did not get one.** With
-`contextSources` on by default, a provider finding nothing is the *ordinary*
-result on a repository with no written intent, not a misconfiguration — so the
-warning text is deliberately calm about it: *"External change-intent provider
-"…" found no change-intent source, so the review ran without one. This is the
-ordinary result when a change has no written intent; if you expected content,
-check where the provider points."* Two other warnings cover the cases that
-**are** worth investigating: a provider that matched files but found nothing
-readable in them — *"External change-intent provider "…" matched N sources but
-none carried usable text, so the review ran without them. Check that those
-sources have a body below their frontmatter."* — and a provider that errored
+**Check `run.warnings` if you expected a brief and did not get one.** A pipeline
+that writes context into `.codereviewer/context/` should list the providers in
+its configuration rather than rely on the defaults, because that is what turns
+the empty case into a signal: a provider you listed which matched nothing warns
+— *"External change-intent provider "…" found no change-intent source, so the
+review ran without one. This provider is configured in this repository, so check
+where it points if you expected content."* — while the defaulted providers stay
+silent on the many repositories that simply have no written intent. Two further
+warnings fire whoever configured the provider: one that matched files but found
+nothing readable in them — *"External change-intent provider "…" matched N
+sources but none carried usable text, so the review ran without them. Check that
+those sources have a body below their frontmatter."* — and one that errored
 outright — *"External change-intent provider "…" failed and was skipped."* All
-three leave the review running without the brief and exiting normally, so the
+of them leave the review running without the brief and exiting normally, so the
 warning is the only signal that the context you paid a pipeline step to fetch
 never reached the reviewer.
 

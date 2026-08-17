@@ -96,6 +96,8 @@ export const runReview = async (
       runGit: runContext.runGit,
       configWarnings: loadedConfig.warnings,
       baselineExplicitlyConfigured: loadedConfig.baselineExplicitlyConfigured,
+      contextProvidersExplicitlyConfigured:
+        loadedConfig.contextProvidersExplicitlyConfigured,
       ...(explicitFiles === undefined ? {} : { explicitFiles }),
       ...(baseRef === undefined ? {} : { baseRef }),
       ...(headRef === undefined ? {} : { headRef }),

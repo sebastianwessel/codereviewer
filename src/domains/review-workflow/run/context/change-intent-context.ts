@@ -48,35 +48,64 @@ export type ChangeIntentContextResult = {
 // the review runs with no change-intent context and says so nowhere. The user
 // configured a source and was never told it contributed nothing.
 //
-// THREE cases, worded apart because each calls for a different action -- and
-// because since 2026-08-11 the providers are ON BY DEFAULT, so the third one is
-// what an ordinary repository sees on an ordinary run and must not read like a
-// fault the reader is expected to fix:
+// THREE cases, worded apart because each calls for a different action:
 //
-//   failed          -- the provider errored. Something is broken.
+//   failed          -- the provider errored. Something is broken. Always said.
 //   matched nothing -- it ran and found no source at all: no inbox directory, or
-//                      no changed file matching its globs. For a defaulted
-//                      provider set that is simply "this change has no written
-//                      intent", which is the common case and not a mistake. The
-//                      pointer is still named, because a MISTYPED directory
-//                      produces exactly this shape and the reader needs to be
-//                      able to tell.
+//                      no changed file matching its globs. Said only when the
+//                      operator LISTED the providers themselves; see below.
 //   matched, gave 0 -- it found sources and none of them yielded usable text
-//                      (empty bodies, frontmatter only). That is genuinely odd
-//                      and stays worded as such.
+//                      (empty bodies, frontmatter only). Genuinely odd whoever
+//                      configured it, so it is always said and keeps its own
+//                      wording.
+//
+// WHY THE MIDDLE CASE IS CONDITIONAL (amendment, 2026-08-17). Since 2026-08-11
+// the two providers are ON BY DEFAULT, and both find nothing on a repository
+// with no `.codereviewer/context` directory and a change touching no markdown —
+// which is nearly every repository, including this one. The warning therefore
+// fired twice on nearly every first run, and it landed in `report.run.warnings`,
+// which `report.md` renders under "Bounds that bound", i.e. reasons this review
+// was thinner than usual. Two lines describing a completely ordinary situation
+// sat above the disclosures that actually cost the reader something (a bound
+// that bound, a stage that degraded, a redaction), and a section whose first two
+// entries are always noise is a section people stop reading.
+//
+// The pointer still has to stay diagnosable, because a MISTYPED directory
+// produces a byte-identical shape to no directory at all. What separates them is
+// not the result but the ASKING: a typo is always something the operator typed,
+// so it always arrives with `contextSources.providers` explicitly listed. A
+// defaulted provider set finding nothing is the ordinary case and says nothing;
+// a provider the operator listed themselves and which found nothing is a source
+// they asked for and did not get, and still says so.
+//
+// `providersExplicitlyConfigured` comes from the config loader, which is the only
+// place that can tell the two apart — after the schema parses, a defaulted set
+// and a restated one are the same value. It follows `baselineExplicitlyConfigured`,
+// whose `baseline-missing` warning draws this exact line for the same reason.
 const warningsForUnusedProviders = (
-  providerMetrics: ContextIngestionResult['providerMetrics']
+  providerMetrics: ContextIngestionResult['providerMetrics'],
+  providersExplicitlyConfigured: boolean
 ): readonly string[] =>
   providerMetrics
     .filter((metric) => metric.failed || metric.fragmentCount === 0)
-    .map((metric) => {
+    .flatMap((metric) => {
       if (metric.failed) {
-        return `External change-intent provider "${metric.id}" failed and was skipped.`
+        return [
+          `External change-intent provider "${metric.id}" failed and was skipped.`
+        ]
       }
 
-      return metric.matchedCount === 0
-        ? `External change-intent provider "${metric.id}" found no change-intent source, so the review ran without one. This is the ordinary result when a change has no written intent; if you expected content, check where the provider points.`
-        : `External change-intent provider "${metric.id}" matched ${metric.matchedCount} sources but none carried usable text, so the review ran without them. Check that those sources have a body below their frontmatter.`
+      if (metric.matchedCount > 0) {
+        return [
+          `External change-intent provider "${metric.id}" matched ${metric.matchedCount} sources but none carried usable text, so the review ran without them. Check that those sources have a body below their frontmatter.`
+        ]
+      }
+
+      return providersExplicitlyConfigured
+        ? [
+            `External change-intent provider "${metric.id}" found no change-intent source, so the review ran without one. This provider is configured in this repository, so check where it points if you expected content.`
+          ]
+        : []
     })
 
 // The other half of the same principle, for a provider that produced SOMETHING.
@@ -162,6 +191,13 @@ type SummarizerUnavailableReason =
   // above are genuine failures; this one is a configuration conflict — and it was
   // the one silent case, because it shared an early return with the two paths where
   // the digest IS the deliberate choice.
+  //
+  // "Explicitly" is now enforced rather than asserted (2026-08-17). The mode
+  // resolves to `model` by DEFAULT whenever a provider is configured, so this
+  // warning also fired for `provider` + `aiReview.enabled: false` — an ordinary
+  // deterministic-only run, where the operator asked for no model summary and lost
+  // nothing they wanted. Only `summary.mode: 'model'`, written down, is a request
+  // that went unserved.
   | { readonly kind: 'ai-review-disabled' }
 
 type SummarizerSelection = {
@@ -197,10 +233,19 @@ const selectSummarizer = async (input: {
   if (!input.config.aiReview.enabled) {
     // Asked for a model summary, provider present, model review off. The operator
     // gets the digest and is told why, rather than silently receiving something
-    // other than what was configured.
+    // other than what was configured — but only when the ask was written down.
+    // With `summary.mode` omitted, `model` above is this function's own default,
+    // and reporting a degradation from a default nobody chose is the same cry-wolf
+    // the early return below it exists to avoid.
     return {
       summarizer: createDigestSummarizer(),
-      modelSummarizerUnavailableReason: { kind: 'ai-review-disabled' }
+      ...(input.config.contextSources.summary.mode === 'model'
+        ? {
+            modelSummarizerUnavailableReason: {
+              kind: 'ai-review-disabled' as const
+            }
+          }
+        : {})
     }
   }
 
@@ -336,6 +381,11 @@ const ledgerDecisionFor = (
 export const prepareReviewRunnerChangeIntentContext = async (input: {
   readonly repositoryRoot: string
   readonly config: CodeReviewerConfig
+  // Whether `contextSources.providers` was written down by the operator rather
+  // than defaulted by the schema. Decides only whether a provider that gathered
+  // nothing is worth a word; see `warningsForUnusedProviders`. Absent is read as
+  // "defaulted", exactly as `baselineExplicitlyConfigured` is.
+  readonly contextProvidersExplicitlyConfigured?: boolean | undefined
   readonly assembledContext: ContextAssemblyResult
   readonly sourceFiles: readonly SupportSignalSourceFile[]
   readonly environment: Readonly<Record<string, string | undefined>>
@@ -414,15 +464,28 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   // repository carrying no written intent, and `observability.json` recorded it
   // as two failures on every such run. `providerStatus` below already draws this
   // exact line for the per-provider event.
-  const providerWarnings = warningsForUnusedProviders(result.providerMetrics)
+  const providerWarnings = warningsForUnusedProviders(
+    result.providerMetrics,
+    input.contextProvidersExplicitlyConfigured ?? false
+  )
   const failedProviders = result.providerMetrics.filter(
     (metric) => metric.failed
   ).length
-  // Providers that contributed no fragment, for whatever reason — the quantity
-  // the warning list actually has one entry per. Reported alongside rather than
-  // folded in, because "nothing failed and nothing was found" and "something
-  // broke" call for different actions.
-  const unusedProviders = providerWarnings.length
+  // Providers that contributed no fragment, for whatever reason. Reported
+  // alongside `failedProviders` rather than folded into it, because "nothing
+  // failed and nothing was found" and "something broke" call for different
+  // actions.
+  //
+  // Counted from the METRICS, never from `providerWarnings.length`. It used to
+  // be the warning count, which happened to agree while every unused provider
+  // warned; since a defaulted provider that found nothing is now deliberately
+  // silent, that derivation would report the ordinary run as having no unused
+  // provider at all. Observability records what HAPPENED and is not a product
+  // decision about what is worth saying — the whole reason the metric is in
+  // `observability.json` is so the quiet case stays countable.
+  const unusedProviders = result.providerMetrics.filter(
+    (metric) => metric.failed || metric.fragmentCount === 0
+  ).length
 
   // Spec 11 requires per-provider observability. A single aggregate step reduced
   // every provider to one failure COUNT, so "which provider went quiet" and "which

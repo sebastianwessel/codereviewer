@@ -101,6 +101,12 @@ export const runEvalCase = async (
     readonly config: CodeReviewerConfig
     readonly configWarnings: readonly string[]
     readonly baselineExplicitlyConfigured: boolean
+    // Optional, unlike its neighbour: `eval run` pins `contextSources.enabled`
+    // to false, so on the default eval path nothing reads it. It is carried
+    // anyway for the `--capability contextSources.enabled=true` arm, where an
+    // eval config that lists its own providers must warn about a quiet one just
+    // like a review does.
+    readonly contextProvidersExplicitlyConfigured?: boolean
     readonly environment: Readonly<Record<string, string | undefined>>
     readonly evalCase: EvalCase
     readonly logger?: Logger
@@ -124,6 +130,12 @@ export const runEvalCase = async (
       config,
       configWarnings: input.configWarnings,
       baselineExplicitlyConfigured: input.baselineExplicitlyConfigured,
+      ...(input.contextProvidersExplicitlyConfigured === undefined
+        ? {}
+        : {
+            contextProvidersExplicitlyConfigured:
+              input.contextProvidersExplicitlyConfigured
+          }),
       explicitFiles: input.evalCase.changedFiles,
       ...(input.evalCase.diff === undefined
         ? {}

@@ -256,9 +256,10 @@ reviewer prompt and the summarizer must enforce these principles:
 ## Determinism And Failure Handling
 
 - All providers are optional. A provider that produces nothing — missing payload,
-  unreachable host, empty inbox, no matching changed files, timeout — emits a
-  warning and the review continues without it. A provider failure never fails the
-  review run.
+  unreachable host, empty inbox, no matching changed files, timeout — leaves the
+  review running without it, and warns **only when the provider was explicitly
+  configured** (amendment 2026-08-17, stated in full under *Errors And
+  Degradation*). A provider failure never fails the review run.
 - **`eval run` ingests no external context, and a committed file — not a default —
   is what holds that.** This paragraph used to claim the property came from "the
   committed evaluation configuration" while no such configuration existed: the
@@ -354,7 +355,10 @@ a provider that ran cleanly and found nothing is the shape a misconfigured
 directory produces, and folding it into `included` would make the two
 indistinguishable. Since the defaults turned the providers on, `empty` is the
 ORDINARY result on a repository with no written change intent — which is why it
-is its own status rather than a failure, and why the warning for it says so.
+is its own status rather than a failure. **The status is recorded on every such
+run even though the ordinary case no longer warns** (amendment 2026-08-17): this
+event says what happened, and the warning says what was worth telling a human.
+The two answer different questions, so neither may be derived from the other.
 
 The aggregate `context_ingestion` step carries the summarizer's record —
 `summaryMode` when it starts, and `summaryInputBytes`, `briefBytes` and
@@ -408,11 +412,62 @@ hid it is what this requirement removes.
   one. A missing inbox directory and a diff with no matching changed file both
   yield zero fragments through the ordinary path, and with the providers on by
   default that is what a repository carrying no written intent produces on every
-  run. It still warns — absence must not read as a brief that was used — but the
-  warning states the ordinary reading first and names the pointer second, so a
-  mistyped directory, which produces the identical shape, stays diagnosable. A
-  provider that matched sources and extracted no usable text from any of them
-  gets its own wording again, because that one is genuinely odd.
+  run. **It warns only when `contextSources.providers` was explicitly configured**
+  (amendment below). A provider that matched sources and extracted no usable text
+  from any of them gets its own wording again, because that one is genuinely odd,
+  and it warns whoever configured the provider.
+
+#### Amendment 2026-08-17: Ordinary Absence Is Silent, Configured Absence Warns
+
+**The rule.** A provider that gathered nothing warns when the operator listed
+`contextSources.providers` in configuration (file, environment, or CLI), and says
+nothing when the provider set came from the schema default. A failed provider, and
+a provider that matched sources carrying no usable text, warn either way.
+Explicitness is keyed on the `providers` key, not on `contextSources.enabled`:
+`enabled` switches on a **defaulted** set and therefore names no source, whereas
+`baseline.enabled` — the flag this signal is modelled on — names the file
+`baseline.path` already points at. The signal is carried as
+`contextProvidersExplicitlyConfigured`, computed in `config-loader.ts` off the
+merged raw configuration before the schema fills its defaults in, for the same
+reason `baselineExplicitlyConfigured` is: after parsing, a defaulted provider set
+and one an operator restated verbatim are the same value.
+
+**The typo rationale is unchanged and is what the rule preserves.** A mistyped
+directory produces a byte-identical shape to no directory at all, and the warning
+is what keeps the two apart. What separates them is not the result but the asking:
+nobody typos a default, so a typo always arrives with `providers` written down.
+The diagnostic therefore survives intact, and the warning's wording now leads with
+the pointer (*"This provider is configured in this repository, so check where it
+points if you expected content"*) rather than with a reassurance, because on this
+path the reader did ask for something specific.
+
+**Why the ordinary-absence warning was removed.** Both shipped providers are on by
+default and both find nothing on a repository with no `.codereviewer/context`
+directory and a change touching no markdown — which is nearly every repository,
+this one included. The warning therefore fired **twice on nearly every run**, and
+it landed in `report.run.warnings`, which `report.md` renders under *"Bounds that
+bound"* — a heading that means "reasons this review was thinner than usual". Two
+lines describing a completely ordinary situation stood above the disclosures that
+cost the reader something: a cap that bound, a summarizer that degraded, a
+redaction that altered what the reviewer read. A section whose leading entries are
+always noise is a section people stop reading, so the cost of the ordinary-absence
+warning was paid by every other warning in it.
+
+**What is unchanged.** The per-provider `empty` observability status, and the
+`unusedProviders` count on the `context_ingestion` step, are unaffected: they
+record what happened, not what is worth telling a human, and a provider that went
+quiet stays countable in `observability.json` on every run. The count is therefore
+derived from the provider metrics and never from the length of the warning list.
+
+**The same rule applied once more, in this section's own scope.** The
+`ai-review-disabled` summarizer warning was documented as firing when "the operator
+EXPLICITLY asked for a model summary", and did not: `summary.mode` is optional and
+resolves to `model` whenever a provider is configured, so `provider` plus
+`aiReview.enabled: false` — an ordinary deterministic-only run — was told the
+digest had been substituted for something it never requested. That warning now
+requires `summary.mode: 'model'` written down. The resolution failures beside it
+(`no-callable-model`, `resolution-failed`) are unconditional, because those are
+breakage rather than absence.
 - Resolving the `model` summarizer itself can fail before any provider ever
   runs — a missing optional provider package, invalid credentials, a network
   failure, or an adapter that resolves with no callable model. This is

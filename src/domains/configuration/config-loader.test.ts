@@ -30,6 +30,81 @@ describe('configuration loader', () => {
         ])
       )
       expect(result.warnings).toEqual(['config-file-missing'])
+      // Nothing was written down, so nothing was asked for.
+      expect(result.contextProvidersExplicitlyConfigured).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The signal a defaulted provider set cannot carry past the schema. After
+  // `CodeReviewerConfigSchema.parse` an operator who listed the default providers
+  // and one who listed none hold the identical value, and change-intent ingestion
+  // needs to tell them apart: a provider nobody asked for finding nothing is the
+  // ordinary case and says nothing, while one a human named and did not get still
+  // warns — which is what keeps a mistyped directory diagnosable.
+  describe('explicit context providers', () => {
+    const loadWith = async (
+      contextSources: Record<string, unknown> | undefined
+    ): Promise<boolean> => {
+      const root = await createTempDir()
+
+      try {
+        await mkdir(join(root, '.codereviewer'), { recursive: true })
+        await writeFile(
+          join(root, '.codereviewer/config.json'),
+          JSON.stringify(contextSources === undefined ? {} : { contextSources })
+        )
+
+        return (await loadCodeReviewerConfig({ repositoryRoot: root }))
+          .contextProvidersExplicitlyConfigured
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    }
+
+    test('is false when the block is absent', async () => {
+      expect(await loadWith(undefined)).toBe(false)
+    })
+
+    // Unlike `baseline.enabled`, which names the file `baseline.path` already
+    // points at, `contextSources.enabled` names no source: it switches on a
+    // DEFAULTED set, so the operator still asked for nothing in particular.
+    test('is false when only the block is switched on', async () => {
+      expect(await loadWith({ enabled: true })).toBe(false)
+    })
+
+    test('is true when providers are listed, even as the default set', async () => {
+      expect(
+        await loadWith({
+          providers: [{ type: 'inbox' }, { type: 'changed-files' }]
+        })
+      ).toBe(true)
+    })
+
+    test('is true for an empty provider list, which is also a choice', async () => {
+      expect(await loadWith({ providers: [] })).toBe(true)
+    })
+  })
+
+  // The same question through the OTHER two inputs the loader merges. A provider
+  // set supplied on the command line is as explicit as one in the file, and
+  // reading only the file would silently drop the CLI arm's diagnostic.
+  test('reads explicit context providers out of CLI overrides too', async () => {
+    const root = await createTempDir()
+
+    try {
+      const result = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        cliConfig: {
+          contextSources: {
+            providers: [{ type: 'inbox', dir: 'ops/context' }]
+          }
+        }
+      })
+
+      expect(result.contextProvidersExplicitlyConfigured).toBe(true)
+      expect(result.config.contextSources.providers).toHaveLength(1)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

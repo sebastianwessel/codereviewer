@@ -148,6 +148,7 @@ engine itself.
 | INV-SEC-001 | Logs, traces, reports, and errors do not include prompt text, source snippets, tokens, or raw tool output by default, and every secret shape on the redactor's pattern list plus every operator-configured exact value is removed from them. Coverage of secret shapes OUTSIDE that list is not claimed; see `07-security-privacy-operations.md`, *What The Mechanism Supports, And What It Does Not*. | Redaction tests and artifact snapshot tests over known tokens. |
 | INV-PUB-001 | No model-only merge approval, merge blocking, or publication decision. Model-origin findings may surface in review output, but merge and publishing authority remains deterministic and local-artifact only. | Admission and quality-gate tests. |
 | INV-STRUCT-001 | Code is grouped by domain/topic with colocated tests and shared helpers for repeated behavior. | Structure lint/review checklist. |
+| INV-REPORT-001 | A user-facing surface speaks when there is a RESULT or a PROBLEM, and stays silent when the ordinary thing happened. A message may not exist merely to report that nothing occurred. The test a message must pass: **if this line were absent, could a reader draw a WRONG conclusion?** If yes it stays — a review with no model search, an incomplete coverage set, findings withheld by a cap, and a stage that failed all pass it, and removing them would produce the "silent optimism" defect this project has a standing rule against. If it only says the ordinary thing happened, it is noise and it goes. Decided 2026-08-17 by the product owner, after `contextSources` — on by default, with two providers most repositories have no source for — put two warnings on nearly every report under a heading meaning "reasons this review was thinner than usual", which is where the disclosures that DO matter are supposed to stand out. | Report and comment rendering tests over the ordinary case (silent) and the degraded case (states it). |
 
 ## Explicit Non-Goals For R1
 
@@ -166,3 +167,16 @@ engine itself.
 - No public documentation for behavior that is not implemented.
 - No replacement implementation for CodeQL, linters, formatters, unit tests, or
   build checks that production pipelines already run.
+- **No handling for a dirty working tree** (decided 2026-08-17). Intake reads
+  file CONTENT from the working tree while the changed-file list comes from
+  `merge-base..HEAD`, so uncommitted edits would let the reviewer see code the
+  diff does not describe, and could mis-anchor a finding's line. This engine runs
+  in CI, where the tree is a clean checkout by construction, so the case cannot
+  arise where it matters. It is therefore NOT detected, NOT warned about, and NOT
+  refused — spending code and a user-facing message on a state the product does
+  not run in would be exactly the noise the reporting rule below forbids.
+
+  Recorded rather than left implicit because the divergence is real and an
+  auditor will find it again: local runs against a dirty tree are a debugging
+  convenience, not a supported measurement, and any figure taken from one is not
+  comparable to a CI run.

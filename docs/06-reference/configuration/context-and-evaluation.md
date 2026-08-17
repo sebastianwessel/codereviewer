@@ -75,14 +75,14 @@ in one of three wordings, because they call for different actions:
 - *"…failed and was skipped."* — the provider errored.
 - *"…found no change-intent source, so the review ran without one."* — the
   provider ran and matched nothing: no inbox directory, no changed file matching
-  its `include` globs. With both providers on by default, **this is the
-  ordinary result on a repository with no written intent for the change** — it
-  is not an error or a misconfiguration, and must not be read as one. A
-  mistyped `dir` produces exactly the same shape, which is why the warning
-  still says to check where the provider points if content was expected. This
-  case used to be silent: a misconfigured source was indistinguishable from one
-  that was never configured, and the review ran with no change-intent context
-  and said so nowhere.
+  its `include` globs. **Reported only when you listed `providers` yourself.**
+  Both providers are on by default and both find nothing on a repository with no
+  written intent for the change, which is the ordinary case: nothing was lost,
+  so nothing is said. A mistyped `dir` produces exactly the same shape — but a
+  typo is always something a human wrote, and so always arrives with `providers`
+  listed, which is what keeps it diagnosable. Writing out the default provider
+  set verbatim is enough to opt into the warning; setting only
+  `contextSources.enabled` is not, because that names no source.
 - *"…matched N sources but none carried usable text, so the review ran without
   them."* — the provider found sources and none of them had a body below their
   frontmatter. Genuinely odd, since something did match.

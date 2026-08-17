@@ -46,7 +46,8 @@ is read as unrecovered.
 | A refutation batch exceeds the provider input budget | no issue recorded | The batch splits in half and each half retries; a retry that succeeds is not a degradation. Only a single candidate that still does not fit becomes a packet failure. |
 | A discovery call hits the agent-loop budget, returns malformed structured JSON, or fails output validation | `false` | That call contributes no findings. The run continues. |
 | A semantic merge call fails | `false` | Its file is left ungrouped; every candidate survives. The run continues. |
-| A change-intent provider fails, or produces nothing | — (a run warning, not a provider issue) | The review proceeds without the brief. |
+| A change-intent provider fails | — (a run warning, not a provider issue) | The review proceeds without the brief. |
+| A change-intent provider produces nothing | — (a run warning only when `contextSources.providers` was configured explicitly; the defaulted set is silent, because finding no written change intent is the ordinary case) | The review proceeds without the brief. |
 | The model summarizer fails | — | The stage falls back to the deterministic digest summary. |
 | A verification claim runs out of tool-call budget | — | The claim ends with an `uncertain` verdict. |
 | A file is larger than `review.maxFileBytes` | — | It is skipped and listed in `skippedFiles`. |

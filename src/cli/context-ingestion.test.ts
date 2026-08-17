@@ -109,9 +109,16 @@ describe('context ingestion CLI', () => {
   // rather than assumed. `contextSources` was turned on by default on 2026-08-11
   // over a provider set pointing at `.codereviewer/context` and changed markdown.
   // A repository that has neither must get a REVIEW — exit 0, no change-intent
-  // entry, no error, and no warning phrased as though the operator broke
-  // something. Spec 11 still requires the run to say a provider contributed
-  // nothing; what it must not do is read like a fault.
+  // entry, no error, and NOT A WORD about it.
+  //
+  // The last clause is the 2026-08-17 amendment to spec 11. This test used to
+  // assert exactly two "found no change-intent source" warnings here, on the
+  // grounds that the run must say a provider contributed nothing. Nearly every
+  // repository is this repository, so nearly every first report opened with two
+  // warnings under "Bounds that bound" — a heading that means "reasons this
+  // review was thinner than usual" — describing the ordinary state of having no
+  // written change intent. The diagnostic they existed for is kept by the test
+  // below, which configures the providers explicitly.
   test('zero config with no inbox directory and no changed docs is inert', async () => {
     const root = await createTempDir()
 
@@ -151,11 +158,14 @@ describe('context ingestion CLI', () => {
       expect(
         warnings.some((warning) => warning.includes('failed and was skipped'))
       ).toBe(false)
+      // Nor are they described at all. Both providers here are schema defaults
+      // the operator never asked for, and a default that finds the ordinary
+      // absence it was promoted over has nothing to report.
       expect(
         warnings.filter((warning) =>
-          warning.includes('found no change-intent source')
+          warning.includes('change-intent')
         )
-      ).toHaveLength(2)
+      ).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -202,17 +212,18 @@ describe('context ingestion CLI', () => {
     }
   })
 
+  // THE TYPO CASE, and the whole reason this warning still exists.
+  //
   // Spec 11 requires a warning from a provider that produces nothing, and names
   // "empty inbox" among the cases. Only a THROWING provider warned, so a source
   // pointed at a directory that does not exist contributed nothing and said so
   // nowhere — indistinguishable from never having configured it.
   //
-  // The warning survived the 2026-08-11 default flip; its WORDING did not. It used
-  // to open by telling the reader to check where the provider points, which is the
-  // wrong first sentence when the provider is a default and the ordinary answer is
-  // "this change has no written intent". The pointer is still named, second,
-  // because a mistyped directory produces exactly this shape.
-  test('a context provider that produces nothing says so', async () => {
+  // Since 2026-08-17 the warning is conditional on the operator having listed
+  // `contextSources.providers` themselves, which is what this config does. A
+  // mistyped directory is ALWAYS an explicit configuration — nobody typos a
+  // default — so the diagnostic survives the ordinary case going quiet.
+  test('a context provider the repository configured itself says when it produces nothing', async () => {
     const root = await createTempDir()
 
     try {
@@ -245,9 +256,96 @@ describe('context ingestion CLI', () => {
         (candidate) => candidate.includes('no-such-directory')
       )
       expect(warning).toContain('found no change-intent source')
-      expect(warning).toContain('check where the provider points')
+      expect(warning).toContain('check where it points')
       // It reports an absence, not a fault: the provider did not fail.
       expect(warning).not.toContain('failed')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The two halves of the amendment, on the SAME empty repository, so the only
+  // difference between them is whether the operator wrote the providers down.
+  // Restating the default set verbatim is enough to get the warning back: what is
+  // being asked is not "is this configuration unusual" but "did a human name this
+  // source and not get it".
+  test('restating the default providers is what brings the warning back', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          ...deterministicOnly,
+          contextSources: {
+            // The schema's own default set, written out by hand.
+            providers: [{ type: 'inbox' }, { type: 'changed-files' }]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+      expect(result.exitCode).toBe(0)
+
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      const warnings = report.run.warnings as readonly string[]
+
+      expect(
+        warnings.filter((warning) =>
+          warning.includes('found no change-intent source')
+        )
+      ).toHaveLength(2)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // `contextSources.enabled: true` alone does NOT bring it back, and that is the
+  // one line where this flag differs from `baselineExplicitlyConfigured`.
+  // `baseline.enabled` names the file `baseline.path` already points at, so
+  // switching it on is asking for that file; `contextSources.enabled` names no
+  // source at all — it turns on a defaulted set — so an operator who wrote only
+  // that still asked for nothing in particular, and still gets the ordinary run.
+  test('enabling the block without naming a provider stays quiet', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          ...deterministicOnly,
+          contextSources: { enabled: true }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+      expect(result.exitCode).toBe(0)
+
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+
+      expect(
+        (report.run.warnings as readonly string[]).filter((warning) =>
+          warning.includes('change-intent')
+        )
+      ).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

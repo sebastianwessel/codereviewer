@@ -51,6 +51,10 @@ export type RunReviewOptions = {
   readonly config: CodeReviewerConfig
   readonly configWarnings?: readonly string[]
   readonly baselineExplicitlyConfigured?: boolean
+  // Whether `contextSources.providers` was listed by the operator or defaulted by
+  // the schema. Only the config loader can tell, and only a change-intent provider
+  // that gathered nothing cares: see `warningsForUnusedProviders`.
+  readonly contextProvidersExplicitlyConfigured?: boolean
   readonly explicitFiles?: readonly string[]
   readonly reviewDiffMaps?: readonly DiffMap[]
   readonly reviewRawDiff?: string
@@ -170,6 +174,8 @@ export const runReview = async (
     const changeIntent = await prepareReviewRunnerChangeIntentContext({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
+      contextProvidersExplicitlyConfigured:
+        options.contextProvidersExplicitlyConfigured,
       assembledContext: contextState.assembledContext,
       sourceFiles,
       environment: options.environment ?? {},
