@@ -130,11 +130,19 @@ const ordinaryEmptyChangeSetReasons: Readonly<Record<string, string>> = {
 // still take refs. Each stage names ITS OWN command, because both warnings appear
 // together on a default run and a reader following one of them must not be sent
 // to the other's answer.
+//
+// THE REMEDY IS A COMMAND THAT CAN BE PASTED, not a template. It used to read
+// `--base-ref <ref> --head-ref <ref>`, and this string is rendered into Markdown
+// through `safeText`, which escapes prose: the angle brackets became `&lt;` and
+// `&gt;` INSIDE a code span, and CommonMark does not decode entities there. So a
+// reader saw the literal `--base-ref &lt;ref&gt;` and copying it produced a
+// command that cannot run. Naming real refs is both the fix and the better
+// message — the placeholder never told anyone what to put in it.
 const explicitFileSkipWarning = (input: {
   readonly name: string
   readonly command: string
 }): string =>
-  `The ${input.name} stage produced no report because this run was scoped to an explicit file list (\`--file\`/\`--files\`), which bypasses the diff this stage reads. Run \`codereviewer ${input.command} check --base-ref <ref> --head-ref <ref>\` over the refs you want covered.`
+  `The ${input.name} stage produced no report because this run was scoped to an explicit file list — \`--file\` or \`--files\` — which bypasses the diff this stage reads. Run it over refs instead, for example \`codereviewer ${input.command} check --base-ref origin/main --head-ref HEAD\`.`
 
 // BOTH STAGES SPEND, AND `review.maxCostUsd` DID NOT REACH THEM.
 //
@@ -204,7 +212,7 @@ const advisoryBudgetSkipWarning = (input: {
     return undefined
   }
 
-  return `The ${input.name} stage produced no report because this run had already spent ${spentUsd} USD of its ${maxCostUsd} USD budget (review.maxCostUsd), and this stage spends per model call. It was stopped before spending rather than reported over budget afterwards; the review itself is unaffected. Raise review.maxCostUsd, or run \`codereviewer ${input.command} check --base-ref <ref> --head-ref <ref>\` under its own budget.`
+  return `The ${input.name} stage produced no report because this run had already spent ${spentUsd} USD of its ${maxCostUsd} USD budget (review.maxCostUsd), and this stage spends per model call. It was stopped before spending rather than reported over budget afterwards; the review itself is unaffected. Raise review.maxCostUsd, or run it under its own budget, for example \`codereviewer ${input.command} check --base-ref origin/main --head-ref HEAD\`.`
 }
 
 /**

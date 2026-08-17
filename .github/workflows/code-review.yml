@@ -39,11 +39,21 @@ permissions:
 # review is running cancels it, so two runs can never race to create the
 # summary comment.
 #
-# This is also spec 30 requirement 5's flood bound: a burst of replies queues
-# up runs that each cancel the one before it, so reply volume — which is
-# attacker-controlled — cannot turn into unbounded model spend. The number in
-# flight per pull request is the same one this group has always enforced; a
-# reply is not a special case.
+# THIS IS NOT SPEC 30 REQUIREMENT 5'S FLOOD BOUND, and this comment used to
+# claim it was. `cancel-in-progress` bounds the runs IN FLIGHT per pull request,
+# never the runs in TOTAL: replies paced apart each start a full review,
+# indefinitely. It also discloses nothing, which requirement 5 separately
+# demands. Spec 30's own 2026-08-14 amendment says so in as many words and
+# records requirement 5 as UNSATISFIED — a comment asserting the opposite, on
+# an attacker-controllable path, is worse than no comment.
+#
+# The exposure it does not bound: with `reviewConversation.enabled` on, one
+# review-comment reply buys one entire paid review run — discovery, merge,
+# refutation and both advisory lanes — from anyone with comment access, which
+# is weaker than commit access. The key defaults to false, so no run reaches
+# this path unless an operator opts in. What the real bound should be, and
+# whether it belongs in `reviewConversation` or here, is the product owner's
+# decision and is recorded as open in spec 30.
 concurrency:
   group: code-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
