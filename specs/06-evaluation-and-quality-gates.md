@@ -573,6 +573,7 @@ artifact revealing that. Every report also records `provenance`:
 | `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run resolved. One provider serves both the reviewer and the judges; only the MODEL is separately pinnable. Omitted for a fully offline run (no expected findings, no judge needed). |
 | `provenance.modelName` | string, omitted when no provider | The REVIEWER's model name (`ProviderConfig.model`) — the subject of the measurement. Omitted under the same condition as `providerId`. |
 | `provenance.judgeModelName` | string, omitted when no provider | The model the two judges actually scored with: `evaluation.judgeModel` when pinned, otherwise `provenance.modelName`. **Recorded either way, including when it equals the reviewer's model** — "same as the reviewer" is an answer, and a report that cannot name its own judge leaves every number in it ambiguous between a reviewer difference and a scorer difference (see "The Judge Must Be Pinnable Independently Of The Reviewer"). Empty for reports saved before the field existed, which is exactly the era whose model comparisons cannot be checked. |
+| `provenance.engine` | object: `commit` string, optional `workingTreeClean` boolean | The engine build that produced the review output being scored, read by the CLI from the same `readEngineIdentity` seam `eval impact` and `eval intent` already used. **Always present on a report this build writes, and `"unknown"` is a legitimate `commit`** — that is what the seam answers when git cannot be read, and it is a recorded statement rather than an omission. `workingTreeClean` is absent when cleanliness could not be determined, which is a different statement from "clean": a number produced by uncommitted code is not reproducible from the commit it names, and recording the commit alone would claim that it is. Absent entirely on every report archived before the field existed; the tolerant read models leave it optional and absence resolves to the `unrecorded` pool identity (see "How A Metric May Be Read"), never to a wildcard. |
 | `provenance.capabilities` | map of configuration path to boolean, omitted when not recorded | Every optional-capability toggle in the configuration schema — one entry per `enabled` key, named by its full configuration path (`fix.enabled`, `security.dedicatedPass.enabled`, …) — read as VALUES off the same effective config `configHash` is taken over. It exists because a digest supports exactly one question, "did two runs share a configuration", and no value can be read back out of it: before this field no archived report could answer "was the fix lane on?", which is the first thing a reader asks of a fix-lane figure. The key set is CLOSED and EXHAUSTIVE over the configuration schema, not a curated subset of the toggles judged relevant to a measurement — a curated list asks for that judgement to be re-made correctly on every new toggle. Every key is therefore present on every report a compatible build writes, so `false` means off; a key that is absent, or an invented key, is a parse failure rather than a partial answer. **Omitted means NOT RECORDED, never "nothing was enabled"**: a report archived before the field existed was written by a build that did not know to record it, and defaulting to an all-`false` set would fabricate an answer about a run nobody can re-interrogate. A capability added to the configuration schema without being added here MUST fail a test (`src/cli/eval-capability-flags.test.ts`), because no type can span the two shapes. |
 
 `eval compare` refuses to diff two reports when any case they BOTH scored was
@@ -756,25 +757,67 @@ were produced by an UNPINNED engine — the harness pinned the repository under
 test but invoked the engine from the live working tree, and no scored artifact
 from that period records which engine produced it.
 
-**No scored artifact records engine identity today either, and no guard covers
-it.** `EvalReportProvenance` carries `answerKeyDigest`, `answerKeyDigestByCase`,
-`configHash`, and an optional `providerId`/`modelName` — nothing that identifies
-the engine build that produced the review output. The two guards that do exist
-are:
+**The scored artifact records engine identity, and the pooling guard covers it
+(amendment 2026-08-17).** This paragraph previously opened *"No scored artifact
+records engine identity today either, and no guard covers it"* and closed by
+telling the reader that *"anyone pooling or comparing runs across an engine
+change has to establish engine identity out of band."* Both statements were true
+when written and are now false: `EvalReportProvenance` carries an `engine` block
+— the commit, and whether the working tree was CLEAN — stamped by `eval run`
+from the same `readEngineIdentity` seam `eval impact` and `eval intent` already
+used, and `eval-pool-identity.ts` refuses a mixed-engine pool alongside the
+answer key, the scoring rules and the judge. The out-of-band instruction is
+withdrawn rather than softened; nothing is asked of the reader that the artifact
+now answers.
+
+The guards that exist are therefore four, and each refuses a different way of
+merging two things that were not measuring the same quantity:
 
 - `metricsVersion`, which the significance module refuses to cross outright and
   the comparison renderer refuses PER METRIC (see "Metrics Version"), because a
   metrics-version change alters what a metric reports for identical review
-  output; and
+  output;
 - `answerKeyDigest`, which the comparison renderer refuses to cross per shared
   case and the significance module refuses to cross in aggregate, because
   pooling runs scored against different expectations computes a rate over a
-  population that never existed.
+  population that never existed;
+- the JUDGE model, which `eval compare` refuses to cross between arms, because a
+  difference between two arms whose scorer also moved has two explanations and
+  no way to tell them apart; and
+- the ENGINE, which every POOLING caller refuses to cross — `eval recall-report`
+  before it merges reports into one `k/n`, and the significance module before it
+  pools an arm's runs into one per-expectation hit rate. `eval compare`
+  deliberately does NOT refuse it between arms: comparing two arms across an
+  engine change is the work that command exists for. Pooling is not comparing.
 
-Neither guard can detect a mixed-engine pool, and neither is a proxy for one: two
-runs of different engine builds against the same answer key and the same metrics
-version pool silently. Anyone pooling or comparing runs across an engine change
-has to establish engine identity out of band.
+**Absence is an identity, not a wildcard, and the field is optional on READ.**
+Every eval report on disk when this landed predates the field — 121 of 516 carry
+no `provenance` block at all — so requiring it would have refused the entire
+archive, which is the failure `eval-recall-view.ts` exists to end. A report that
+cannot name its engine therefore resolves to `unrecorded`: it still opens alone
+(a pool of one merges nothing), it refuses to pool with a report that CAN name
+one, and it pools with another equally silent report only with a warning saying
+that absence is not agreement. A recorded `unknown` — what `readEngineIdentity`
+writes when git cannot be read — is the same statement and gets the same
+identity. The PRODUCER contract is the opposite: `engine` is required there and
+`unknown` is a legitimate value, because a run that could have named its build
+must never be able to stay silent and pool with anything.
+
+Cleanliness is part of the identity. A number produced by uncommitted code is not
+reproducible from the commit it names, so a dirty run does not pool with a clean
+run at that commit. Two DIRTY runs at one commit still pool, which is a bounded
+permissiveness rather than an oversight: seeds of one configuration are routinely
+run back to back from an edited tree, and refusing those would fire the guard on
+the ordinary multi-seed run it exists to protect.
+
+**This is not a `metricsVersion` bump.** The rule under "Metrics Version" is that
+the version moves when a change alters what a METRIC would report for identical
+review output, including a metric merely added whose value cannot be recovered
+for a report saved earlier. `provenance.engine` is not a metric and no metric
+reads it: for identical review output every number in the report is unchanged,
+and the only thing that moves is what the artifact can say about itself. Bumping
+would also do active harm — it would make every archived report refuse to pool
+with every new one, destroying the comparability this field was added to protect.
 
 The blended recall figure is not interpretable on its own on the real-repository
 corpus, because a large share of its expectations lie in unchanged code and the
@@ -1063,13 +1106,15 @@ error, because per-expectation outcomes measured over different run counts are
 not paired observations and a 2/3 against a 1/1 would read as movement that is an
 artifact of the run counts.
 
-Within one arm every report must carry the same `metricsVersion` and the same
-`provenance.answerKeyDigest`, and every report must have scored the same
-expectations; each is a refusal, for the reason pooling refuses in general — the
-runs share a per-expectation denominator, so a heterogeneous arm computes a rate
-over a population that never existed, and an expectation one run never scored is
-not an expectation that run missed. ACROSS arms both a differing `metricsVersion`
-and a differing selection remain legitimate and are handled as they always were.
+Within one arm every report must carry the same `metricsVersion`, the same
+`provenance.answerKeyDigest` and the same `provenance.engine`, and every report
+must have scored the same expectations; each is a refusal, for the reason pooling
+refuses in general — the runs share a per-expectation denominator, so a
+heterogeneous arm computes a rate over a population that never existed, and an
+expectation one run never scored is not an expectation that run missed. ACROSS
+arms a differing `metricsVersion`, a differing selection and a differing
+`provenance.engine` all remain legitimate and are handled as they always were —
+comparing two arms across an engine change is what this command is for.
 
 The per-report sections — gate status, selection status, metric deltas, context
 ledger and agentic stage counts, metric-group deltas, and case transitions — are

@@ -51,6 +51,43 @@ export const toPortablePath = (
   return normalizedPath.split(pathApiByFlavor[flavor].sep).join('/')
 }
 
+/**
+ * The portable (`/`-separated) path from `fromPath` to `toPath`, both of which are
+ * real filesystem paths in the SAME flavor.
+ *
+ * One definition, because there were two and one of them was wrong on Windows.
+ * `skill-index.ts` composed `toPortablePath(path.relative(a, b), { flavor: 'posix' })`,
+ * pinning the POSIX flavor while `path.relative` speaks the flavor of the platform
+ * it actually runs on — so on Windows it split a `skills\nested` on `/`, found no
+ * separator, and handed back `skills\nested` with the backslash intact.
+ * `eval-slice-manifest.ts` split on `path.sep` and converted correctly, and its
+ * output feeds a stable sha256 slice digest, so the two spellings would have made a
+ * Windows-generated digest disagree with the one every other platform computes.
+ *
+ * The flavor defaults to the current platform's rather than being pinned, because
+ * the INPUT's flavor is the platform's: `path.relative` is what produced it.
+ *
+ * NOT routed through `normalizeRepositoryRelativePath`, which is the canonical
+ * normalizer for repository-relative paths that arrive as DATA (from a config file,
+ * a model, an analyzer). That one deliberately reads `\` as a separator whatever the
+ * platform, so that a path written on one platform normalizes the same on the other.
+ * That is right for data and wrong here: `\` is a legal character in a POSIX file
+ * name, and a path this function derives from the filesystem has already committed
+ * to one flavor. Feeding a real POSIX `a\b.txt` through it would rewrite the file's
+ * name to `a/b.txt` — and, for the manifest, silently move a published digest.
+ */
+export const toPortableRelativePath = (
+  fromPath: string,
+  toPath: string,
+  options: PathServiceOptions = {}
+): string => {
+  const flavor = options.flavor ?? currentFileSystemFlavor
+
+  return toPortablePath(pathApiByFlavor[flavor].relative(fromPath, toPath), {
+    flavor
+  })
+}
+
 export const resolvePathInsideRoot = (
   rootPath: string,
   requestedPath: string,

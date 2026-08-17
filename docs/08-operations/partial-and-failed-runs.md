@@ -199,6 +199,7 @@ They never carry raw provider messages or tool output.
 | `provider_rate_limited` | Re-run. Lower `review.maxConcurrentTasks`, or raise `provider.retryMaxDelayMs`. |
 | `provider_context_length` | Narrow the scope (`paths.include`, `paths.exclude`, a smaller ref range), or set `review.contextMaxBytes`. **Not `review.depth`** — it does not bound the packet, only the mediated retrieval budget. |
 | `provider_auth` | Fix the credential; not retried by design. |
+| `provider_output_truncated` | The model stopped writing at the output-token ceiling, so its answer is incomplete. Raise or unset `provider.maxOutputTokens`; if it is already unset, the model's own default ceiling is too low for these packets, so reduce what one call must answer about (narrower scope, or a model with a larger output budget). Not retried: the same request against the same ceiling truncates identically. |
 | `coverage_incomplete` | Check `skippedFiles` and `paths.exclude`; something reviewable was not assigned to a task. |
 | `cost_budget_exceeded` | Raise `review.maxCostUsd`, or reduce scope and optional passes. |
 

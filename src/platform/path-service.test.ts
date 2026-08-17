@@ -7,7 +7,8 @@ import {
   resolveExistingPathInsideRoot,
   resolveWritePathInsideRoot,
   resolvePathInsideRoot,
-  toPortablePath
+  toPortablePath,
+  toPortableRelativePath
 } from './path-service.js'
 
 describe('path service', () => {
@@ -29,6 +30,38 @@ describe('path service', () => {
     expect(
       toPortablePath('C:\\repo\\src\\..\\src\\index.ts', { flavor: 'win32' })
     ).toBe('C:/repo/src/index.ts')
+  })
+
+  // The regression the shared `toPortableRelativePath` exists to prevent. It is
+  // asserted on the win32 flavor because that is the only flavor on which the two
+  // implementations it replaced disagreed: `path.relative` returns `skills\nested`
+  // there, and the skill index used to split that on `/`, find nothing, and emit the
+  // backslash unchanged — while the slice manifest split on `path.sep` and produced
+  // `skills/nested` into a sha256. On POSIX the two were byte-identical, which is
+  // exactly why nothing caught it.
+  test('converts a Windows relative path to a portable one', () => {
+    expect(
+      toPortableRelativePath('C:\\repo', 'C:\\repo\\skills\\nested', {
+        flavor: 'win32'
+      })
+    ).toBe('skills/nested')
+  })
+
+  test('converts a POSIX relative path to a portable one', () => {
+    expect(
+      toPortableRelativePath('/repo', '/repo/skills/nested', { flavor: 'posix' })
+    ).toBe('skills/nested')
+  })
+
+  // A POSIX file name may legally contain a backslash, and this helper derives its
+  // input from the filesystem rather than receiving it as data — so the backslash is
+  // part of the NAME here, not a separator. This is the case that would move if this
+  // ever got routed through `normalizeRepositoryRelativePath`, which reads `\` as a
+  // separator on every platform by design.
+  test('keeps a backslash in a POSIX file name as part of the name', () => {
+    expect(
+      toPortableRelativePath('/repo', '/repo/odd\\name.txt', { flavor: 'posix' })
+    ).toBe('odd\\name.txt')
   })
 
   test('rejects empty path values', () => {

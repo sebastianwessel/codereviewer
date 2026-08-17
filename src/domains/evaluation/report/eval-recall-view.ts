@@ -92,7 +92,7 @@ const RecallViewCaseResultSchema = z.looseObject({
 // refuse those 121 archives outright, which is the failure this whole module
 // exists to end, arriving through the guard meant to protect their numbers.
 //
-// THREE PROVENANCE FIELDS, AND THE BOUND IS STATED. `answerKeyDigestByCase` is
+// FOUR PROVENANCE FIELDS, AND THE BOUND IS STATED. `answerKeyDigestByCase` is
 // comparison's tool for naming which SHARED case moved, and this report pools
 // rather than compares, so the aggregate digest is the right test here for the
 // reason the significance module gives. `configHash` is a digest nothing can be
@@ -104,7 +104,21 @@ const RecallViewCaseResultSchema = z.looseObject({
 const RecallViewProvenanceSchema = z.looseObject({
   answerKeyDigest: z.string().min(1).optional(),
   modelName: z.string().min(1).optional(),
-  judgeModelName: z.string().min(1).optional()
+  judgeModelName: z.string().min(1).optional(),
+  // The engine build that produced the review output. OPTIONAL, and the whole
+  // point of it being optional is stated above: every report on disk when this
+  // field landed predates it, and requiring it would refuse all 516 of them at
+  // once — the failure this module exists to end, arriving through the guard
+  // meant to protect their numbers. Absence resolves to `unrecorded` in
+  // `eval-pool-identity.ts`, so an archive that cannot name its build still
+  // opens alone, still pools with other archives that equally cannot (loudly),
+  // and refuses to pool with a report that can.
+  engine: z
+    .looseObject({
+      commit: z.string().min(1).optional(),
+      workingTreeClean: z.boolean().optional()
+    })
+    .optional()
 })
 
 export const EvalRecallViewSchema = z.looseObject({

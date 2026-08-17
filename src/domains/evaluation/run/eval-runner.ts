@@ -42,6 +42,7 @@ import {
   type EvalReportScoring,
   type EvalReportSelection
 } from '../report/eval-report-contracts.js'
+import { ENGINE_COMMIT_UNKNOWN } from '../report/engine-identity.js'
 import {
   computeAnswerKeyDigest,
   computeAnswerKeyDigestByCase
@@ -126,6 +127,12 @@ type RunEvaluationInput = {
     // apart from the reviewer's. Supplied by the CLI for the same reason as the
     // two above.
     readonly judgeModelName?: string
+    // Which engine build produced the review output being scored. Supplied by
+    // the caller for the same reason as everything else here -- reading it
+    // means running git, which this module does not do -- and read from the
+    // one seam that already answers the question, `readEngineIdentity`, rather
+    // than a second git call with its own idea of what "clean" means.
+    readonly engine?: EvalReportProvenance['engine']
     // The run's effective optional-capability flags, resolved from the same
     // merged config `configHash` is taken over. Supplied by the CLI for the same
     // reason as everything else here: this module does not import the
@@ -429,6 +436,14 @@ export const runEvaluation = async (
       ...(input.provenance?.judgeModelName === undefined
         ? {}
         : { judgeModelName: input.provenance.judgeModelName }),
+      // Substituted rather than omitted when the caller supplies none, which is
+      // the OPPOSITE of the capability rule immediately below, and deliberately:
+      // `unknown` is the value `readEngineIdentity` itself returns when git
+      // cannot be read, so it states exactly what is true -- nobody can name the
+      // build. Omitting the field would instead produce a report that pools
+      // freely with every other silent report, and this contract's whole purpose
+      // is that a run which cannot name its engine says so.
+      engine: input.provenance?.engine ?? { commit: ENGINE_COMMIT_UNKNOWN },
       // Omitted rather than substituted when the caller supplies none: an
       // all-`false` stand-in would state that every capability was off, which is
       // a measurement nobody took. Absent means not recorded.

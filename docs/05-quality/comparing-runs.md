@@ -168,10 +168,12 @@ are not paired observations. Output is Markdown on stdout. **The command exits
 new/removed cases.
 
 Within one arm the runs must agree: same `metricsVersion`, same
-`provenance.answerKeyDigest`, and the same expectations scored by every run. Each
-is a refusal — the runs share a per-expectation denominator, so a mixed arm
-computes a rate over a population that never existed. Differences *between* the
-arms are fine and are exactly what the command is for.
+`provenance.answerKeyDigest`, same `provenance.engine`, and the same expectations
+scored by every run. Each is a refusal — the runs share a per-expectation
+denominator, so a mixed arm computes a rate over a population that never existed.
+Differences *between* the arms are fine and are exactly what the command is for,
+the engine included: comparing across an engine change is the point, pooling
+across one inside a single arm is not.
 
 **With more than one run per arm, the per-report sections are omitted** — gate,
 selection, metric deltas, ledger/stage counts, metric-group deltas and case
@@ -201,8 +203,9 @@ the inputs its status derives from renders `unknown`, never `PASS`.
   key moves underneath a comparison, no metric on either side means what it says.
   Every base report is checked against every head report, so a divergence in the
   third run of an arm cannot hide behind a clean first run.
-- **An arm mixes scoring rules, answer keys, or scored expectations across its
-  own runs** — see above. Pooling a heterogeneous arm is never right.
+- **An arm mixes scoring rules, answer keys, engine builds, or scored
+  expectations across its own runs** — see above. Pooling a heterogeneous arm is
+  never right.
 
 A *capability* difference is deliberately not on this list: it is warned about
 instead, for the same reason a `configHash` difference is tolerated. See
@@ -437,6 +440,19 @@ The three summary buckets are the useful output:
 `-` means the finding was absent from that report entirely (different case set),
 and such runs leave the `Rate` denominator. Check the `Case set: same` line
 before reading anything.
+
+**Several reports are POOLED, so they must be poolable.** The `Rate` column and
+the three buckets share one denominator across the reports you pass, and the
+command refuses (exit `2`) when they disagree on the answer key, the scoring
+rules (`metricsVersion`), the judge model, or the engine build that produced
+them — a rate over runs that were not measuring the same thing describes a
+population that never existed. A single `--report` is never refused: nothing is
+merged, so every archive still opens on its own, however old.
+
+A report that does not RECORD one of those — every report written before the
+field existed — counts as `unrecorded` rather than as a match for anything. Two
+silent reports still pool, with a warning on stderr saying which fact neither of
+them states; a silent report and one that can name the fact are refused.
 
 `eval run` also writes a single-report version of this table to
 `eval-recall-report.md` automatically.

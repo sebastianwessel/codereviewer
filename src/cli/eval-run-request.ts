@@ -3,6 +3,7 @@
 // evaluation domain cannot derive on its own.
 import type {
   runEvaluation,
+  EngineIdentity,
   EvalCase,
   EvalCaseFileReader
 } from '../domains/evaluation/index.js'
@@ -34,6 +35,11 @@ export const buildEvalRunRequest = (
     // captured before it did anything.
     readonly generatedAt: string
     readonly evaluationElapsedMs: () => number
+    // Which engine build ran the review. Read by the command rather than here
+    // because it needs a git call, and typed off `readEngineIdentity`'s own
+    // return so the two facts it records -- commit, and whether the working tree
+    // was clean -- cannot be re-spelled on the way into the report.
+    readonly engine: EngineIdentity
   }
 ): EvalRunRequest => ({
   cases: input.cases,
@@ -89,6 +95,14 @@ export const buildEvalRunRequest = (
     ...(input.judges.judgeModelName === undefined
       ? {}
       : { judgeModelName: input.judges.judgeModelName }),
+    // WHICH BUILD PRODUCED THE OUTPUT BEING SCORED. Every eval before
+    // 2026-08-01 ran an unpinned engine and no artifact from that period can
+    // say which one, so those figures cannot be pooled with anything; `eval
+    // impact` and `eval intent` have stamped this since they existed and this
+    // command, which produces every published recall and precision figure, did
+    // not. Passed straight through: the answer comes from `readEngineIdentity`
+    // and nothing here reinterprets it.
+    engine: input.engine,
     // The same effective config, read as VALUES rather than hashed. The hash
     // proves two runs shared a configuration; it cannot answer "was the fix
     // lane on?", because nothing can be read back out of a digest.

@@ -642,6 +642,14 @@ being on. `provenance.configHash` cannot answer that — nothing can be read bac
 out of a digest — and a report archived before the field existed **omits** it,
 which means *not recorded*, never that everything was off.
 
+It also carries `provenance.engine`: the commit the engine ran from, and whether
+its working tree was clean. A rate is a property of a build, so this is what lets
+`eval recall-report` and the paired verdict refuse to merge runs from two builds
+into one number. `commit: "unknown"` is a real answer — the run could not read
+git — and a report archived before the field existed omits it, which again means
+*not recorded* rather than *the same build as yours*. `workingTreeClean: false`
+says the number is not reproducible from the commit it names.
+
 ---
 
 ## Exit codes

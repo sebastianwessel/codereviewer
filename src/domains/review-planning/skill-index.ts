@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   resolveExistingPathInsideRoot,
-  toPortablePath
+  toPortableRelativePath
 } from '../../platform/path-service.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
 import { sha256 } from '../../shared/hash/hash.js'
@@ -27,9 +27,6 @@ type CreateSkillIndexOptions = {
 
 const skillFileName = 'SKILL.md'
 const skillNamePattern = /^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$/u
-
-const portableRelativePath = (from: string, to: string): string =>
-  toPortablePath(path.relative(from, to), { flavor: 'posix' })
 
 const extractFrontmatter = (
   content: string,
@@ -122,12 +119,12 @@ export const createSkillIndex = async (
       const content = await readFile(skillFile, 'utf8')
       const metadata = parseSkillMetadata(content, skillFile)
       const skillDirectory = path.dirname(skillFile)
-      const relativeSkillDirectoryFromConfiguredRoot = portableRelativePath(
+      const relativeSkillDirectoryFromConfiguredRoot = toPortableRelativePath(
         resolvedDirectory,
         skillDirectory
       )
       const relativeSkillDirectoryFromRepositoryRoot = normalizeRepositoryRelativePath(
-        portableRelativePath(options.repositoryRoot, skillDirectory)
+        toPortableRelativePath(options.repositoryRoot, skillDirectory)
       )
       const relativeSkillFile = normalizeRepositoryRelativePath(
         path.posix.join(

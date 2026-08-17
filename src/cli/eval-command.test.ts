@@ -749,6 +749,37 @@ describe('eval CLI', () => {
     }
   })
 
+  // WHICH ENGINE PRODUCED THE FIGURE. `eval impact` and `eval intent` have
+  // stamped this since they existed; `eval run` — the source of every published
+  // recall and precision number — did not, so no guard could refuse to pool two
+  // builds into one statistic. The commit is not asserted to be a real object
+  // name here: the run's cwd is a temp directory outside any checkout, so
+  // `readEngineIdentity` correctly answers `unknown`. What this pins is that the
+  // command reads the identity and the report carries it, which is what no
+  // report before this could say at all.
+  test('stamps the engine identity of the build that ran the review', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeSampleEvalCases(root)
+      const result = await runCli(['eval', 'run'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(0)
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(typeof report.provenance.engine.commit).toBe('string')
+      expect(report.provenance.engine.commit.length).toBeGreaterThan(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('archives each eval run while preserving latest artifact paths', async () => {
     const root = await createTempDir()
 
@@ -2815,6 +2846,92 @@ describe('eval CLI', () => {
 
       expect(result.exitCode).toBe(2)
       expect(result.stderr).toContain('unrecorded (archive.json)')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A rate is a property of a build, so two builds pooled into one `k/n` column
+  // describe neither. Nothing could refuse this until the report recorded which
+  // engine produced it: every figure this repository published before
+  // 2026-08-01 came from an unpinned engine and no artifact from that period can
+  // name the build behind it.
+  test('refuses to pool recall reports produced by different engine builds', async () => {
+    const root = await createTempDir()
+
+    try {
+      const base = evalReport()
+      const withEngine = (commit: string): Record<string, unknown> => ({
+        ...base,
+        provenance: {
+          ...(base.provenance as Record<string, unknown>),
+          engine: { commit, workingTreeClean: true }
+        }
+      })
+
+      await writeFile(
+        join(root, 'one.json'),
+        JSON.stringify(withEngine('a'.repeat(40)))
+      )
+      await writeFile(
+        join(root, 'two.json'),
+        JSON.stringify(withEngine('b'.repeat(40)))
+      )
+
+      const result = await runCli(
+        ['eval', 'recall-report', '--report', 'one.json', '--report', 'two.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('different engine builds')
+      // Both, so a reader can see which archive is which without opening them.
+      expect(result.stderr).toContain('one.json')
+      expect(result.stderr).toContain('two.json')
+      expect(result.stdout).not.toContain('# Evaluation Recall Report')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // THE ARCHIVE CONSTRAINT, at the shape that actually dominates the disk. 216
+  // of the eval reports here record a full provenance block and no engine —
+  // every report written before the field existed does. Requiring it would have
+  // refused all of them, which is the failure `eval-recall-view.ts` exists to
+  // end. One still opens, and two pool with the engine silence stated out loud.
+  test('opens reports whose provenance records no engine, and says so when pooling them', async () => {
+    const root = await createTempDir()
+
+    try {
+      const archive = evalReport()
+
+      expect(
+        (archive.provenance as Record<string, unknown>).engine
+      ).toBeUndefined()
+
+      await writeFile(join(root, 'one.json'), JSON.stringify(archive))
+      await writeFile(join(root, 'two.json'), JSON.stringify(archive))
+
+      const single = await runCli(
+        ['eval', 'recall-report', '--report', 'one.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(single.exitCode).toBe(0)
+      expect(single.stdout).toContain('# Evaluation Recall Report')
+      expect(single.stderr).toBe('')
+
+      const pooled = await runCli(
+        ['eval', 'recall-report', '--report', 'one.json', '--report', 'two.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(pooled.exitCode).toBe(0)
+      expect(pooled.stdout).toContain('# Evaluation Recall Report')
+      // The answer key and the judge ARE recorded here, so the engine is the one
+      // dimension the pool is silent on and the only one warned about.
+      expect(pooled.stderr).toContain('engine build')
+      expect(pooled.stderr).not.toContain('answer key')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

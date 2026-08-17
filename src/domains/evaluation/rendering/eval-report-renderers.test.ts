@@ -61,7 +61,8 @@ const summaryInput = {
     provenance: {
       answerKeyDigestByCase: {},
   answerKeyDigest: 'test-answer-key-digest',
-      configHash: 'test-config-hash'
+      configHash: 'test-config-hash',
+      engine: { commit: 'test-engine-commit', workingTreeClean: true }
     },
     scoring: {
       judgeAgreement: 1,

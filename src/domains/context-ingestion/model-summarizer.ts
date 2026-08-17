@@ -5,6 +5,7 @@ import type {
   ContextFragment,
   ContextSummarizer
 } from './contracts.js'
+import { packFragments, type PackedFragments } from './fragment-packer.js'
 import { truncateToUtf8Bytes } from './text.js'
 
 export const summarizerInstructions = [
@@ -41,74 +42,27 @@ const summarizerSchema: JsonValue = {
 // That is not an undisclosed loss but a denied one — the report states the
 // intent was seen whole.
 //
-// Built per fragment, the way `digest-summarizer.ts` already does it, so
-// `origins` names what survived and `truncated` reports what happened.
+// Built per fragment by the SHARED `packFragments`, which `digest-summarizer.ts`
+// also calls. That sentence used to read "the way `digest-summarizer.ts` already
+// does it" above a second, statement-for-statement copy of the loop; the two
+// differ only in the two things passed as arguments below.
 const fragmentsToPrompt = (
   fragments: readonly ContextFragment[],
   maxBytes: number
-): {
-  readonly prompt: string
-  readonly origins: readonly string[]
-  readonly truncated: boolean
-  readonly cutBySummaryCap: boolean
-} => {
-  // Roughly four times the output cap of raw input to work from, bounded so a
-  // large thread cannot blow the request budget.
-  const inputBudget = maxBytes * 4
-  const separatorBytes = Buffer.byteLength('\n\n', 'utf8')
-  const sections: string[] = []
-  const origins: string[] = []
-  let usedBytes = 0
-  let truncated = false
-  // The input budget is derived from `contextSources.summary.maxBytes`, so a cut
-  // here IS that cap binding — reported apart from a provider's own per-file cut for
-  // the reason given on `ChangeIntentBrief.cutBySummaryCap`.
-  let cutBySummaryCap = false
-
-  for (const fragment of fragments) {
-    const remaining =
-      inputBudget - usedBytes - (sections.length === 0 ? 0 : separatorBytes)
-
-    if (remaining <= 0) {
-      truncated = true
-      cutBySummaryCap = true
-      break
-    }
-
-    const heading = fragment.title ?? fragment.origin
-    const section = `## ${heading} (${fragment.kind})\n${fragment.body.trim()}`
-    const fitted = truncateToUtf8Bytes(section, remaining)
-
-    if (fitted.length === 0) {
-      truncated = true
-      cutBySummaryCap = true
-      break
-    }
-
-    sections.push(fitted)
-    origins.push(fragment.origin)
-
-    if (fragment.truncated === true) {
-      // The section fits this budget, but only because the provider already cut
-      // the body at its per-file cap. Measuring the text we were handed can only
-      // ever find the cuts made here, so a brief summarizing half a ticket would
-      // otherwise report itself complete.
-      truncated = true
-    }
-
-    usedBytes +=
-      (sections.length === 1 ? 0 : separatorBytes) +
-      Buffer.byteLength(fitted, 'utf8')
-
-    if (fitted.length < section.length) {
-      truncated = true
-      cutBySummaryCap = true
-      break
-    }
-  }
-
-  return { prompt: sections.join('\n\n'), origins, truncated, cutBySummaryCap }
-}
+): PackedFragments =>
+  packFragments({
+    fragments,
+    // Roughly four times the output cap of raw input to work from, bounded so a
+    // large thread cannot blow the request budget. Still derived from
+    // `contextSources.summary.maxBytes`, so a cut here IS that cap binding and the
+    // packer's `cutBySummaryCap` means the same thing it means for the digest.
+    budgetBytes: maxBytes * 4,
+    // The fragment KIND is named here and not in the digest: this text is read by a
+    // model that has to weigh a ticket against a changed file, where the digest's is
+    // read as a document.
+    renderSection: (fragment) =>
+      `## ${fragment.title ?? fragment.origin} (${fragment.kind})\n${fragment.body.trim()}`
+  })
 
 /**
  * The dedicated summarizer model call (spec 11): a single object-output request
@@ -143,7 +97,7 @@ export const createModelSummarizer = (input: {
       model: input.modelAlias.model,
       messages: [
         { role: 'system', content: summarizerInstructions },
-        { role: 'user', content: prepared.prompt }
+        { role: 'user', content: prepared.text }
       ],
       schema: summarizerSchema,
       schemaName: 'change_intent_brief',

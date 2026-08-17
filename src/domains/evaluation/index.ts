@@ -174,13 +174,15 @@ export {
   readEngineIdentity,
   ENGINE_COMMIT_UNKNOWN,
   engineCommitArgs,
-  engineWorkingTreeArgs
+  engineWorkingTreeArgs,
+  type EngineIdentity
 } from './report/engine-identity.js'
 // Whether several finished runs may be merged into one statistic. On the barrel
 // because both pooling surfaces are CLI commands: `eval recall-report` pools
 // per-expectation outcomes, and `eval compare` asks the same question of the
 // judge before it adjudicates two arms.
 export {
+  engineIdentityOf,
   judgeIdentityOf,
   poolIdentityRefusals,
   poolIdentityWarnings,

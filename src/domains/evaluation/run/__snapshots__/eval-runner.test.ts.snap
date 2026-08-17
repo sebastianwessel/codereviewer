@@ -1815,6 +1815,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "typescript-positive": "84bbdb14b451f6f31220f6aa92c329c206251bd89767aaec60dbfe4ad5ef8a01",
     },
     "configHash": "unspecified",
+    "engine": {
+      "commit": "unknown",
+    },
   },
   "regressionGate": {
     "failingCaseIds": [

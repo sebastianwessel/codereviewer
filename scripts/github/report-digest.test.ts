@@ -7,15 +7,19 @@ import {
 } from '../../src/domains/intent-fulfilment/index.js'
 import {
   BaselineStatusSchema,
+  compareSeverityDescending,
   ReporterEligibilitySchema,
-  ReviewReportSchema
+  ReviewReportSchema,
+  SeveritySchema,
+  type Severity
 } from '../../src/shared/contracts/index.js'
 import {
   digestImpactReport,
   digestIntentReport,
   digestReadModels,
   digestReviewReport,
-  ReportShapeError
+  ReportShapeError,
+  severityOrder
 } from './report-digest.js'
 import {
   impactReportFixture,
@@ -761,4 +765,36 @@ describe('the digest accounts for every field its producers write', () => {
       expect(stale).toEqual([])
     })
   }
+})
+
+// `severityOrder` is the pull-request comment's ordering AND its counts line, and
+// it used to be a hand-written literal beside the engine's own private ordering.
+// The two agreed, so nothing was wrong and nothing was watching: a sixth severity
+// would have typechecked, been counted into `severityCounts`, then been dropped
+// from the counts line and sorted ahead of `critical` (`indexOf` returns `-1`).
+// It is derived from the vocabulary and the comparator now, and these pin the
+// derivation from both ends.
+describe('severityOrder', () => {
+  it('renders most severe first', () => {
+    // The literal is repeated HERE on purpose, and only here. Deriving the array
+    // means a new severity silently takes a position in a pull-request comment;
+    // this fails when that happens, so somebody confirms the comment still reads
+    // the way it should before the change ships.
+    expect(severityOrder).toEqual(['critical', 'high', 'medium', 'low', 'info'])
+  })
+
+  it('names every member of the severity vocabulary', () => {
+    expect([...severityOrder].sort()).toEqual([...SeveritySchema.options].sort())
+  })
+
+  it('agrees member for member with the engine ordering', () => {
+    // Strictly descending by the engine's own comparator, so the comment can never
+    // rank two severities differently from admission's floor or the report sort.
+    for (let index = 1; index < severityOrder.length; index += 1) {
+      const previous = severityOrder[index - 1] as Severity
+      const current = severityOrder[index] as Severity
+
+      expect(compareSeverityDescending(previous, current)).toBeLessThan(0)
+    }
+  })
 })

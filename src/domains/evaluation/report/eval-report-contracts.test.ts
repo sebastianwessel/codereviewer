@@ -134,7 +134,8 @@ describe('eval report contracts', () => {
     const provenance = {
       answerKeyDigest: 'a'.repeat(64),
       answerKeyDigestByCase: {},
-      configHash: 'b'.repeat(64)
+      configHash: 'b'.repeat(64),
+      engine: { commit: 'c'.repeat(40), workingTreeClean: true }
     }
 
     test('round-trips every flag through a serialized report', () => {

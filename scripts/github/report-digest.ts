@@ -76,6 +76,7 @@ import {
 } from '../../src/domains/intent-fulfilment/index.js'
 import {
   BaselineStatusSchema,
+  compareSeverityDescending,
   isActionableFinding,
   ReporterEligibilitySchema,
   SeveritySchema,
@@ -181,14 +182,28 @@ const parseReport = <T>(
   return parsed.data
 }
 
-/** Most severe first. Shared by the counters and the comment's ordering. */
-export const severityOrder: readonly Severity[] = [
-  'critical',
-  'high',
-  'medium',
-  'low',
-  'info'
-]
+/**
+ * Most severe first. Shared by the counters and the comment's ordering.
+ *
+ * DERIVED, for the same reason every closed vocabulary above is imported rather
+ * than restated. This was a hand-written literal, and it agreed with
+ * `compareSeverityDescending` — which is precisely the state a duplicate is in
+ * right up until it is not. Membership was half-caught (a `Record<Severity, number>`
+ * elsewhere fails `tsc` on a new member) but neither the ORDER nor this array's
+ * completeness was caught by anything: a sixth severity would typecheck, be
+ * counted into `severityCounts`, then be omitted from the comment's counts line and
+ * sorted FIRST of all, because `indexOf` returns `-1` for a member that is not here.
+ * Silent on a pull request, which is where this integration's expensive defects
+ * have all lived.
+ *
+ * `SeveritySchema.options` supplies the members and `compareSeverityDescending`
+ * supplies the order, so a new severity joins this list and takes its correct place
+ * in the one edit that declares it. The sort is on a copy: `options` is the schema's
+ * own array.
+ */
+export const severityOrder: readonly Severity[] = [...SeveritySchema.options].sort(
+  compareSeverityDescending
+)
 
 const LocationSchema = z.object({
   path: z.string(),

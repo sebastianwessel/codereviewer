@@ -140,7 +140,7 @@ npm run cli -- config validate
 | Key | Default | What it does |
 | --- | --- | --- |
 | `provider.temperature` | `0` | Sent as a model default. **Not sent** for `openai` models whose name starts with `gpt-5` (dot or dash separator) — those reasoning models reject it with HTTP 400. |
-| `provider.maxOutputTokens` | unset | Sent as `maxTokens` when set. |
+| `provider.maxOutputTokens` | unset | Sent as `maxTokens` when set. A response that stops at the output-token ceiling fails with `provider_output_truncated` instead of being treated as complete. |
 | `provider.reasoningEffort` | unset | `minimal` / `low` / `medium` / `high`. Emitted as `providerOptions.reasoning_effort`, which the OpenAI Responses adapter maps to `reasoning: { effort }`. Unset uses the provider default. |
 | `provider.timeoutMs` | `120000` | Per-call timeout handed to the adapter (1 000–600 000). |
 

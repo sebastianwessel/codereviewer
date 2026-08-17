@@ -462,6 +462,39 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // Not for an archived report — this is the producer contract, which no archive
   // is ever read through.
   judgeModelName: z.string().min(1).optional(),
+  // WHICH ENGINE BUILD PRODUCED THE REVIEW OUTPUT THESE NUMBERS SCORE.
+  //
+  // A rate is a property of a build and a model, not of a corpus. Every
+  // evaluation in this repository before 2026-08-01 ran an UNPINNED engine --
+  // the harness pinned the repository under test and invoked the engine from
+  // the live working tree -- and none of those artifacts can say which build
+  // produced them, so none of their figures can be pooled with a later run.
+  // The intent, impact and advisory eval reports have recorded this since they
+  // existed; this report, the source of every published recall and precision
+  // figure, did not, and `eval-pool-identity.ts` could therefore not refuse a
+  // mixed-engine pool at all.
+  //
+  // TWO FACTS, and the second is the one people forget. The commit, and whether
+  // the working tree was CLEAN: a number produced by uncommitted code is not
+  // reproducible from the commit it names, and recording the commit alone would
+  // claim that it is. `workingTreeClean` is absent when it could not be
+  // determined, which is a different statement from "clean" -- `EngineIdentity`
+  // in `engine-identity.ts` owns that distinction and this mirrors it exactly
+  // rather than restating a second shape.
+  //
+  // REQUIRED, and `unknown` is a legitimate value rather than an omission --
+  // the same rule the intent and impact reports state at their own `engine`
+  // block. `readEngineIdentity` never fails: it returns `ENGINE_COMMIT_UNKNOWN`
+  // when git cannot be read, so the producer can always answer, and an optional
+  // field here would let a report that COULD have named its engine stay silent
+  // and pool with anything. Archived reports are unaffected: this is the
+  // producer contract, and no archive is ever read through it (see
+  // `eval-comparison-view.ts` and `eval-recall-view.ts`, where the field is
+  // optional and its absence resolves to the `unrecorded` pool identity).
+  engine: z.strictObject({
+    commit: z.string().min(1),
+    workingTreeClean: z.boolean().optional()
+  }),
   // Which optional capabilities the run actually had ENABLED.
   //
   // `configHash` above cannot answer that, and its own comment claims it exists

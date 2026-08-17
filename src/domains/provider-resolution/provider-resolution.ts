@@ -5,6 +5,7 @@ import {
   isMissingModuleError,
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
+import { guardTruncatedProviderOutput } from './output-truncation-guard.js'
 
 type ProviderId = ProviderConfig['id']
 
@@ -180,7 +181,16 @@ const createModelAlias = (
   provider: ProviderConfig,
   modelProvider: ModelProvider
 ): ModelAlias => ({
-  provider: modelProvider,
+  // Wrapped, not raw. `maxOutputTokens` below is installed as the adapter's
+  // `maxTokens`, and a response that hits that ceiling comes back as an ordinary
+  // success carrying `finishReason: 'length'` — indistinguishable from a complete
+  // answer to every stage downstream. The guard is attached here, where the
+  // ceiling is set, so no lane has to remember to ask for it.
+  provider: guardTruncatedProviderOutput({
+    provider: modelProvider,
+    model: provider.model,
+    maxOutputTokens: provider.maxOutputTokens
+  }),
   model: provider.model,
   capabilities: ['object', 'tool_use'],
   // Retry is handled by the harness model retry policy, which classifies

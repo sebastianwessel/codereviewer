@@ -14,6 +14,7 @@ import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 import {
   assertBenchmarkSlicesHydrated,
+  readEngineIdentity,
   runEvaluation
 } from '../../domains/evaluation/index.js'
 import { unknownCliOption } from '../args.js'
@@ -140,6 +141,19 @@ export const runEval = async (
         ? {}
         : { providerImport: options.providerImport })
     })
+    // Read AFTER the cases have run, so it describes the tree the review
+    // actually executed from rather than one an edit could have changed
+    // underneath a long run. `readEngineIdentity` never throws -- it answers
+    // `unknown` when git cannot be read -- so this cannot fail a run that has
+    // already been paid for.
+    //
+    // `options.cwd`, which is the same argument `eval impact` and `eval intent`
+    // pass, deliberately rather than a second rule invented here: this
+    // repository's evals are invoked from the engine checkout, so the commit is
+    // the engine's. Run from somewhere else it answers `unknown` (no checkout)
+    // or names that checkout, and either is a recorded identity the pooling
+    // guard treats as its own -- never a claim about a build nobody verified.
+    const engine = await readEngineIdentity({ repositoryRoot: options.cwd })
     const result = await runEvaluation(
       buildEvalRunRequest({
         config,
@@ -147,6 +161,7 @@ export const runEval = async (
         outputs,
         judges,
         readFindingSource,
+        engine,
         ...(evalOptions.sliceRoot === undefined
           ? {}
           : { sliceRoot: evalOptions.sliceRoot }),

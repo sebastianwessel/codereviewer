@@ -171,6 +171,19 @@ export const EvalComparisonReportSchema = z.object({
       // an unknown.
       modelName: z.string().min(1).optional(),
       judgeModelName: z.string().min(1).optional(),
+      // The engine build that produced the review output, read so an ARM whose
+      // runs came from two builds can be refused before they are pooled into one
+      // per-expectation hit rate. Not read to refuse the two ARMS against each
+      // other: comparing across an engine change is what this command is for,
+      // and pooling within an arm is what it is not. Optional and every leaf
+      // optional, because no report written before the field existed carries it
+      // — absence resolves to the `unrecorded` pool identity, never a wildcard.
+      engine: z
+        .object({
+          commit: z.string().min(1).optional(),
+          workingTreeClean: z.boolean().optional()
+        })
+        .optional(),
       // The run's optional-capability flags. Read as a free-form
       // `Record<string, boolean>` and NOT as the producer's closed key set, for
       // the same reason `diffScope` above is read as a free string: a capability

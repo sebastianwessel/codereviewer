@@ -25,7 +25,20 @@ export type ExpectationKey = string
 // only has some of a report cannot be tempted to fill the rest in with zeroes.
 export type PairedScoredRun = {
   readonly metricsVersion: string
-  readonly provenance: { readonly answerKeyDigest: string }
+  readonly provenance: {
+    readonly answerKeyDigest: string
+    // The engine build this run came from, when the report named one. Optional
+    // rather than resolved to a literal the way `answerKeyDigest` is, because a
+    // caller holding only part of a report must not be able to fill it in: the
+    // pooling guard maps absence to `unrecorded` itself, and one spelling of
+    // that rule is the point of the guard owning it.
+    readonly engine?:
+      | {
+          readonly commit?: string | undefined
+          readonly workingTreeClean?: boolean | undefined
+        }
+      | undefined
+  }
   readonly caseResults: readonly {
     readonly caseId: string
     readonly expectedFindings: readonly {
@@ -131,10 +144,21 @@ export const collectArmOutcomes = (
   // guard resolves to `unrecorded` for every run and cannot fire. That is not a
   // hole opened here: the only caller builds its arms from a comparison whose
   // command already refuses a judge mismatch before this module is reached.
+  //
+  // The ENGINE dimension is different and is carried, because no caller refuses
+  // it anywhere else. `eval compare` deliberately does not — comparing two arms
+  // across an engine change is the work it exists for — so an arm whose own runs
+  // came from two builds would be pooled into one per-expectation hit rate with
+  // nothing saying so. Pooling is not comparing, and this is the pooling half.
   const refusals = poolIdentityRefusals(
     reports.map((report) => ({
       metricsVersion: report.metricsVersion,
-      provenance: { answerKeyDigest: report.provenance.answerKeyDigest }
+      provenance: {
+        answerKeyDigest: report.provenance.answerKeyDigest,
+        ...(report.provenance.engine === undefined
+          ? {}
+          : { engine: report.provenance.engine })
+      }
     }))
   )
 

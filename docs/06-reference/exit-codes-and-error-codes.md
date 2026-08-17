@@ -89,6 +89,20 @@ Classification is order-sensitive: rate-limit patterns are checked before auth,
 auth before context length, and the `5xx` bucket last. A `429` with an
 "unauthorized" message is therefore classified as `provider_rate_limited`.
 
+One provider code is not derived from a failure at all:
+
+| Code | Trigger | Exit | Retried |
+| --- | --- | --- | --- |
+| `provider_output_truncated` | A *successful* response whose finish reason is `length`, meaning generation stopped at the output-token ceiling | `4` | no |
+
+It is raised from a response the provider considered fine: HTTP `200`, a body,
+no error. Only the finish reason distinguishes it from a complete answer, so
+without this check a review cut off mid-answer is indistinguishable from a
+review that finished and found less. Retrying is pointless — an identical
+request against an identical ceiling truncates identically — so the run fails
+instead. Raise or unset `provider.maxOutputTokens`; when it is unset, the
+message says so and the ceiling belongs to the model or adapter default.
+
 Provider setup problems are **config** errors (exit `2`), not provider errors:
 
 | Code | When | Exit |

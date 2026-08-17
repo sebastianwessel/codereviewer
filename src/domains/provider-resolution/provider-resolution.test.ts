@@ -68,6 +68,55 @@ describe('provider resolution', () => {
     expect(logs).not.toContain('secret-value')
   })
 
+  // The resolved alias must carry the truncation guard, not the raw adapter
+  // provider. Configuring `maxOutputTokens` is what makes a cut-off response
+  // likely, so the one call that installs the ceiling has to be the one that
+  // installs the detection — otherwise every lane resolving an alias silently
+  // opts out.
+  test('resolved alias refuses a response truncated at the output-token limit', async () => {
+    const resolution = await resolveProviderModelAlias({
+      provider: {
+        id: 'openai',
+        model: 'gpt-5-mini',
+        temperature: 0,
+        timeoutMs: 10_000,
+        maxRetries: 1,
+        retryBackoffMs: 0,
+        retryMaxDelayMs: 0,
+        maxOutputTokens: 128
+      },
+      environment: {
+        OPENAI_API_KEY: 'secret-value'
+      },
+      importProvider: async () => ({
+        openai: () => ({
+          ...fakeProvider,
+          object: async () => ({
+            // Valid, parseable, and INCOMPLETE: the shape that used to be
+            // accepted as the whole answer.
+            object: { findings: [{ title: 'first of many' }] },
+            finishReason: 'length' as const,
+            usage: { inputTokens: 10, outputTokens: 128, totalTokens: 138 }
+          })
+        })
+      })
+    })
+
+    expect(resolution.modelAlias.defaults?.maxTokens).toBe(128)
+    await expect(
+      resolution.modelAlias.provider.object!({
+        model: 'gpt-5-mini',
+        messages: [{ role: 'user', content: 'review' }],
+        schema: { type: 'object' },
+        signal: new AbortController().signal
+      })
+    ).rejects.toMatchObject({
+      code: 'provider_output_truncated',
+      category: 'provider',
+      details: { maxOutputTokens: 128 }
+    })
+  })
+
   test('omits unsupported OpenAI GPT-5 temperature defaults', async () => {
     const resolution = await resolveProviderModelAlias({
       provider: {

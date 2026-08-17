@@ -2,7 +2,10 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { z } from 'zod'
-import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
+import {
+  resolveExistingPathInsideRoot,
+  toPortableRelativePath
+} from '../../../platform/path-service.js'
 import {
   EvalSourceProfileSchema,
   EvalSliceCaseSchema,
@@ -59,9 +62,6 @@ type EvalSliceManifestDigestPayload = {
   readonly cases: readonly unknown[]
 }
 
-const toPortableRelativePath = (rootPath: string, filePath: string): string =>
-  path.relative(rootPath, filePath).split(path.sep).join(path.posix.sep)
-
 const collectRepositoryFiles = async (
   repositoryRoot: string,
   currentPath: string = repositoryRoot
@@ -92,6 +92,11 @@ const collectRepositoryFiles = async (
 
         return [
           {
+            // Portable, and shared with `skill-index.ts` rather than spelled out
+            // here, because this string is hashed: `repositoryTreeDigest` folds it
+            // into the slice digest that decides whether two runs are comparable.
+            // A separator that survived on one platform would make that digest a
+            // property of the machine that generated it.
             relativePath: toPortableRelativePath(repositoryRoot, entryPath),
             sizeBytes: entryStat.size,
             sha256: sha256(content)

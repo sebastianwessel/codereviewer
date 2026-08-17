@@ -337,6 +337,62 @@ describe('eval runner', () => {
     expect(renderEvalSummary({ cases, report: result.report })).toMatchSnapshot()
   })
 
+  // WHICH BUILD PRODUCED THE NUMBERS. Every eval before 2026-08-01 ran an
+  // unpinned engine and no artifact from that period can name the build behind
+  // it, so none of those figures can be pooled with a later run. The intent and
+  // impact reports have recorded this since they existed; the report every
+  // published recall and precision figure comes from did not, and the pooling
+  // guard could therefore not refuse a mixed-engine pool at all.
+  describe('the engine build behind a report', () => {
+    const scoreOneCase = async (
+      provenance?: Parameters<typeof runEvaluation>[0]['provenance']
+    ): ReturnType<typeof runEvaluation> =>
+      runEvaluation({
+        cases: parseEvalCases([inlineEvalCases[0]]),
+        judge: acceptingJudge,
+        outputs: [
+          {
+            caseId: 'typescript-positive',
+            changedLineCount: 50,
+            diffHunkCount: 2,
+            contextLedger: [],
+            result: {
+              status: 'ok',
+              reviewReport: reviewReport([admittedFinding()])
+            }
+          }
+        ],
+        generatedAt: '2026-06-20T00:00:02.000Z',
+        evaluationElapsedMs: () => 42,
+        ...(provenance === undefined ? {} : { provenance })
+      })
+
+    test('is stamped on the report, cleanliness included', async () => {
+      const result = await scoreOneCase({
+        engine: { commit: 'a'.repeat(40), workingTreeClean: false }
+      })
+
+      expect(result.report.provenance.engine).toEqual({
+        commit: 'a'.repeat(40),
+        // Not decoration: a number produced by uncommitted code is not
+        // reproducible from the commit it names, and recording the commit alone
+        // would claim that it is.
+        workingTreeClean: false
+      })
+    })
+
+    // The opposite rule to the capability flags beside it, and deliberately.
+    // `unknown` is what `readEngineIdentity` itself answers when git cannot be
+    // read, so it states the truth — nobody can name the build. Omitting the
+    // field instead would produce a report that pools freely with every other
+    // silent report, which is the failure the field exists to end.
+    test('records unknown rather than nothing when the caller names none', async () => {
+      const result = await scoreOneCase()
+
+      expect(result.report.provenance.engine).toEqual({ commit: 'unknown' })
+    })
+  })
+
   test('preserves token usage and renders unavailable cost explicitly', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = await runEvaluation({

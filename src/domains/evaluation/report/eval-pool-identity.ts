@@ -15,7 +15,7 @@
 // all and pooled whatever it was handed. This module is the one owner, and the
 // two existing refusals delegate to it rather than restating it.
 //
-// THE THREE THINGS THAT MUST AGREE, and why each one is not optional:
+// THE FOUR THINGS THAT MUST AGREE, and why each one is not optional:
 //
 //   - the ANSWER KEY. `caseId#expectedIndex` is a positional address into a
 //     case's expected findings. Two runs scored against different keys can put
@@ -30,15 +30,29 @@
 //   - the JUDGE. The semantic judge is the sole authority on whether an admitted
 //     finding IS the expected defect, so "matched" means whatever the judge said.
 //     Pooling runs scored by different judges mixes two definitions of a match.
+//   - the ENGINE. A rate is a property of a build and a model, never of a
+//     corpus, so runs from two builds pooled into one number describe neither.
+//     This repository has already had to void every figure it produced before
+//     2026-08-01, because the harness pinned the repository under test and ran
+//     the engine from the live working tree, and no artifact from that period
+//     records which build produced it.
 //
-// WHAT ABOUT THE ENGINE? It is NOT checked here, and that is a stated gap rather
-// than an oversight: `EvalReportProvenanceSchema` records no engine identity, so
-// no reader can check one. `eval compare` does not refuse a mixed-engine pool
-// either -- it cannot. Spec 06 says so outright ("No scored artifact records
-// engine identity today either, and no guard covers it"), and closing it means
-// adding a producer field, which is a spec decision and not a reader change.
-// `report/engine-identity.ts` reads the fact today for the intent, impact and
-// advisory eval reports, which DO carry it; the main eval report does not.
+// THE ENGINE DIMENSION WAS A STATED GAP AND IS NOW CLOSED. It could not be
+// checked while `EvalReportProvenanceSchema` recorded no engine identity -- the
+// reader had nothing to read -- and spec 06 said so outright ("No scored
+// artifact records engine identity today either, and no guard covers it"). The
+// producer field landed with this dimension; the spec sentence is amended.
+//
+// WHAT THE ENGINE IDENTITY IS, and what it deliberately is not. The commit,
+// plus whether the working tree was CLEAN, because a number produced by
+// uncommitted code is not reproducible from the commit it names and the commit
+// alone would claim it is. A dirty run therefore refuses to pool with a clean
+// run at the same commit -- they are not the same code. Two DIRTY runs at one
+// commit still pool, and that is a bounded permissiveness rather than an
+// oversight: seeds of one configuration are routinely run back to back from an
+// edited tree, and refusing them would fire the guard on the ordinary
+// multi-seed run it exists to protect. What it buys is the pool that actually
+// went wrong -- runs separated by a commit.
 //
 // ABSENCE IS AN IDENTITY, NOT A WILDCARD.
 //
@@ -63,10 +77,24 @@
 // is merged, so there is nothing to disagree about, and every one of those 121
 // archives still opens on its own.
 
+import { ENGINE_COMMIT_UNKNOWN } from './engine-identity.js'
+
 export type PoolIdentityProvenance = {
   readonly answerKeyDigest?: string | undefined
   readonly modelName?: string | undefined
   readonly judgeModelName?: string | undefined
+  // The producer writes this whole block or none of it, and both leaves are
+  // optional here for the same reason every other field on this type is: a
+  // report is read through a tolerant view, and an archive written before the
+  // field existed carries nothing. `commit` absent and `commit: 'unknown'` are
+  // the SAME statement -- nobody can name the build -- and both resolve to
+  // `unrecorded` below.
+  readonly engine?:
+    | {
+        readonly commit?: string | undefined
+        readonly workingTreeClean?: boolean | undefined
+      }
+    | undefined
 }
 
 export type PoolCandidate = {
@@ -101,6 +129,38 @@ export const judgeIdentityOf = (
   provenance?.modelName ??
   POOL_IDENTITY_UNRECORDED
 
+/**
+ * The engine build a report was produced by.
+ *
+ * `ENGINE_COMMIT_UNKNOWN` is what `readEngineIdentity` writes when git could not
+ * be read, so a report carrying it has recorded that it cannot name its build —
+ * which is the same fact as an archive that recorded no engine at all, and maps
+ * to the same `unrecorded` identity. Absence is not a wildcard either way: a
+ * report that cannot name its engine refuses to pool with one that can.
+ *
+ * Cleanliness is part of the identity, never a suffix on a note. A run from a
+ * dirty tree is not the code its commit names, so it does not pool with a clean
+ * run at that commit; and `workingTreeClean` absent means it could not be
+ * determined, which is its own third answer rather than a quiet "clean".
+ */
+export const engineIdentityOf = (
+  provenance: PoolIdentityProvenance | undefined
+): string => {
+  const commit = provenance?.engine?.commit
+
+  if (commit === undefined || commit === ENGINE_COMMIT_UNKNOWN) {
+    return POOL_IDENTITY_UNRECORDED
+  }
+
+  if (provenance?.engine?.workingTreeClean === undefined) {
+    return `${commit} (cleanliness unrecorded)`
+  }
+
+  return provenance.engine.workingTreeClean
+    ? commit
+    : `${commit} (working tree dirty)`
+}
+
 type PoolIdentityDimension = {
   readonly identityOf: (candidate: PoolCandidate) => string
   // Reads as `Refusing to pool evaluation runs <refusal>: <values>.` The
@@ -132,6 +192,12 @@ const POOL_IDENTITY_DIMENSIONS: readonly PoolIdentityDimension[] = [
     refusal: 'scored by different judges: judge models',
     unrecordedRisk:
       'names the model its semantic judge scored with, so pooling them cannot rule out that "matched" was decided by two different scorers'
+  },
+  {
+    identityOf: (candidate) => engineIdentityOf(candidate.provenance),
+    refusal: 'produced by different engine builds: engines',
+    unrecordedRisk:
+      'names the engine build that produced its review output, so pooling them cannot rule out that the number spans a change to the engine being measured'
   }
 ]
 

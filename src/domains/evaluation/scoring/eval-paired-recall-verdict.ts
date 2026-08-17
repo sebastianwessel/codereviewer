@@ -175,8 +175,16 @@ const asPairedScoredRun = (
     // Read by the pooling guard, which refuses an arm whose runs were scored
     // against different answer keys. Cross-ARM divergence is caught by the
     // comparison's own per-case digest refusal before this module is reached.
+    //
+    // The engine is passed through as the report stated it, absence included.
+    // Mapping it to a literal here the way the digest above does would be a
+    // second spelling of the guard's own absence rule, and the guard is where
+    // that rule lives.
     provenance: {
-      answerKeyDigest: report.provenance?.answerKeyDigest ?? 'unrecorded'
+      answerKeyDigest: report.provenance?.answerKeyDigest ?? 'unrecorded',
+      ...(report.provenance?.engine === undefined
+        ? {}
+        : { engine: report.provenance.engine })
     },
     caseResults: runCases
   }
