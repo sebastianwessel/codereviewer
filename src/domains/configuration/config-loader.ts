@@ -4,6 +4,11 @@ import {
   CodeReviewerConfigSchema,
   type CodeReviewerConfig
 } from '../../shared/contracts/index.js'
+import {
+  createStructuredError,
+  isFileNotFoundError
+} from '../../shared/errors/error-normalizer.js'
+import { applyConfiguredSecretRedaction } from './secret-redaction.js'
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -11,9 +16,9 @@ type JsonObject = {
   readonly [key: string]: JsonValue
 }
 
-export type EnvironmentSource = Readonly<Record<string, string | undefined>>
+type EnvironmentSource = Readonly<Record<string, string | undefined>>
 
-export type ConfigLoaderOptions = {
+type ConfigLoaderOptions = {
   readonly repositoryRoot: string
   readonly configPath?: string
   readonly environment?: EnvironmentSource
@@ -21,13 +26,29 @@ export type ConfigLoaderOptions = {
   readonly loadDotEnv?: boolean
 }
 
-export type LoadedConfig = {
+type LoadedConfig = {
   readonly config: CodeReviewerConfig
   readonly environment: EnvironmentSource
   readonly warnings: readonly string[]
   // True when the user explicitly provided baseline settings (file/env/CLI),
   // so a missing baseline file should be reported rather than silently ignored.
   readonly baselineExplicitlyConfigured: boolean
+  // True when the user explicitly listed `contextSources.providers`
+  // (file/env/CLI), so a provider that gathers nothing is a source they asked
+  // for and did not get, rather than a schema default finding the ordinary
+  // absence it was promoted over. Same purpose as the flag above, and it exists
+  // for the same reason: after `CodeReviewerConfigSchema.parse`, a defaulted
+  // provider set and one the user restated verbatim are the same value.
+  //
+  // KEYED ON `providers`, NOT ON `enabled` — which is where it differs from the
+  // baseline flag, deliberately. `baseline.enabled` names the same single file
+  // `baseline.path` already points at, so switching it on IS asking for that
+  // file. `contextSources.enabled` names no source at all: it turns on a
+  // DEFAULTED set, so an operator who wrote only `enabled: true` still asked for
+  // nothing in particular. Every mistyped directory or glob lives inside a
+  // `providers` entry, so keying on that key is exactly what keeps a typo
+  // diagnosable.
+  readonly contextProvidersExplicitlyConfigured: boolean
 }
 
 const defaultReviewConfigPath = '.codereviewer/config.json'
@@ -72,34 +93,82 @@ const rejectPollutionKeysReviver = (key: string, value: unknown): unknown => {
   return value
 }
 
-const parseJsonObject = (content: string): JsonObject => {
-  const parsed: unknown = JSON.parse(content, rejectPollutionKeysReviver)
+// A malformed config file is a day-one failure — a trailing comma, an unclosed
+// brace — and it used to surface as `JSON.parse`'s own message and nothing else:
+// `"Unexpected end of JSON input"`, with no file name, no statement that the
+// configuration was what failed, and no remedy. The reader was left to guess
+// which of the several JSON documents this engine reads was meant.
+//
+// Only a `SyntaxError` is rewritten. The reviver rejects prototype-pollution
+// keys with a `TypeError` naming the offending key, and reporting that as a
+// syntax problem would send the reader looking for a missing brace.
+const parseJsonObject = (content: string, configPath: string): JsonObject => {
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(content, rejectPollutionKeysReviver)
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+
+    throw createStructuredError({
+      code: 'config_error',
+      message: `The configuration file "${configPath}" is not valid JSON, so no setting in it could be read: ${error.message}. Fix the syntax (a trailing comma and an unclosed brace are the usual causes), or delete the file to run on built-in defaults.`,
+      category: 'config',
+      details: { configPath }
+    })
+  }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new TypeError('Config file must contain a JSON object.')
+    throw createStructuredError({
+      code: 'config_error',
+      message: `The configuration file "${configPath}" is valid JSON but is not a JSON object, so it carries no settings. It must be a single \`{ … }\` object whose keys are configuration sections.`,
+      category: 'config',
+      details: { configPath }
+    })
   }
 
   return parsed as JsonObject
 }
 
+// A config file that is absent means two different things, and reading them the
+// same way is what makes the second one dangerous.
+//
+// At the DEFAULT path, absence is the ordinary case: most repositories have no
+// config file and the defaults are the intended settings. At a path the user
+// NAMED -- `--config <path>` or `CODEREVIEWER_CONFIG_PATH` -- absence is a
+// mistake, and continuing on defaults runs a review with settings nobody asked
+// for while reporting success. This project has already paid for exactly that:
+// an A/B whose config flag never reached the run cost roughly $11.50 to compare
+// a build against itself, and the run exited 0 throughout.
+//
+// So a requested path that does not exist is a `config` error, and the default
+// path that does not exist is a warning.
 const readConfigFile = async (
   repositoryRoot: string,
-  configPath: string
+  configPath: string,
+  requestedExplicitly: boolean
 ): Promise<JsonObject | undefined> => {
   try {
     return parseJsonObject(
       await readFile(
         await resolveExistingPathInsideRoot(repositoryRoot, configPath),
         'utf8'
-      )
+      ),
+      configPath
     )
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
+      if (requestedExplicitly) {
+        throw createStructuredError({
+          code: 'config_error',
+          message: `The configuration file "${configPath}" does not exist. It was requested explicitly, so the run stops here rather than continuing on default settings.`,
+          category: 'config',
+          details: { configPath }
+        })
+      }
+
       return undefined
     }
 
@@ -117,12 +186,7 @@ const readOptionalTextFile = async (
       'utf8'
     )
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
+    if (isFileNotFoundError(error)) {
       return undefined
     }
 
@@ -239,6 +303,11 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_MODEL', ['provider', 'model']],
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
     ['CODEREVIEWER_PROVIDER_REASONING_EFFORT', ['provider', 'reasoningEffort']],
+    // Pins the eval judges' model apart from the reviewer's. Deliberately its
+    // own variable rather than a suffix on the provider one: a model comparison
+    // sets `CODEREVIEWER_PROVIDER_MODEL` per arm and must be able to hold this
+    // one FIXED across those arms.
+    ['CODEREVIEWER_JUDGE_MODEL', ['evaluation', 'judgeModel']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
     [
       'CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE',
@@ -345,11 +414,14 @@ export const loadCodeReviewerConfig = async (
     options.environment ?? {},
     options.loadDotEnv ?? true
   )
-  const configPath =
-    options.configPath ??
-    configPathFromEnvironment(environment) ??
-    defaultReviewConfigPath
-  const fileConfig = await readConfigFile(options.repositoryRoot, configPath)
+  const requestedConfigPath =
+    options.configPath ?? configPathFromEnvironment(environment)
+  const configPath = requestedConfigPath ?? defaultReviewConfigPath
+  const fileConfig = await readConfigFile(
+    options.repositoryRoot,
+    configPath,
+    requestedConfigPath !== undefined
+  )
   const warnings = fileConfig === undefined ? ['config-file-missing'] : []
   const environmentConfig = configFromEnvironment(environment)
   const cliConfig = options.cliConfig ?? {}
@@ -361,11 +433,27 @@ export const loadCodeReviewerConfig = async (
   const baselineExplicitlyConfigured =
     isJsonObject(baselineRaw) &&
     ('path' in baselineRaw || 'enabled' in baselineRaw)
+  const contextSourcesRaw = mergedConfig.contextSources
+  // Read off the MERGED raw object, before the schema fills its defaults in —
+  // the only point on this path where "the user wrote this" is still visible.
+  const contextProvidersExplicitlyConfigured =
+    isJsonObject(contextSourcesRaw) && 'providers' in contextSourcesRaw
+  const config = CodeReviewerConfigSchema.parse(mergedConfig)
+
+  // The one effect this loader has beyond returning a value, and it is here
+  // because this is the only place configuration and environment are both in
+  // hand. Redaction is ambient — no seam that redacts takes configuration — so
+  // the configured secrets have to be established once, on the path every entry
+  // point already takes, rather than by each caller remembering to. A run that
+  // loaded configuration and did not apply it would emit artifacts that look
+  // redacted and are not.
+  applyConfiguredSecretRedaction({ config, environment })
 
   return {
-    config: CodeReviewerConfigSchema.parse(mergedConfig),
+    config,
     environment,
     warnings,
-    baselineExplicitlyConfigured
+    baselineExplicitlyConfigured,
+    contextProvidersExplicitlyConfigured
   }
 }

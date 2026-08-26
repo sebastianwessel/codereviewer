@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type ReviewContextDocument,
-  type WorkflowReviewTask
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import { ReviewContextDocumentSchema } from '../agent-contracts.js'
+import type {
+  ReviewContextDocument,
+  WorkflowReviewTask
 } from '../agent-contracts.js'
 import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
 } from '../contracts.js'
-import { findingRefutationInputForCandidate } from './packet.js'
-import { isTaskPacketBudgetExceededError } from '../discovery/task-packet.js'
+import { findingRefutationBatchInput } from './packet.js'
+import { isTaskPacketBudgetExceededError } from '../packet-budget.js'
 
 const configHash =
   '1111111111111111111111111111111111111111111111111111111111111111'
@@ -29,6 +30,21 @@ const modelCandidate: CandidateFinding = {
   },
   evidenceIds: ['ev_diff1'],
   proposedBy: 'review-agent'
+}
+
+// A second model candidate raised by the SAME task. Batched refutation adjudicates
+// it in the same packet, so the packet must carry the union of the batch's evidence.
+const secondModelCandidate: CandidateFinding = {
+  ...modelCandidate,
+  id: 'cand_bug2',
+  title: 'Changed branch skips validation',
+  description: 'The changed branch can skip validation.',
+  location: {
+    path: 'src/app.ts',
+    startLine: 40,
+    side: 'new'
+  },
+  evidenceIds: ['ev_other1']
 }
 
 const supportCandidate: CandidateFinding = {
@@ -53,7 +69,7 @@ const evidence = (
   path = 'src/app.ts'
 ): EvidenceRecord => ({
   id,
-  kind: 'diff',
+  kind: 'file',
   summary: `Evidence for ${path}.`,
   location: {
     path,
@@ -73,7 +89,10 @@ const reviewContext = (
   ledgerEntryId: 'ctx_aaaaaaaa'
 })
 
-const task = (context: readonly ReviewContextDocument[]): WorkflowReviewTask => ({
+const task = (
+  context: readonly ReviewContextDocument[],
+  instructions: WorkflowReviewTask['instructions'] = []
+): WorkflowReviewTask => ({
   id: 'task_app1',
   round: 1,
   kind: 'file',
@@ -82,14 +101,26 @@ const task = (context: readonly ReviewContextDocument[]): WorkflowReviewTask => 
   evidenceIds: ['ev_diff1'],
   candidateIds: ['cand_bug1'],
   contextEntryIds: context.map((entry) => entry.ledgerEntryId),
+  instructions: [...instructions],
   reviewContext: [...context],
   priority: 0
 })
 
+// Instruction documents as context assembly resolves them for one task. Declared
+// here so a test can hand the same set to the task fixture that the assertions
+// name.
+const instructionDocuments = (
+  ...contents: readonly string[]
+): WorkflowReviewTask['instructions'] =>
+  contents.map((content, index) => ({
+    path: `AGENTS-${index}.md`,
+    content,
+    allowed: true
+  }))
+
 const workflowInput = (
   input: {
     readonly maxTaskInputBytes?: number
-    readonly instructions?: readonly { readonly content: string }[]
   } = {}
 ): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
@@ -108,11 +139,6 @@ const workflowInput = (
       supportCandidate,
       unrelatedSamePathSupportCandidate
     ],
-    instructions: (input.instructions ?? []).map((instruction, index) => ({
-      path: `AGENTS-${index}.md`,
-      content: instruction.content,
-      allowed: true
-    })),
     skills: [],
     ...(input.maxTaskInputBytes === undefined
       ? {}
@@ -127,20 +153,19 @@ const workflowInput = (
 describe('finding refutation packet', () => {
   test('keeps candidate-scoped evidence, support signals, and task context', () => {
     const context = reviewContext()
-    const packet = findingRefutationInputForCandidate({
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput(),
-      tasks: [task([context])],
-      candidate: modelCandidate,
-      allCandidates: [modelCandidate, supportCandidate],
-      sharedDigest: '(no admitted shared context yet)'
+      task: task([context]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, supportCandidate]
     })
 
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1'
     ])
-    expect(packet.input.supportSignalCandidates).toEqual([supportCandidate])
-    expect(packet.input.reviewContext).toEqual([context])
-    expect(packet.input.reviewedDiffRanges).toEqual([
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
+    expect(packet.reviewContext).toEqual([context])
+    expect(packet.reviewedDiffRanges).toEqual([
       {
         path: 'src/app.ts',
         startLine: 4,
@@ -149,35 +174,129 @@ describe('finding refutation packet', () => {
     ])
   })
 
-  test('drops unrelated same-file support signals from the refutation packet', () => {
-    const packet = findingRefutationInputForCandidate({
+  // The point of the batch packet: every candidate of the task rides along with a
+  // SINGLE copy of the task context, and the evidence is the union of the batch.
+  test('carries every batched candidate and the union of their evidence once', () => {
+    const context = reviewContext()
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput(),
-      tasks: [task([])],
-      candidate: modelCandidate,
+      task: task([context]),
+      candidates: [modelCandidate, secondModelCandidate],
+      allCandidates: [modelCandidate, secondModelCandidate, supportCandidate]
+    })
+
+    expect(packet.candidates.map((entry) => entry.id)).toEqual([
+      'cand_bug1',
+      'cand_bug2'
+    ])
+    expect(packet.evidence.map((record) => record.id)).toEqual([
+      'ev_diff1',
+      'ev_other1'
+    ])
+    expect(packet.reviewContext).toEqual([context])
+  })
+
+  // Spec 04: refutation adjudicates a candidate against the same rules its
+  // discovery call was given, so the packet takes the originating task's own
+  // resolved instruction set. Taking a run-wide list instead would show the
+  // adjudicator guidance that was scoped away from the task that raised the
+  // candidate — and in this stage the mistake is silent, because a candidate
+  // refuted against a rule that should not have applied produces no output.
+  test('carries the originating task’s own instruction set', () => {
+    const scoped = instructionDocuments('Backend-only guidance.')
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([reviewContext()], scoped),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.instructions).toEqual(scoped)
+
+    const unscopedPacket = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([reviewContext()]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(unscopedPacket.instructions).toEqual([])
+  })
+
+  test('drops unrelated same-file support signals from the refutation packet', () => {
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([]),
+      candidates: [modelCandidate],
       allCandidates: [
         modelCandidate,
         supportCandidate,
         unrelatedSamePathSupportCandidate
-      ],
-      sharedDigest: '(no admitted shared context yet)'
+      ]
     })
 
-    expect(packet.input.supportSignalCandidates).toEqual([supportCandidate])
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
+  })
+
+  // The packet reaches the provider as `JSON.stringify(input)` with Zod's
+  // declaration key order, so the fields ahead of `reviewContext` ARE the prompt
+  // prefix two refutation calls of one run share, and a provider caches only a
+  // prefix it can match. Pinning the invariant here because it is invisible: a
+  // per-task field moved or inserted above `reviewContext` breaks nothing a
+  // functional test would notice, it just silently deletes the shared prefix.
+  test('serializes every run-invariant field ahead of the first per-task field', () => {
+    const input = workflowInput()
+    // The unscoped case: both tasks resolved the same repository-wide
+    // instruction, so it is still run-invariant and still belongs in the prefix.
+    const instructions = instructionDocuments('Repository review instructions.')
+    const firstBatch = JSON.stringify(
+      findingRefutationBatchInput({
+        workflowInput: input,
+        task: task([reviewContext('first task context')], instructions),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
+      })
+    )
+    const secondBatch = JSON.stringify(
+      findingRefutationBatchInput({
+        workflowInput: input,
+        task: task([reviewContext('second task context')], instructions),
+        candidates: [secondModelCandidate],
+        allCandidates: [secondModelCandidate]
+      })
+    )
+
+    let sharedPrefixLength = 0
+    while (
+      sharedPrefixLength < firstBatch.length &&
+      firstBatch[sharedPrefixLength] === secondBatch[sharedPrefixLength]
+    ) {
+      sharedPrefixLength += 1
+    }
+    const sharedPrefix = firstBatch.slice(0, sharedPrefixLength)
+
+    // Provenance, instructions, and skills are constant for every refutation call
+    // of a run and must all sit inside the shared prefix.
+    expect(sharedPrefix).toContain('"provenance":')
+    expect(sharedPrefix).toContain('Repository review instructions.')
+    expect(sharedPrefix).toContain('"skills":')
+    // The prefix reaches the first per-task field and stops inside it.
+    expect(sharedPrefix).toContain('"reviewContext":')
+    expect(sharedPrefix).not.toContain('first task context')
   })
 
   test('throws the shared packet budget error when the refutation packet is too large', () => {
     let thrown: unknown
 
     try {
-      findingRefutationInputForCandidate({
-        workflowInput: workflowInput({
-          maxTaskInputBytes: 10000,
-          instructions: [{ content: 'irreducible instruction '.repeat(800) }]
-        }),
-        tasks: [task([])],
-        candidate: modelCandidate,
-        allCandidates: [modelCandidate],
-        sharedDigest: '(no admitted shared context yet)'
+      findingRefutationBatchInput({
+        workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+        task: task(
+          [],
+          instructionDocuments('irreducible instruction '.repeat(800))
+        ),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
       })
     } catch (error: unknown) {
       thrown = error
@@ -186,29 +305,286 @@ describe('finding refutation packet', () => {
     expect(isTaskPacketBudgetExceededError(thrown)).toBe(true)
   })
 
-  test('compacts optional digest and support-signal context before failing the packet budget', () => {
+  // A packet that fits carries no notice at all: the field exists to explain a
+  // withheld field, and an always-present one would be a second constant of the
+  // kind the shared-context digest already turned out to be.
+  test('carries no budget notice when the packet fits', () => {
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 100000 }),
+      task: task([reviewContext()]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, supportCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
+  })
+
+  test('compacts support-signal context before failing the packet budget', () => {
     const context = reviewContext('decisive context')
     const supportCandidates = Array.from({ length: 40 }, (_, index) => ({
       ...supportCandidate,
       id: `cand_support${index}`
     }))
-    const packet = findingRefutationInputForCandidate({
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput({
         maxTaskInputBytes: 10000
       }),
-      tasks: [task([context])],
-      candidate: modelCandidate,
-      allCandidates: [modelCandidate, ...supportCandidates],
-      sharedDigest: 'large admitted digest '.repeat(700)
+      task: task([context]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, ...supportCandidates]
     })
 
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1'
     ])
-    expect(packet.input.reviewContext).toEqual([context])
-    expect(packet.input.supportSignalCandidates).toEqual([])
-    expect(packet.input.sharedDigest).toBe(
-      '(shared digest omitted for refutation packet budget)'
+    expect(packet.reviewContext).toEqual([context])
+    expect(packet.supportSignalCandidates).toEqual([])
+    // The support signals were shed, so the notice NAMES them. Without it the
+    // emptied array read to the refuter as "there is no corroboration" rather than
+    // "it was withheld".
+    expect(packet.budgetNotice).toContain('WITHHELD')
+    expect(packet.budgetNotice).toContain('the deterministic support signals')
+    // And what the absence must NOT be read as. A candidate refuted because the
+    // budget removed its support produces no output at all, so the mistake is
+    // invisible downstream.
+    expect(packet.budgetNotice).toContain('needs-more-evidence')
+  })
+
+  // THE DEFAULT PATH. `supportSignalCandidates` is filtered on `proposedBy !==
+  // 'review-agent'` and the only producer inside this engine stamps
+  // `'review-agent'` on every candidate it proposes, so on an ordinary run the
+  // array is ALREADY empty when the ladder starts. The first rung ran anyway:
+  // it emptied an empty array — shedding nothing — and added ~330 characters of
+  // notice, so the response to an over-budget packet was to make it BIGGER, and
+  // the notice told the refuter that deterministic support signals had been
+  // withheld from it when none had ever existed. That is the same
+  // absence-the-engine-created failure the notice exists to prevent, arriving
+  // through the notice itself.
+  test('a rung with nothing to shed neither runs nor claims a withholding', () => {
+    // Large enough that the packet is over budget with the support-signal rung
+    // unavailable, so the ladder must reach the review-context rung to fit.
+    const context = reviewContext('decisive context '.repeat(1200))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+      task: task([context]),
+      candidates: [modelCandidate],
+      // Nothing here was proposed by anything but the review agent — the shape
+      // of every default-path run.
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.supportSignalCandidates).toEqual([])
+    expect(packet.reviewContext).toEqual([])
+    // What WAS withheld is named.
+    expect(packet.budgetNotice).toContain('the review context')
+    // What was never there is not: a refuter told the support signals were
+    // withheld reads their absence as an artefact of the budget rather than as
+    // the ordinary state of every run, and both readings are wrong here.
+    expect(packet.budgetNotice).not.toContain('support signals')
+  })
+
+  test('naming the withheld context is the last thing shed, not the first', () => {
+    // Every rung of the ladder carries the notice, including the one that empties
+    // the review context — the rung whose silence was most costly, because the
+    // refuter's instructions treat review context as evidentiary.
+    // Large enough that shedding the signals still does not fit, so the ladder
+    // reaches its last rung. 10000 is the schema floor for the cap.
+    const context = reviewContext('decisive context '.repeat(1200))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+      task: task([context]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.reviewContext).toEqual([])
+    expect(packet.budgetNotice).toContain('the review context')
+    expect(packet.budgetNotice).toContain('artefact of the budget')
+  })
+})
+
+// Spec 05, *The Excerpt Premise Is Per-Packet* (2026-08-17). The refuter's fixed
+// instructions used to open the guard clause with "review context content can be a
+// partial excerpt selected for budget" — a claim that is false on essentially every
+// packet since spec 26 stopped assembly splitting on bytes. The premise is a
+// property of ONE packet, so it now rides in the packet, and only when true.
+describe('finding refutation packet — partial-excerpt notice', () => {
+  // Assembly's own output: one document per whole file, with the span it occupies.
+  const assembled = (
+    endLine: number,
+    path = 'src/app.ts'
+  ): ReviewContextDocument => ({
+    kind: 'file',
+    path,
+    content: 'whole file',
+    startLine: 1,
+    endLine,
+    ledgerEntryId: 'ctx_aaaaaaaa'
+  })
+
+  const workflowInputWithAssembledContext = (
+    context: readonly ReviewContextDocument[],
+    maxTaskInputBytes?: number
+  ): ReviewWorkflowInput =>
+    ReviewWorkflowInputSchema.parse({
+      ...workflowInput(
+        maxTaskInputBytes === undefined ? {} : { maxTaskInputBytes }
+      ),
+      reviewContext: [...context]
+    })
+
+  test('says nothing when the task holds the whole file', () => {
+    // THE ONLY PATH ANY REAL RUN HAS TAKEN. Spec 26 records zero provider refusals
+    // over 21 cases up to 1.2 MB, so the reactive split has never fired and every
+    // observed packet is this one. Silence is the correct answer, and the old
+    // instruction said the opposite on every one of them.
+    const whole = assembled(400)
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([whole]),
+      task: task([whole]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+  })
+
+  test('declares the excerpt, its path, and its line range when a split fired', () => {
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half',
+      startLine: 201,
+      endLine: 400
+    }
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)]),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('src/app.ts (lines 201-400)')
+    // The operative half: the refuter must not read the missing 200 lines as a
+    // statement about the file, and must not refute on their absence.
+    expect(packet.budgetNotice).toContain('artefact of the split')
+    expect(packet.budgetNotice).toContain('needs-more-evidence')
+  })
+
+  test('makes no claim when there is no assembled context to compare against', () => {
+    // Detection is exact or absent — never a guess. A caller that supplies no
+    // run-wide context gives this nothing to measure a span against, and the honest
+    // output is silence rather than a heuristic.
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([{ ...assembled(400), startLine: 201 }]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+  })
+
+  test('composes the excerpt notice with a shedding notice rather than replacing it', () => {
+    // Two different absences, both engine-created, both of which the refuter has to
+    // know about: half the file was never shown, and the support signals were shed
+    // to fit the budget. Overwriting either leaves an absence reading as evidence.
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half',
+      startLine: 201,
+      endLine: 400
+    }
+    const supportCandidates = Array.from({ length: 40 }, (_, index) => ({
+      ...supportCandidate,
+      id: `cand_support${index}`
+    }))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)], 10000),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, ...supportCandidates]
+    })
+
+    expect(packet.supportSignalCandidates).toEqual([])
+    expect(packet.reviewContext).toEqual([half])
+    expect(packet.budgetNotice).toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('the deterministic support signals')
+  })
+
+  test('drops the excerpt notice once the review context it describes is shed', () => {
+    // An excerpt statement about documents the packet no longer holds is not a
+    // smaller truth, it is a false one. The omission notice already covers the
+    // absence, and it covers ALL of it.
+    const half: ReviewContextDocument = {
+      ...assembled(400),
+      content: 'second half '.repeat(1200),
+      startLine: 201,
+      endLine: 400
+    }
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInputWithAssembledContext([assembled(400)], 10000),
+      task: task([half]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate]
+    })
+
+    expect(packet.reviewContext).toEqual([])
+    expect(packet.budgetNotice).not.toContain('PARTIAL EXCERPT')
+    expect(packet.budgetNotice).toContain('the review context')
+  })
+})
+
+// The change-intent exclusion is a BLOCKLIST — `kind !== 'change-intent'` — so
+// every other reviewContext kind reaches refutation by default. That is fail-open,
+// and TypeScript cannot catch it: the comparison compiles unchanged however many
+// kinds the enum gains.
+//
+// This test is the guard the filter does not have. It fails when a kind is added,
+// forcing a deliberate decision about whether refutation may see it — which is the
+// point, because the next untrusted-but-fact-shaped kind (a PR description, an
+// external ticket body) inherits change-intent's exact risk: refutation treats
+// reviewContext as evidentiary, and a suppressed finding leaves no trace.
+describe('every reviewContext kind is a decision, not a default', () => {
+  const kindsRefutationMaySee = [
+    'file',
+    'support-signal-output',
+    'referenced-definition',
+    'analyzer-signal'
+  ] as const
+  const kindsWithheldFromRefutation = ['change-intent'] as const
+
+  test('the enum holds exactly the kinds this test has ruled on', () => {
+    expect([...ReviewContextDocumentSchema.shape.kind.options].sort()).toEqual(
+      [...kindsRefutationMaySee, ...kindsWithheldFromRefutation].sort()
     )
+  })
+
+  test('a withheld kind never reaches the refuter', () => {
+    for (const kind of kindsWithheldFromRefutation) {
+      const packet = findingRefutationBatchInput({
+        workflowInput: workflowInput(),
+        task: task([{ ...reviewContext(), kind }]),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
+      })
+
+      expect(packet.reviewContext).toEqual([])
+    }
+  })
+
+  test('an allowed kind does reach the refuter', () => {
+    for (const kind of kindsRefutationMaySee) {
+      const document = { ...reviewContext(), kind }
+      const packet = findingRefutationBatchInput({
+        workflowInput: workflowInput(),
+        task: task([document]),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
+      })
+
+      expect(packet.reviewContext).toEqual([document])
+    }
   })
 })

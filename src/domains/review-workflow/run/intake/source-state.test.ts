@@ -65,7 +65,8 @@ describe('review runner source state', () => {
         }
       ],
       diffMaps: [],
-      rawDiff: ''
+      rawDiff: '',
+      deletedFiles: []
     }
     const intakeState: ReviewRunnerRepositoryIntakeState = {
       intake,
@@ -81,7 +82,8 @@ describe('review runner source state', () => {
       ],
       intakeMetrics: {
         changedFileCount: 1,
-        skippedFileCount: 1
+        skippedFileCount: 1,
+        redactedDiffSpanCount: 0
       }
     }
     const sourceState: ReviewRunnerSourceReadState = {
@@ -143,7 +145,11 @@ describe('review runner source state', () => {
         step: 'repository_intake',
         attributes: {
           changedFileCount: 1,
-          skippedFileCount: 1
+          skippedFileCount: 1,
+          // Stated at zero, like every other count that says what the reviewer
+          // was given: a run that redacted part of the diff has to be tellable
+          // apart from one that redacted nothing.
+          redactedDiffSpanCount: 0
         }
       },
       {
@@ -166,7 +172,8 @@ describe('review runner source state', () => {
         message: 'Repository intake completed.',
         fields: {
           changed_file_count: 1,
-          skipped_file_count: 1
+          skipped_file_count: 1,
+          redacted_diff_span_count: 0
         }
       },
       {

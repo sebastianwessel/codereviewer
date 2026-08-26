@@ -1,7 +1,7 @@
 # 03: Finding, Evidence, And Report Contracts
 
 Status: Approved
-Date: 2026-07-20
+Date: 2026-07-31
 
 ## Contract Source Rule
 
@@ -29,14 +29,64 @@ ReviewMode = "local" | "ci" | "pr" | "full"
 ReviewDepth = "fast" | "balanced" | "thorough"
 Severity = "critical" | "high" | "medium" | "low" | "info"
 FindingCategory = "bug" | "security" | "performance" | "maintainability" | "compatibility" | "policy" | "test"
-EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-rationale" | "config" | "policy" | "data-flow" | "related-location" | "rule" | "baseline" | "deterministic-signal" | "tool-read" | "tool-search" | "refutation"
+EvidenceKind = "file" | "diagnostic" | "model-rationale" | "citation" | "tool-read" | "tool-search"
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
-RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted"
+RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted" | "deterministic-contradiction" | "weak-evidence" | "static-analysis-duplicate"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
-ReportFormat = "json" | "markdown" | "sarif" | "github-review-comments"
+ReportFormat = "json" | "markdown" | "sarif"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-error"
 ```
+
+
+**On the size of `EvidenceKind`.** It carried seventeen values; twelve had no
+producer and were removed, each for a stated reason rather than for the absence
+itself — an unproduced value can equally mean a capability nobody wired, and
+those get wired instead. `data-flow`, `related-location`, `rule` and `baseline`
+duplicated first-class `AdmittedFinding` fields that analyzer ingestion already
+populates; `refutation` renamed what refutation mints as `model-rationale`;
+`symbol` named a declared-symbol span, which any located evidence record's
+`location` already covers; `command`, `config` and `policy` name subsystems this
+engine does not have; `proof` duplicated the verification domain's
+`Verdict`/`Claim`; `diff` claimed a finding rests on a hunk, but the diff travels
+as `reviewedDiffRanges` and a citation into changed code is a citation into a
+file. **All eleven removed on 2026-08-10** — this sentence read *"All six"* until
+2026-08-14, and six, eleven and twelve cannot all be right in a contract whose whole
+purpose is to reconcile against the schema by counting. It reconciles as: eleven
+named here, plus `deterministic-signal` below removed later, is the twelve; seventeen
+less twelve leaves five kept (`file`, `diagnostic`, `refutation` → renamed
+`model-rationale`, `tool-read`, `tool-search`); `citation` was added afterwards with
+its producer, giving the **six** values the enum carries today.
+
+`deterministic-signal` was KEPT once, on 2026-08-10, as the sole exception to the
+rule this contract otherwise enforces — add a value in the same change that
+produces it, never before — on the argument that signal facts are extracted and
+do reach the model, today as an opaque blob no finding can cite. The measurement
+that would have wired a citation path for it came back null
+(reports/2026-08-10-signal-facts-result.md), so it was removed in its turn.
+
+`citation` (added the same day) does not repeat that exception: it landed in the
+same change as its producer, `citationEvidenceFor`
+(`src/domains/review-workflow/pipeline/discovery/citation-evidence.ts`), which
+mints it only for a discovery-cited source line a deterministic check re-read and
+confirmed against the reviewed file. Gated by `review.citations.enabled`
+(off by default, unmeasured); disabled, a finding's `evidenceIds` stays `[]`
+exactly as before this kind existed, and a citation that is absent, malformed, or
+fails verification can never drop, downgrade, or reject the candidate that sent
+it.
+
+**`AdmittedFinding.cwe`, `securitySeverity`, `relatedLocations` and `dataFlow`
+stay**, and are not evidence of dead code even when a whole eval corpus shows them
+empty. They are populated from ingested analyzer artifacts; a corpus that supplies
+none leaves them absent, which is the contract working, not a field nobody fills.
+
+The last three `RejectReason` members were already in `RejectReasonSchema` and in
+the generated `review-report.schema.json`; this alias had simply not been updated,
+so a consumer written against the prose would reject a valid report. `weak-evidence`
+is live — a refutation that leaves a candidate unproved records it with status
+`needs-more-evidence`. `deterministic-contradiction` and `static-analysis-duplicate`
+have **no producer in the implementation today**: they remain in the contract because
+a consumer must still accept them, not because anything emits them.
 
 ## Path Contract
 
@@ -66,16 +116,19 @@ For reviewed head-file content, admission must validate that `startLine` and
 `endLine` resolve to a known source line range before a finding can become
 inline-eligible. Candidates with `side = "new"` or `side = "file"` whose line
 range is outside the reviewed head file must be rejected with
-`location-invalid`. R1 does not create old-side GitHub review comments; old-side
-findings that otherwise pass admission must be `summary-only` or
+`location-invalid`. R1 does not create old-side review comments on any platform;
+old-side findings that otherwise pass admission must be `summary-only` or
 `artifact-only`.
 
 When a run has a `DiffMap[]`, `reporterEligibility = inline` additionally
-requires the new-side finding line range to overlap a changed new-side diff
-hunk for the same path. Findings on reviewed source lines outside changed hunks
-may still be admitted, but they must be `summary-only` or `artifact-only` so
-GitHub review-comment drafts cannot target lines the pull request API cannot
-anchor.
+requires the finding to be anchorable on a changed line for the same path: a
+`side = "new"` finding must have a line range that overlaps a changed new-side
+hunk, and a `side = "file"` finding must have a `startLine` that falls inside
+one. A `side = "file"` finding is inline-eligible only through that hunk test,
+so a run with no diff ranges produces no inline whole-file findings. Findings on
+reviewed source lines outside changed hunks may still be admitted, but they must
+be `summary-only` or `artifact-only` so review-comment drafts cannot target
+lines a review platform cannot anchor.
 
 Provider task and validation packets may include diff-range `changeKind`
 metadata. `changeKind = "new"` means the matching new-side hunk is introduced
@@ -118,11 +171,26 @@ primary finding location.
 | `value` | yes | string | Lowercase base32/hex hash. |
 
 Every admitted finding carries exactly one fingerprint, produced by the
-`v2-category-path-title-anchor` algorithm. Its input is the normalized finding
-category, the repository-relative path, the normalized title, and a normalized
-**anchor text**: the source line at the finding's `startLine`, lowercased with
-runs of non-alphanumeric characters collapsed to single spaces and trimmed. When
-the source line cannot be resolved the anchor contributes the empty string.
+`v3-category-path-anchor` algorithm. Its input is the normalized finding
+category, the repository-relative path, and a normalized **anchor text**: the
+source line at the finding's `startLine`, lowercased with runs of non-alphanumeric
+characters collapsed to single spaces and trimmed. When the source line cannot be
+resolved the anchor contributes the empty string.
+
+**The finding's title is NOT an input, and v2 — which included it — was measured
+unfit for the purpose the fingerprint exists for.** A title is model prose,
+rewritten almost every run: across ten identical runs of one pinned engine, 96% of
+cases produced a different `(category, path, title)` set, and on the cases inspected
+not one title recurred. A fingerprint carrying it therefore changed on every push
+even when nothing changed, so the baseline reported an untouched finding as
+**resolved** and the very same defect as **new** in one run, and inline comments
+re-posted rather than deduplicating. Identity across pushes is the whole contract of
+this field, and prose cannot carry it.
+
+The consequence is deliberate: two findings sharing a category, a path and an
+anchored line collapse to one. The semantic merge upstream exists to collapse
+exactly that case, so the fingerprint does not need a tiebreaker that costs it
+stability.
 
 Anchor sources are indexed by head-side content. A location with `side` of `old`
 resolves to no anchor, because line N of the head file is not the line such a
@@ -173,7 +241,7 @@ discloses no source content.
 | `id` | yes | `evidenceId` | Stable within run. |
 | `kind` | yes | `EvidenceKind` | Closed enum. |
 | `summary` | yes | string 1..500 | Redacted, safe for logs/reports. |
-| `location` | conditional | `CodeLocation` | Required for `diff`, `file`, `symbol`, and `diagnostic`; forbidden for `config` and `policy`; optional for `command` and `model-rationale`. |
+| `location` | no | `CodeLocation` | Optional for every kind, uniformly. This row previously stated a per-kind required/forbidden rule naming `diff`, `symbol`, `config`, `policy` and `command` — five values removed from `EvidenceKind` on 2026-08-10 (see above) — and no such rule was ever enforced: `EvidenceRecordSchema.location` is and was `CodeLocationSchema.optional()`. A conditional stated here and absent from the schema is a rule readers believe and code does not apply, so the row now says what the contract actually is. |
 | `source` | yes | string | Support signal extractor, agent, tool, or config source name. |
 | `sourceVersion` | no | string | Version/hash when known. |
 | `contentHash` | no | string | SHA-256 hash of raw content when raw content is withheld. |
@@ -189,19 +257,28 @@ Raw source snippets must not be stored in `summary`. If raw content is needed
 for debugging, `rawContentRef` points to an artifact excluded from default
 publishing and marked sensitive.
 
-## DeterministicSignal
+## Deterministic Support Signals
 
 Deterministic signals are support data for model context, refutation, and
 admission safety. They are not the primary production issue-discovery product.
 
-| Field | Required | Type | Rule |
-| --- | --- | --- | --- |
-| `id` | yes | string | Stable within run. |
-| `kind` | yes | `"line-anchor" | "symbol-span" | "import-edge" | "test-hint" | "config-hint" | "scope-check" | "duplicate-key" | "contradiction" | "external-tool-summary"` | Closed enum. |
-| `path` | conditional | repositoryRelativePath | Required for file-backed signals. |
-| `location` | no | `CodeLocation` | Must resolve when present. |
-| `summary` | yes | string 1..500 | Redacted and report-safe. |
-| `evidenceIds` | yes | evidence ID array | May be empty for scope-only signals. |
+**This section previously specified a `DeterministicSignal` contract** — `id`,
+`kind` from a nine-value enum (`line-anchor`, `symbol-span`, `import-edge`,
+`test-hint`, `config-hint`, `scope-check`, `duplicate-key`, `contradiction`,
+`external-tool-summary`), `path`, `location`, `summary`, `evidenceIds`. **No such
+shape was ever produced.** `DeterministicSignalSchema` existed in
+`shared/contracts`, was exported publicly, and had no producer and no consumer;
+it was deleted on 2026-08-10. Not one of those nine `kind` values appears
+anywhere in the codebase.
+
+What the extractors actually emit is `SupportSignalFact`
+(`src/domains/deterministic-signals/shared/deterministic-signal-types.ts`):
+`id`, `language`, `kind` from `import | export | declaration | public-symbol |
+module`, `path`, `name`, optional `moduleSpecifier`, `line`, `endLine`,
+`summary`, `contentHash` — carried alongside `EvidenceRecord[]` in a
+`DeterministicSignalExtraction`. That type is the contract, and it lives with the
+domain that produces it rather than being restated here, so the two cannot
+disagree again.
 
 Signals may corroborate or contradict a model-origin candidate, but signals from
 CodeQL/linter/build/test-equivalent categories should be de-prioritized unless
@@ -237,8 +314,26 @@ artifact-only output according to promotion policy.
 | `location` | yes | `CodeLocation` | Candidate location. |
 | `evidenceIds` | yes | string[] | References existing evidence when the candidate cites exact task evidence; may be empty before validation. |
 | `proposedBy` | yes | string | Agent or deterministic signal source ID. |
-| `suggestedFix` | no | string <= 1200 | Text only in R1; no patch application. |
-| `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal. Preferred over `suggestedFix` for structured output. |
+| `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal (summary and optional edits). The single fix contract. |
+| `securitySeverity` | no | number 0..10 | CVSS-like numeric severity when the proposer states one. |
+| `ruleId` | no | string | Stable signal or policy rule identifier when known. |
+| `helpUri` | no | URL | Rule help URL. |
+| `cwe` | no | string[] | CWE IDs when known. |
+| `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. Messages are redacted at admission. |
+| `dataFlow` | no | `DataFlowPath[]` | Source-to-sink or cause-to-effect path. Labels and step messages are redacted at admission. |
+
+The last six fields are the ones `AdmittedFinding` carries and the SARIF reporter
+projects. They are declared HERE because an admitted finding is built by spreading
+its candidate: a field the candidate cannot hold is a field no run can produce, and
+these six went unproducible from the contract's first day until 2026-08-11.
+
+Their producer is the **caller**: a client seeding `ReviewWorkflowInput.candidates`
+with a deterministic signal's output is exactly the proposer that has a rule id, a
+CWE list, and a traced path to state. The holistic review does not fill them, and
+analyzer ingestion deliberately does not (see spec 15 — an ingested alert keeps its
+metadata on its own `EvidenceRecord`, because joining a third-party alert to a
+model-authored finding by shared location would attach one defect's classification
+to another).
 
 Model-origin candidates come directly from the holistic whole-file review. Task
 evidence and deterministic signals are optional corroborating inputs and must be
@@ -277,17 +372,17 @@ All `CandidateFinding` fields plus:
 | `admissionStatus` | yes | `"admitted"` | Fixed value. |
 | `admittedAt` | yes | ISO datetime | UTC. |
 | `admissionEvidenceIds` | yes | non-empty string[] | Evidence used by gate. |
-| `reporterEligibility` | yes | `ReporterEligibility` | Inline only when diff line is valid and severity is at least configured inline threshold. |
+| `reporterEligibility` | yes | `ReporterEligibility` | Inline only when the location anchors to a changed new-side line (see the diff-map rule above) and severity is at least the configured inline threshold. |
 | `provenance` | yes | `FindingProvenance` | Model/signal/config versions. |
 | `refutationId` | conditional | `refutationId` | Required for model-origin admitted findings; references the proved refutation. |
 | `baselineStatus` | yes | `BaselineStatus` | `existing` when matched against the configured baseline, `unknown` when a baseline is explicitly configured but its file is missing/indeterminate, otherwise `new`. |
 | `fingerprints` | yes | non-empty `FindingFingerprint[]` | Used for de-duplication and baseline matching. |
-| `securitySeverity` | no | number 0..10 | CVSS-like numeric severity for security findings when available. |
-| `ruleId` | no | string | Stable signal or policy rule identifier when known. |
-| `helpUri` | no | URL | Rule help URL after allowlist validation. |
-| `cwe` | no | string[] | CWE IDs when known. |
-| `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. |
-| `dataFlow` | no | `DataFlowPath[]` | Source-to-sink or cause-to-effect path. |
+
+`securitySeverity`, `ruleId`, `helpUri`, `cwe`, `relatedLocations` and `dataFlow`
+are inherited from `CandidateFinding` (see its table above for the rule and the
+producer) and are not restated here. The admission gate redacts the free text in
+`relatedLocations` and `dataFlow` on the way through, the same as it does the title
+and description.
 
 ## RejectedFinding
 
@@ -298,6 +393,7 @@ All `CandidateFinding` fields plus:
 | `reason` | yes | `RejectReason` | Closed enum. |
 | `message` | yes | string <= 500 | Redacted human-readable reason. |
 | `evidenceIds` | no | string[] | Evidence considered. |
+| `severity` | no | `Severity` | The rejected candidate's own severity, when the rejecting call site had a parsed candidate available. Omitted when the candidate failed schema validation before it could be parsed, or when the rejecting call site has not been updated to pass it through. Exists so eval measurement (spec 06) can tally rejections by severity without being confounded by the admission floor deleting model-origin `low` candidates before anyone downstream can observe them. |
 
 ## FindingProvenance
 
@@ -386,9 +482,11 @@ JSON file to callers, but that JSON self-entry is not embedded in `report.json`.
 | `repositoryRootHash` | yes | SHA-256 of normalized root path, not raw path |
 | `baseRef` | no | string |
 | `headRef` | no | string |
+| `mergeBaseRef` | no | string (resolved merge base the diff was taken against, present when intake resolved one) |
 | `configHash` | yes | SHA-256 |
-| `provider` | no | provider ID |
-| `model` | no | string |
+| `provider` | no | provider ID of the model that PRODUCED this run's findings; absent when no model search ran, and never copied from configuration on a run that performed none |
+| `model` | no | string, on the same terms as `provider` |
+| `modelSearch` | no | `performed` \| `not-performed` — whether a model actually searched this change. Absent means the report does not say (it predates the field), which a consumer must not read as `performed`. A run that failed INSIDE the model stages records `performed`: it resolved its model and dispatched tasks to it, and the incompleteness is carried by the `partial-run` warning and the run error, not by this field |
 | `durationMs` | yes | integer >= 0 |
 | `costUsd` | no | number >= 0 |
 | `inputTokens` | no | integer >= 0 |
@@ -409,6 +507,32 @@ Markdown rendering must be deterministic from `ReviewReport`:
 7. Cost/timing summary.
 
 Markdown must not include raw source snippets by default.
+
+A run that performed no model search (`run.modelSearch` is `not-performed`) must
+say so where the reader is, must not name a model as having produced the report,
+and must not print the measured recall and precision rates. Those rates describe
+how often a model search finds a defect; over a run that performed none they are
+a flattering claim about a search that did not happen, and an empty findings list
+under them reads as a clearance. The same rule binds every surface that carries
+the claim — `report.json` provenance, SARIF, and the pull-request comment.
+
+**Where those rates come from is part of the contract, not an implementation
+detail.** Every reader-facing rate must be a transcription of one named entry in
+`reports/eval-results-ledger.md` — the newest entry measuring that population on
+that corpus — held in a single module both renderers import, with a test that
+checks the transcribed fields against the cited entry. Nothing may compute,
+round, or paraphrase a rate into a second copy. Until this rule was written, five
+different figures were in circulation as "current" and nothing bound the printed
+one to the record: the reporter kept quoting a baseline the ledger had retired,
+because a stale number and a fresh one are indistinguishable to a renderer that
+does not know which measurement it is quoting.
+
+Each transcription must carry, beside the number, the provider and model, the
+corpus and its case count, the population scored, the pinned engine and the run
+count — the constraints spelt out in `05-review-workflow-and-runtime.md` under
+*The Published Rate Has One Owner*. A rate whose measured configuration differs
+from the run printing it is still quotable, but only with that difference stated:
+every published rate predates the 2026-08-11 default flips.
 
 ## SARIF Report
 
@@ -433,7 +557,23 @@ Rules:
   report-safe `code`, optional `stage`, optional `recovered`, and redacted
   optional `message` fields; provider issues are not rendered as SARIF
   diagnostic results;
-- cap rendered results through `reporting.sarif.maxResults`;
+- cap rendered results through `reporting.sarif.maxResults`, and DISCLOSE the cut
+  when it binds: emit one `runs[].invocations[].toolExecutionNotifications` entry
+  at level `warning`, naming the number of withheld findings, the eligible total,
+  `reporting.sarif.maxResults`, and where the complete set lives, with its
+  descriptor defined in `tool.driver.notifications`. The disclosure is required
+  because a code-scanning consumer treats a result absent from a run under the
+  same `automationDetails.id` as RESOLVED, so a silent cut reports withheld
+  findings as fixed. `executionSuccessful` stays `true`, since the run succeeded
+  and only results were withheld;
+- DISCLOSE a run that performed no model search (`run.modelSearch` is
+  `not-performed`) in the same channel: one `toolExecutionNotifications` entry at
+  level `warning`, with its descriptor defined in `tool.driver.notifications`,
+  stating that no model searched the change and that an absent result therefore
+  means nothing was searched for. An empty SARIF run is the strongest clean bill
+  of health this engine emits, and a code-scanning dashboard never sees
+  `report.md`'s disclosure. `invocations` is emitted only when at least one
+  disclosure applies, and carries every one that does;
 - define every referenced `ruleId` in `tool.driver.rules`;
 - validate the rendered file before writing it.
 
@@ -459,22 +599,22 @@ and the artifact is not written.
 SARIF upload, code scanning alert management, and PR annotation publication are
 out of scope for R1. R1 only writes the local artifact.
 
-## GitHub PR Review-Comment Artifact
+## Review-Comment Artifacts
 
-R1 may render a local `github-review-comments.json` artifact from the canonical
-`ReviewReport`. Rendering this artifact is not publication and must not perform
-network IO.
+The engine renders platform-neutral inline review-comment drafts from the
+canonical `ReviewReport`, then renders them for a resolved platform. Rendering is
+not publication and must not perform network IO. The full model, detection order,
+and per-platform rendering are defined in `13-review-comments-and-suggestions.md`;
+the neutral contract is summarized here.
 
-`GitHubReviewCommentDraft` fields:
+`ReviewCommentDraft` fields:
 
 | Field | Required | Type | Semantics |
 | --- | --- | --- | --- |
-| `path` | yes | repositoryRelativePath | File path for the PR review comment. |
-| `line` | yes | integer >= 1 | New-side line for the comment anchor. |
-| `side` | yes | `"RIGHT"` | R1 emits new-side review comments only. |
-| `startLine` | no | integer >= 1 | Start line for a multi-line comment. Omitted for single-line comments. |
-| `startSide` | conditional | `"RIGHT"` | Required when `startLine` is present. |
-| `body` | yes | string 1..3000 | Redacted Markdown comment body. |
+| `path` | yes | repositoryRelativePath | File path for the comment. |
+| `targetRange` | yes | `{ startLine, endLine }` integers >= 1 | New-side line range the comment anchors to. |
+| `body` | yes | string 1..3000 | Redacted, Markdown-escaped comment body. |
+| `suggestion` | no | `{ replacement }` | Structured replacement for `targetRange`; never a pre-rendered fenced block. |
 | `findingId` | yes | findingId | Source admitted finding. |
 | `severity` | yes | Severity | Source severity for downstream filtering. |
 | `category` | yes | FindingCategory | Source category for downstream filtering. |
@@ -482,38 +622,47 @@ network IO.
 Comment eligibility rules:
 
 - only admitted findings with `reporterEligibility = inline` are rendered;
-- only `location.side = "new"` is rendered in R1;
-- `line` is `location.endLine` when present, otherwise `location.startLine`;
-- `startLine` is emitted only when `location.endLine` is present and greater
-  than `location.startLine`;
-- the body includes severity, category, title, description, finding ID, and
-  fix summary when present;
+- `location.side = "old"` is never rendered; `"new"` and `"file"` are, because
+  admission has already proved an inline-eligible location anchors to a changed
+  new-side line. Re-testing the side here would drop every model-origin finding,
+  since discovery stamps them all `side = "file"`;
+- `targetRange.endLine` is `location.endLine` when present, otherwise
+  `location.startLine`; `targetRange.startLine` is `location.startLine`;
+- the body includes severity, category, title, description, finding ID, and fix
+  summary when present;
 - body text must pass the same redaction policy as Markdown and JSON reports;
 - raw source snippets, prompt text, provider IDs, tokens, absolute paths, and
   command output are forbidden.
 
-GitHub suggestion block rules:
+Suggestion eligibility rules (enforced once in the neutral layer, inherited by
+every platform renderer):
 
-- emit a suggestion block only when `fixProposal.safety = "manual-review"`;
+- a `suggestion` is emitted only when `fixProposal.safety = "manual-review"`;
 - exactly one `FixEdit` is present;
-- edit path equals the finding location path;
-- edit range is contiguous and equals the comment range, or for a single-line
-  finding the edit range is that same single line;
-- replacement length is within `FixEdit.replacement` limits after redaction;
-- no suggestion block is emitted for multi-file edits, multiple edits,
-  old-side findings, summary-only findings, artifact-only findings, or edit
-  ranges that do not map to the rendered comment range.
+- the edit path equals the finding location path and its range equals
+  `targetRange`;
+- the replacement contains no triple-backtick fence and fits the body cap after
+  redaction;
+- no suggestion is emitted for multi-file edits, multiple edits, old-side
+  findings, summary-only findings, artifact-only findings, or edit ranges that do
+  not map to `targetRange`.
 
-The artifact writer records `github-review-comments` in
-`ReviewReport.artifacts` using the same artifact metadata contract as other
-non-JSON formats.
+The artifact writer records the neutral `review-comments.json` and the resolved
+`review-comments.<platform>.json` in `ReviewReport.artifacts` using the same
+artifact metadata contract as other non-JSON formats.
 
 ## Compatibility
 
-`schemaVersion` changes:
+`ReviewReport.schemaVersion` is the literal `"1.0"`. R1 has shipped no other
+version: the holistic-discovery architecture is what `1.0` describes, so no
+increment was owed for it.
 
-- the holistic-discovery refactor is a breaking contract change and must
-  increment the report schema before implementation lands;
-- pre-refactor reports, config, and internal candidate artifacts are rejected
-  rather than translated;
-- report readers must reject unknown major versions.
+`schemaVersion` rules:
+
+- pre-holistic-discovery reports, config, and internal candidate artifacts are
+  rejected rather than translated; no runtime translation layer exists or may be
+  added in R1;
+- report readers must reject unknown major versions;
+- before public release, a breaking contract change requires a spec update and
+  regenerated schemas; after public release it additionally requires a
+  `schemaVersion` increment and a breaking-change record.

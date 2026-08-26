@@ -36,13 +36,30 @@ export const astGrepVersion: string = (() => {
   }
 })()
 
+// ast-grep ships TypeScript/TSX and JavaScript in its own `Lang` enum; every other
+// supported language arrives as a separate grammar package that must be registered
+// before `parse` can resolve it by name.
+//
+// The split is expressed in the type rather than in a comment: this record is keyed
+// by the language union MINUS the two built-in grammars, so the two halves are
+// CHECKED to cover the union between them. Adding an eighth language fails to
+// compile here until its grammar is registered. Before, `astGrepLanguageFor` simply
+// returned the language string for anything that was not TypeScript or JavaScript,
+// so an unregistered grammar reached `parse` as a name resolving to nothing and
+// came back as an ordinary parse failure — indistinguishable, in the evidence
+// record it produces, from a file with a syntax error.
+type DynamicGrammarLanguage = Exclude<
+  SupportedSignalLanguage,
+  'typescript' | 'javascript'
+>
+
 const dynamicLanguages = {
   python: pythonLanguage,
   go: goLanguage,
   ruby: rubyLanguage,
   rust: rustLanguage,
   java: javaLanguage
-} as const
+} as const satisfies Record<DynamicGrammarLanguage, unknown>
 
 let dynamicLanguagesRegistered = false
 
@@ -55,7 +72,7 @@ const registerFirstClassDynamicLanguages = (): void => {
   dynamicLanguagesRegistered = true
 }
 
-export type AstGrepParseResult = {
+type AstGrepParseResult = {
   readonly language: SupportedSignalLanguage
   readonly parsed: boolean
   readonly root?: SgNode
@@ -79,6 +96,13 @@ const astGrepLanguageFor = (
 
   registerFirstClassDynamicLanguages()
 
+  // `language` is narrowed to `DynamicGrammarLanguage` here, and every member of
+  // that type is a key of `dynamicLanguages` by the `satisfies` above, so the name
+  // returned is always one `parse` can resolve. No runtime guard is added for the
+  // values that never passed the type system: they are already refused upstream by
+  // `hasLanguageExtension`, which throws for a language with no extension entry
+  // before this function is reached, and a second unreachable check here would be
+  // a branch nothing could ever exercise.
   return language
 }
 

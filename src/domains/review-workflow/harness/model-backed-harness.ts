@@ -1,14 +1,25 @@
 import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
+  holisticReviewerInstructionsFor,
   modelFindingRefuterInstructions,
-  modelHolisticReviewerInstructions
+  modelSemanticMergeInstructions
 } from '../pipeline/agent-instructions.js'
 import {
-  FindingRefutationInputSchema,
+  createBoundedRetrievalTools,
+  type ContextRetriever
+} from '../../context-retrieval/index.js'
+import {
+  crossFileDiscoveryToolDefinitions,
+  runWithCrossFileDiscoveryTools
+} from '../pipeline/discovery/cross-file-tools.js'
+import {
+  FindingRefutationBatchInputSchema,
   HolisticReviewInputSchema,
-  ModelFindingRefutationResultSchema,
-  ModelHolisticReviewResultSchema
+  ModelFindingRefutationBatchResultSchema,
+  ModelHolisticReviewResultSchema,
+  ModelSemanticMergeResultSchema,
+  SemanticMergeInputSchema
 } from '../pipeline/agent-contracts.js'
 import {
   ReviewWorkflowInputSchema,
@@ -16,10 +27,7 @@ import {
 } from '../pipeline/contracts.js'
 import { runRefutationProviderCall } from './provider-call-adapters.js'
 import { runModelBackedHolisticTaskReview } from '../pipeline/discovery/holistic-task-review.js'
-import {
-  type ModelBackedReviewHarness,
-  type ReviewHarness
-} from './session.js'
+import type { ReviewHarness } from './session.js'
 import { runReviewWorkflowHandler } from '../pipeline/handler.js'
 import {
   effectiveMaxConcurrentTasks,
@@ -27,11 +35,11 @@ import {
   modelReviewWorkflowDelegation,
   reviewAgentOptionsForRole
 } from './config.js'
-import { type CreateReviewHarnessOptions } from './options.js'
+import type { CreateReviewHarnessOptions } from './options.js'
 
 export const createModelBackedReviewHarness = (
   options: CreateReviewHarnessOptions
-): ModelBackedReviewHarness => {
+): ReviewHarness => {
   const skills = options.skills ?? {}
   const logger = options.logger ?? createNoopReviewLogger()
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(
@@ -39,6 +47,55 @@ export const createModelBackedReviewHarness = (
   )
   const maxChildAgentCalls = options.maxChildAgentCalls
   const skillIds = options.skillIds ?? Object.keys(skills)
+  // Spec 16: cross-file retrieval is off unless configured on. When off, no tool is
+  // registered, the discovery agent gets no tool list, and its instructions are the
+  // unchanged single-shot prompt.
+  const crossFileRetrieval = options.crossFileRetrieval
+  const crossFileEnabled = crossFileRetrieval?.enabled === true
+
+  // Binds one task's bounded repository tools for the duration of its discovery
+  // call, so every tool call the model makes resolves that task's own budget (see
+  // `cross-file-tools.ts`). With the mode disabled, or when the workflow has no
+  // retriever (no repository root), the discovery call runs unwrapped and no tool
+  // is reachable.
+  const runDiscoveryTask = async <T>(
+    contextRetriever: ContextRetriever | undefined,
+    runTask: () => Promise<T>
+  ): Promise<T> => {
+    if (!crossFileEnabled || contextRetriever === undefined) {
+      return runTask()
+    }
+
+    const bounded = createBoundedRetrievalTools({
+      retriever: contextRetriever,
+      maxToolCalls: crossFileRetrieval.maxToolCallsPerTask
+    })
+
+    const result = await runWithCrossFileDiscoveryTools(
+      {
+        tools: bounded.tools,
+        // Spec 28: nothing caps a read in advance, so an overflow is discovered by
+        // hitting the provider's real limit. This is what makes the retry smaller.
+        reduceReadBudget: contextRetriever.reduceReadBudget,
+        // Read by the task's own telemetry while this scope is still open, so a
+        // reviewer that stopped looking because it ran out of lookups says so in
+        // the report. The debug line below stays — it is free and useful at debug
+        // level — but it could never reach a reader: `observability.logging.level`
+        // defaults to `silent`, and the reviewer's exhausted budget is exactly the
+        // fact that explains a quiet review of a change spread across files.
+        budgetExhausted: bounded.budgetExhausted
+      },
+      runTask
+    )
+
+    logger.debug('Cross-file discovery retrieval completed.', {
+      tool_call_count: bounded.toolCallCount(),
+      bytes_read: bounded.bytesRead(),
+      budget_exhausted: bounded.budgetExhausted()
+    })
+
+    return result
+  }
   const agentOptionsForRole = (
     role: Parameters<typeof reviewAgentOptionsForRole>[0]['role']
   ) =>
@@ -47,17 +104,20 @@ export const createModelBackedReviewHarness = (
       skillIds,
       ...(options.skillTools === undefined
         ? {}
-        : { skillTools: options.skillTools })
+        : { skillTools: options.skillTools }),
+      ...(crossFileRetrieval === undefined ? {} : { crossFileRetrieval })
     })
 
   return defineHarness({ name: 'codereviewer-review' })
     .logger(logger)
-    .defaults(harnessDefaults(options, maxConcurrentTasks))
+    .defaults(harnessDefaults(maxConcurrentTasks))
     .telemetry({ contentCaptureMode: 'NO_CONTENT' })
     .models({
       reviewer: options.modelAlias
     })
-    .tools({})
+    // Registered only when discovery may use them. No other lane holds them, so a
+    // run with cross-file retrieval off has no repository tool at all.
+    .tools(crossFileEnabled ? crossFileDiscoveryToolDefinitions : {})
     .skills(skills)
     .agents(({ agent }) => ({
       holistic_review: agent({
@@ -65,12 +125,27 @@ export const createModelBackedReviewHarness = (
         input: HolisticReviewInputSchema,
         output: ModelHolisticReviewResultSchema,
         ...agentOptionsForRole('holistic_review'),
-        instructions: modelHolisticReviewerInstructions
+        instructions: holisticReviewerInstructionsFor({
+          crossFileRetrievalEnabled: crossFileEnabled
+        })
+      }),
+      // Spec 05: the semantic finding merge. Compact and tool-free — one step,
+      // no tools — and deliberately its OWN agent rather than extra duties on
+      // the refuter: requiring unrelated judgements in one call is a measured
+      // cause of degraded refutation, which is the stage this engine's precision
+      // depends on.
+      semantic_merge: agent({
+        model: 'reviewer',
+        input: SemanticMergeInputSchema,
+        output: ModelSemanticMergeResultSchema,
+        builtinTools: false,
+        maxSteps: 1,
+        instructions: modelSemanticMergeInstructions
       }),
       refute_finding: agent({
         model: 'reviewer',
-        input: FindingRefutationInputSchema,
-        output: ModelFindingRefutationResultSchema,
+        input: FindingRefutationBatchInputSchema,
+        output: ModelFindingRefutationBatchResultSchema,
         ...agentOptionsForRole('refute_finding'),
         instructions: modelFindingRefuterInstructions
       })
@@ -92,23 +167,34 @@ export const createModelBackedReviewHarness = (
             ...(options.onTaskEvent === undefined
               ? {}
               : { onTaskEvent: options.onTaskEvent }),
-            runTask: async (taskInput, task, signal) =>
-              runModelBackedHolisticTaskReview({
-                workflowInput: ctx.input,
-                taskInput,
-                task,
-                runners: {
-                  holisticReview: (holisticInput, holisticSignal) =>
-                    ctx.agents.holistic_review(
-                      holisticInput,
-                      holisticSignal === undefined
-                        ? {}
-                        : { signal: holisticSignal }
-                    )
-                },
-                logger,
-                ...(signal === undefined ? {} : { signal })
-              }),
+            runTask: async (taskInput, task, signal, contextRetriever) =>
+              runDiscoveryTask(contextRetriever, () =>
+                runModelBackedHolisticTaskReview({
+                  workflowInput: ctx.input,
+                  taskInput,
+                  task,
+                  runners: {
+                    // None of these calls forwards prior conversation: the harness
+                    // default is `historyWindow: 0` (see `harnessDefaults`), so a
+                    // call never opens holding the output of a call that finished
+                    // before it (spec 05, Conversation History).
+                    holisticReview: (holisticInput, holisticSignal) =>
+                      ctx.agents.holistic_review(
+                        holisticInput,
+                        holisticSignal === undefined
+                          ? {}
+                          : { signal: holisticSignal }
+                      ),
+                    semanticMerge: (mergeInput, mergeSignal) =>
+                      ctx.agents.semantic_merge(
+                        mergeInput,
+                        mergeSignal === undefined ? {} : { signal: mergeSignal }
+                      )
+                  },
+                  logger,
+                  ...(signal === undefined ? {} : { signal })
+                })
+              ),
             refuteFinding: async (refutationInput, signal) => {
               return runRefutationProviderCall({
                 refutationInput,

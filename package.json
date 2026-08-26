@@ -1,37 +1,80 @@
 {
   "name": "@sebastianwessel/codereviewer",
   "version": "0.1.0",
-  "private": true,
-  "description": "Harness-based evidence-first code review engine.",
+  "description": "Evidence-first AI code review engine: finds semantic defects that compile cleanly and pass lint.",
+  "keywords": [
+    "code-review",
+    "static-analysis",
+    "ai",
+    "llm",
+    "pull-request",
+    "sarif",
+    "code-quality",
+    "cli",
+    "typescript"
+  ],
+  "homepage": "https://github.com/sebastianwessel/codereviewer#readme",
+  "bugs": {
+    "url": "https://github.com/sebastianwessel/codereviewer/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastianwessel/codereviewer.git"
+  },
+  "author": "Sebastian Wessel",
   "type": "module",
   "bin": {
     "codereviewer": "./dist/cli/main.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./cli": "./dist/cli/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./types/cli.d.ts",
+      "default": "./dist/cli/index.js"
+    },
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "schema",
+    "types"
+  ],
   "engines": {
     "node": ">=24.15.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "prebuild": "npm run clean",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "generate:schemas": "tsx scripts/generate-schemas.mjs",
     "generate:schemas:check": "tsx scripts/generate-schemas.mjs --check",
     "update:model-pricing": "tsx scripts/update-model-pricing.ts",
     "update:model-pricing:write": "tsx scripts/update-model-pricing.ts --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
     "lint": "npm run typecheck",
-    "dev": "tsx src/index.ts",
     "cli": "node --env-file-if-exists=.env --import tsx src/cli/main.ts",
     "eval:hydrate": "node --import tsx scripts/hydrate-code-review-benchmark.ts",
-    "eval:benchmark": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --semantic-judge --max-concurrent-tasks 1",
-    "eval:benchmark:debug": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --semantic-judge --max-concurrent-tasks 1 --debug --log-file .codereviewer/eval/log.log",
+    "eval:benchmark": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --max-concurrent-tasks 1",
+    "eval:benchmark:debug": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --max-concurrent-tasks 1 --debug --log-file .codereviewer/eval/log.log",
+    "eval:corpus:hydrate": "node --import tsx scripts/hydrate-real-repo-corpus.ts",
+    "eval:corpus": "node --import tsx scripts/hydrate-real-repo-corpus.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/corpus-slices/real-repo-cross-file --review-mode pr --review-depth thorough --max-concurrent-tasks 1",
+    "eval:impact-corpus:hydrate": "node --import tsx scripts/hydrate-change-impact-corpus.ts",
+    "eval:intent-corpus:hydrate": "node --import tsx scripts/hydrate-intent-corpus.ts",
     "provider:install:openai": "npm install @purista/harness-openai",
     "provider:install:bedrock": "npm install @purista/harness-bedrock",
     "provider:install:azure": "npm install @purista/harness-azure-foundry",
-    "audit:high": "npm audit --audit-level=high"
+    "audit:high": "npm audit --audit-level=high",
+    "audit:release": "npm audit --omit dev --audit-level=high"
   },
   "dependencies": {
     "@ast-grep/lang-go": "^0.0.6",
@@ -39,22 +82,22 @@
     "@ast-grep/lang-python": "^0.0.6",
     "@ast-grep/lang-ruby": "^0.0.7",
     "@ast-grep/lang-rust": "^0.0.7",
-    "@ast-grep/napi": "^0.44.0",
-    "@purista/harness": "^1.6.0",
-    "typescript": "^6.0.3",
+    "@ast-grep/napi": "^0.45.1",
+    "@purista/harness": "^1.7.3",
+    "@types/node": "^26.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@purista/harness-openai": "^1.6.0",
-    "@types/node": "^26.0.0",
-    "@vitest/coverage-v8": "^4.1.9",
-    "tsx": "^4.22.4",
-    "vitest": "^4.1.9"
+    "@purista/harness-openai": "^1.7.3",
+    "@vitest/coverage-v8": "^4.1.10",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@purista/harness-azure-foundry": "^1.6.0",
-    "@purista/harness-bedrock": "^1.6.0",
-    "@purista/harness-openai": "^1.6.0"
+    "@purista/harness-azure-foundry": "^1.7.3",
+    "@purista/harness-bedrock": "^1.7.3",
+    "@purista/harness-openai": "^1.7.3"
   },
   "peerDependenciesMeta": {
     "@purista/harness-azure-foundry": {

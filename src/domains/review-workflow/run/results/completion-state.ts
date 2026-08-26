@@ -5,17 +5,18 @@ import type {
   ReviewReport
 } from '../../../../shared/contracts/index.js'
 import type {
-  CandidateFinding,
   ReviewedDiffRange,
   ReviewedLineRange
 } from '../../../admission/index.js'
-import type {
-  DeterministicSignalExtraction,
-  SupportSignalSourceFile
+import {
+  computeTestAdequacySignal,
+  type DeterministicSignalExtraction,
+  type SupportSignalSourceFile,
+  type SupportSignalTestMapping
 } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import {
   prepareReviewRunnerAdmissionState
@@ -33,6 +34,7 @@ import {
 import { recordObservedTaskEvents } from '../support/observability.js'
 import type { ReviewRunnerProviderState } from '../provider/provider-state.js'
 import type { BaselineFingerprintRecord } from '../../../admission/index.js'
+import { combineRunTokenUsage, type RunTokenUsage } from '../../../costs/index.js'
 
 export const prepareReviewRunnerCompletionState = (
   input: {
@@ -50,10 +52,19 @@ export const prepareReviewRunnerCompletionState = (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
     readonly analysis: DeterministicSignalExtraction
+    // Spec 29. The pairing the deterministic registry already discovered, carried
+    // here so the test-adequacy signal can be read off it without a second pass.
+    readonly testMappings: readonly SupportSignalTestMapping[]
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]
-    readonly supportSignalCandidates: readonly CandidateFinding[]
-    readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
+      readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
+    readonly contextIngestionUsage?: RunTokenUsage | undefined
+    readonly contextIngestionWarnings?: readonly string[] | undefined
+    // What redaction replaced in the diff and the task context this run reviewed.
+    readonly contextRedactionWarnings?: readonly string[] | undefined
+    // What the referenced-definition caps kept out of the task context, and what
+    // resolved but could not be read.
+    readonly referencedDefinitionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -69,12 +80,22 @@ export const prepareReviewRunnerCompletionState = (
   }
 ): ReviewRunnerSuccessResult => {
   const providerWorkflowOutput = input.providerWorkflow?.output
+  // The exact fact, taken at its source. `runProviderWorkflow` returns undefined
+  // for exactly one reason — `aiReview.enabled` is false or no provider is
+  // configured — so an absent workflow is proof that no model looked at this
+  // change, and a present one is proof that one did. Nothing downstream can
+  // reconstruct this: `report.discovery` is also absent for a run that recorded
+  // no telemetry, and `run.model` is also absent for a run that did not record it.
+  const modelSearch =
+    input.providerWorkflow === undefined
+      ? ('not-performed' as const)
+      : ('performed' as const)
   const { admission } = prepareReviewRunnerAdmissionState({
     providerWorkflowOutput,
     reviewedPaths: input.reviewedPaths,
     reviewedLineRanges: input.reviewedLineRanges,
     reviewedDiffRanges: input.reviewedDiffRanges,
-    candidates: input.supportSignalCandidates,
+    candidates: [],
     evidence: input.evidence,
     config: input.config,
     admittedAt: input.admittedAt,
@@ -100,8 +121,15 @@ export const prepareReviewRunnerCompletionState = (
   const completedAt = input.now()
   const coverage = createCoverageSummary({
     sourceFiles: input.sourceFiles,
-    contextLedger: effectiveContextLedger
+    contextLedger: effectiveContextLedger,
+    skippedFileCount: input.skippedFiles.length
   })
+  // Fold the dedicated summarizer's tokens into the run's provider usage so they
+  // count toward run cost.
+  const providerUsage = combineRunTokenUsage(
+    input.providerWorkflow?.usage,
+    input.contextIngestionUsage
+  )
   const { runCost, warnings, resolvedBaselineEntries } =
     prepareReviewRunFinalization({
       config: input.config,
@@ -109,12 +137,19 @@ export const prepareReviewRunnerCompletionState = (
       driftFindings: input.driftFindings,
       admissionWarnings: admission.warnings,
       admittedFindings: admission.admittedFindings,
+      ...(input.contextIngestionWarnings === undefined
+        ? {}
+        : { contextIngestionWarnings: input.contextIngestionWarnings }),
+      ...(input.contextRedactionWarnings === undefined
+        ? {}
+        : { contextRedactionWarnings: input.contextRedactionWarnings }),
+      ...(input.referencedDefinitionWarnings === undefined
+        ? {}
+        : { referencedDefinitionWarnings: input.referencedDefinitionWarnings }),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),
-      ...(input.providerWorkflow?.usage === undefined
-        ? {}
-        : { providerUsage: input.providerWorkflow.usage })
+      ...(providerUsage === undefined ? {} : { providerUsage })
     })
   if (coverage.status !== 'complete') {
     throw createReviewRunnerCoverageFailure({
@@ -128,6 +163,7 @@ export const prepareReviewRunnerCompletionState = (
       configHash: input.configHash,
       warnings,
       runCost,
+      modelSearch,
       analysis: input.analysis,
       admission,
       coverage,
@@ -151,6 +187,7 @@ export const prepareReviewRunnerCompletionState = (
       configHash: input.configHash,
       warnings,
       runCost,
+      modelSearch,
       analysis: input.analysis,
       admission,
       maxCostUsd: input.config.review.maxCostUsd,
@@ -172,8 +209,17 @@ export const prepareReviewRunnerCompletionState = (
     configHash: input.configHash,
     warnings,
     runCost,
+    modelSearch,
     analysis: input.analysis,
     coverage,
+    // Computed over exactly the files the registry analysed and exactly the files
+    // it did not, so a source file whose test could never have been discovered is
+    // never reported as one that has none.
+    testAdequacy: computeTestAdequacySignal({
+      analyzedFiles: input.sourceFiles,
+      skippedFiles: input.skippedFiles,
+      testMappings: input.testMappings
+    }),
     contextLedger: effectiveContextLedger,
     skippedFiles: input.skippedFiles,
     admission,

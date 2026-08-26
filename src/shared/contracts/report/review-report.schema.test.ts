@@ -18,6 +18,7 @@ const validReport = {
   },
   coverage: {
     status: 'complete',
+    excludedFileCount: 0,
     reviewableFileCount: 1,
     coveredFileCount: 1,
     reviewableBytes: 120,
@@ -128,6 +129,106 @@ const validReport = {
 describe('ReviewReportSchema', () => {
   test('accepts a valid review report fixture', () => {
     expect(ReviewReportSchema.parse(validReport).schemaVersion).toBe('1.0')
+  })
+
+  test('carries optional discovery telemetry, and distinguishes absent from zero', () => {
+    // Spec 27. `undefined` means the run issued no discovery call (or predates the
+    // field); an all-zero record means it looked and found nothing. Conflating the
+    // two would make an old report read as a reviewer that never looked.
+    expect(ReviewReportSchema.parse(validReport).discovery).toBeUndefined()
+
+    const discovery = {
+      totals: {
+        callCount: 2,
+        rawFindingCount: 3,
+        rawFindingsPerCall: [2, 1],
+        candidateCount: 1,
+        droppedCount: 2,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        cappedByLimitCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: [
+        {
+          taskId: 'task_abc123',
+          callCount: 2,
+          rawFindingCount: 3,
+          rawFindingsPerCall: [2, 1],
+          candidateCount: 1,
+          droppedCount: 2,
+          suppressedByIdCount: 0,
+          suppressedByLocationCount: 0,
+          cappedByLimitCount: 0,
+          contextOverflowSplitCount: 0,
+          mergeCallCount: 0,
+          mergeGroupCount: 0,
+          mergedAwayCount: 0
+        }
+      ]
+    }
+
+    expect(
+      ReviewReportSchema.parse({ ...validReport, discovery }).discovery
+    ).toEqual(discovery)
+  })
+
+  test('carries the optional test-adequacy signal, and distinguishes absent from zero', () => {
+    // Spec 29. Absent means this run did not compute the signal; a record whose
+    // counts are zero means it did and there was nothing to observe. A reader who
+    // cannot tell those apart has been handed an optimistic default.
+    expect(ReviewReportSchema.parse(validReport).testAdequacy).toBeUndefined()
+
+    const testAdequacy = {
+      consideredFileCount: 2,
+      pairedFileCount: 1,
+      unpairedPaths: ['src/example.ts'],
+      changedTestFileCount: 1,
+      unknown: { unsupportedLanguageFileCount: 3, notAnalysedFileCount: 1 }
+    }
+
+    expect(
+      ReviewReportSchema.parse({ ...validReport, testAdequacy }).testAdequacy
+    ).toEqual(testAdequacy)
+  })
+
+  test('rejects a test-adequacy signal whose counts disagree with its own list', () => {
+    // The considered count and the unpaired list are two views of one partition,
+    // and a producer that lets them disagree publishes a total a reader cannot
+    // reconstruct from the paths beneath it.
+    expect(() =>
+      ReviewReportSchema.parse({
+        ...validReport,
+        testAdequacy: {
+          consideredFileCount: 5,
+          pairedFileCount: 1,
+          unpairedPaths: ['src/example.ts'],
+          changedTestFileCount: 0,
+          unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+        }
+      })
+    ).toThrow()
+  })
+
+  test('the test-adequacy signal cannot carry a severity or any other finding field', () => {
+    // Spec 29: it is a neutral statement of fact, and the SHAPE is what keeps it
+    // one. A strict object with no free slot cannot grow a severity by accident.
+    expect(() =>
+      ReviewReportSchema.parse({
+        ...validReport,
+        testAdequacy: {
+          consideredFileCount: 1,
+          pairedFileCount: 0,
+          unpairedPaths: ['src/example.ts'],
+          changedTestFileCount: 0,
+          unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 },
+          severity: 'low'
+        }
+      })
+    ).toThrow()
   })
 
   test('rejects unknown report fields', () => {

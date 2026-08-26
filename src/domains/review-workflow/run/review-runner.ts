@@ -1,27 +1,26 @@
 import type { Logger } from '@purista/harness'
-import {
-  type CodeReviewerConfig,
-  type CoverageSummary,
-  type ReviewReport
+import type {
+  CodeReviewerConfig,
+  ReviewReport
 } from '../../../shared/contracts/index.js'
-import type { ContextLedgerEntry } from '../../review-planning/context-ledger.js'
-import {
-  type NoContentEventRecorder,
-  type NoContentObservabilitySnapshot
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
+import type {
+  NoContentEventRecorder,
+  NoContentObservabilitySnapshot
 } from '../../observability/index.js'
-import {
-  type DeterministicSignalExtraction
-} from '../../deterministic-signals/index.js'
-import {
-  type ProviderImport
+import type {
+  ProviderImport
 } from '../../provider-resolution/index.js'
-import { type DiffMap } from '../../repository-intake/index.js'
+import type {
+  DiffMap,
+  GitCommandRunner
+} from '../../repository-intake/index.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
+import { aiReviewBudgetFor } from './support/budgets.js'
 import {
-  aiReviewBudgetFor,
-  type AiReviewRuntimeBudget
-} from './support/budgets.js'
-import { reviewedLineRangesForSourceFiles } from './context/context.js'
+  redactedReviewMaterialWarnings,
+  reviewedLineRangesForSourceFiles
+} from './context/context.js'
 import { createWorkflowInput } from './workflow-input.js'
 import {
   createReviewRunSignal,
@@ -36,6 +35,9 @@ import { prepareReviewRunnerRunObservability } from './support/run-observability
 import { prepareReviewRunnerSourceState } from './intake/source-state.js'
 import { prepareReviewRunnerPlanningState } from './planning/planning-state.js'
 import { prepareReviewRunnerContextAssemblyState } from './context/assembly-state.js'
+import { referencedDefinitionContextWarnings } from './context/referenced-definition-warnings.js'
+import { prepareReviewRunnerChangeIntentContext } from './context/change-intent-context.js'
+import { prepareReviewRunnerAnalyzerSignalContext } from './context/analyzer-signal-context.js'
 import { prepareReviewRunnerCompletionState } from './results/completion-state.js'
 
 export {
@@ -44,14 +46,15 @@ export {
   type PartialReviewRunState
 } from './support/errors.js'
 
-const emptySha256 =
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-
 export type RunReviewOptions = {
   readonly repositoryRoot: string
   readonly config: CodeReviewerConfig
   readonly configWarnings?: readonly string[]
   readonly baselineExplicitlyConfigured?: boolean
+  // Whether `contextSources.providers` was listed by the operator or defaulted by
+  // the schema. Only the config loader can tell, and only a change-intent provider
+  // that gathered nothing cares: see `warningsForUnusedProviders`.
+  readonly contextProvidersExplicitlyConfigured?: boolean
   readonly explicitFiles?: readonly string[]
   readonly reviewDiffMaps?: readonly DiffMap[]
   readonly reviewRawDiff?: string
@@ -62,6 +65,9 @@ export type RunReviewOptions = {
   readonly runId?: string
   readonly now?: () => Date
   readonly signal?: AbortSignal
+  // The run's shared git runner and changed-file reader, when the review is one
+  // stage of a run that already has them. Absent for a review on its own.
+  readonly runGit?: GitCommandRunner
   readonly observability?: NoContentEventRecorder
   readonly logger?: Logger
 }
@@ -81,10 +87,7 @@ export const runReview = async (
     ...(options.runId === undefined ? {} : { runId: options.runId }),
     ...(options.now === undefined ? {} : { now: options.now })
   })
-  const runSignal = createReviewRunSignal(
-    options.signal,
-    options.config.review.runTimeoutMs
-  )
+  const runSignal = createReviewRunSignal(options.signal)
   const { observability, logger } = prepareReviewRunnerRunObservability({
     runId,
     configHash,
@@ -94,6 +97,22 @@ export const runReview = async (
       : { observability: options.observability }),
     ...(options.logger === undefined ? {} : { logger: options.logger })
   })
+
+  // Started here and awaited where its result is first needed, below. It reads one
+  // JSON file and depends on nothing any later stage produces, so there is no
+  // reason for repository intake, planning and context assembly to wait behind it.
+  const baselinePending = prepareReviewRunnerBaseline({
+    repositoryRoot: options.repositoryRoot,
+    config: options.config,
+    baselineExplicitlyConfigured: options.baselineExplicitlyConfigured,
+    observability,
+    logger
+  })
+  // A stage before the await point can throw, and this promise would then be
+  // rejected with nobody listening. The failure is not swallowed: the await below
+  // is what reports it, and this only keeps an unrelated failure from being
+  // reported as an unhandled rejection instead.
+  baselinePending.catch(() => undefined)
 
   try {
     const { drift } = await runReviewRunnerPreflight({
@@ -116,13 +135,19 @@ export const runReview = async (
       ...(options.reviewRawDiff === undefined
         ? {}
         : { reviewRawDiff: options.reviewRawDiff }),
+      ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
       ...(options.explicitFiles === undefined
         ? {}
         : { explicitFiles: options.explicitFiles }),
       ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
     })
-    const { intake, effectiveDiffRanges, effectiveRawDiff, sourceFiles } =
-      sourceState
+    const {
+      intake,
+      effectiveDiffRanges,
+      effectiveRawDiff,
+      sourceFiles,
+      intakeMetrics
+    } = sourceState
     const planningState = prepareReviewRunnerPlanningState({
       config: options.config,
       files: intake.changedFiles,
@@ -130,7 +155,7 @@ export const runReview = async (
       observability,
       logger
     })
-    const { analysis, evidence, reviewTasks, supportSignalCandidates } =
+    const { analysis, evidence, reviewTasks, deterministicSignals } =
       planningState
     const contextState = await prepareReviewRunnerContextAssemblyState({
       repositoryRoot: options.repositoryRoot,
@@ -138,33 +163,68 @@ export const runReview = async (
       sourceFiles,
       analysis,
       tasks: reviewTasks,
+      reviewedDiffText: effectiveRawDiff,
       observability,
       logger
     })
-    const { assembledContext, instructionHashes, skillHashes } = contextState
-    const baseline = await prepareReviewRunnerBaseline({
+    const { instructionHashes, skillHashes } = contextState
+    // Ingest external change-intent context and inject the summarized brief into
+    // the tasks before the workflow input is assembled. Disabled or empty
+    // ingestion returns the assembled context unchanged.
+    const changeIntent = await prepareReviewRunnerChangeIntentContext({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
-      baselineExplicitlyConfigured: options.baselineExplicitlyConfigured,
+      contextProvidersExplicitlyConfigured:
+        options.contextProvidersExplicitlyConfigured,
+      assembledContext: contextState.assembledContext,
+      sourceFiles,
+      environment: options.environment ?? {},
+      observability,
+      logger,
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport }),
+      ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
+    })
+    // Spec 15, Mechanism 2: ingest already-produced analyzer artifacts and attach
+    // each task's changed-side-attributed results to it as untrusted evidence.
+    // Disabled (the default) this returns the assembled context unchanged. The
+    // changed diff ranges are the attribution authority: an alert with no changed
+    // line on its location or its traced path is pre-existing repository debt and
+    // is not reported.
+    const analyzerSignals = await prepareReviewRunnerAnalyzerSignalContext({
+      repositoryRoot: options.repositoryRoot,
+      config: options.config,
+      assembledContext: changeIntent.assembledContext,
+      changedRanges: effectiveDiffRanges,
       observability,
       logger
     })
-    const { baselineFingerprints, baselineConfigured } = baseline
+    const assembledContext = analyzerSignals.assembledContext
+    // Analyzer evidence joins the run's evidence set so the report records what the
+    // review was shown. It seeds no candidate: nothing reaches a finding except
+    // through discovery, refutation, and the admission gate.
+    const reviewEvidence = [...evidence, ...analyzerSignals.evidence]
+    const { baselineFingerprints, baselineConfigured } = await baselinePending
+    // Both derivations are consumed twice — once by the workflow input and once by
+    // the completion state — and `reviewedLineRangesForSourceFiles` walks the
+    // content of every source file to produce them.
+    const reviewedPaths = intake.changedFiles.map((file) => file.path)
+    const reviewedLineRanges = reviewedLineRangesForSourceFiles(sourceFiles)
     const workflowInput = createWorkflowInput({
       runId,
       repositoryRoot: options.repositoryRoot,
-      reviewedPaths: intake.changedFiles.map((file) => file.path),
-      reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+      reviewedPaths,
+      reviewedLineRanges,
       reviewedDiffRanges: effectiveDiffRanges,
       reviewedDiffText: effectiveRawDiff,
-      evidence,
-      candidates: supportSignalCandidates,
+      evidence: reviewEvidence,
+      candidates: [],
       config: options.config,
       configHash,
       providerId: options.config.provider?.id ?? '',
       modelName: options.config.provider?.model ?? '',
       admittedAt: startedAt.toISOString(),
-      instructions: assembledContext.instructions,
       skills: assembledContext.skills,
       tasks: assembledContext.tasks,
       aiReviewBudget: aiReviewBudgetFor(options.config),
@@ -185,10 +245,8 @@ export const runReview = async (
         configHash,
         analysis,
         contextLedger: assembledContext.contextLedger,
-        evidence,
-        supportSignalCandidates,
+        evidence: reviewEvidence,
         workflowInput,
-        tasks: assembledContext.tasks,
         environment: options.environment ?? {},
         ...(options.providerImport === undefined
           ? {}
@@ -197,7 +255,6 @@ export const runReview = async (
         skillIds: assembledContext.skillIds,
         logger,
         observability,
-        runTimedOut: runSignal.timedOut,
         ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
       })
     const successResult = prepareReviewRunnerCompletionState({
@@ -215,13 +272,38 @@ export const runReview = async (
       sourceFiles,
       skippedFiles: intake.skippedFiles,
       analysis,
+      testMappings: deterministicSignals.testMappings,
       contextLedger: assembledContext.contextLedger,
-      evidence,
-      supportSignalCandidates,
+      evidence: reviewEvidence,
+      ...(changeIntent.usage === undefined
+        ? {}
+        : { contextIngestionUsage: changeIntent.usage }),
+      contextIngestionWarnings: [
+        ...changeIntent.warnings,
+        ...analyzerSignals.warnings
+      ],
+      // Both halves of the reviewed material are counted where they are redacted
+      // — the diff at intake, the task documents at assembly — and disclosed
+      // together, because a reader asking "did the reviewer see this file as it
+      // is?" does not care which of the two paths altered it.
+      contextRedactionWarnings: redactedReviewMaterialWarnings({
+        redactedDiffSpanCount: intakeMetrics.redactedDiffSpanCount,
+        redactedContextSpanCount: contextState.metrics.redactedContextSpanCount
+      }),
+      // Context assembly already counted the dependency digests its caps kept out
+      // and the ones that could not be read, and already disclosed both — but only
+      // through `logger.warn`, and the default logging level is `silent`, where the
+      // logger is a no-op. So the report is where a default run can say it, and
+      // `report.md` renders run warnings under "Bounds that bound".
+      referencedDefinitionWarnings: referencedDefinitionContextWarnings({
+        droppedCount: contextState.metrics.referencedDefinitionsDroppedCount,
+        unreadableCount:
+          contextState.metrics.referencedDefinitionsUnreadableCount
+      }),
       providerWorkflow,
       providerTaskEventsObservedLive,
-      reviewedPaths: intake.changedFiles.map((file) => file.path),
-      reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+      reviewedPaths,
+      reviewedLineRanges,
       reviewedDiffRanges: effectiveDiffRanges,
       admittedAt: startedAt.toISOString(),
       instructionHashes,
@@ -242,8 +324,6 @@ export const runReview = async (
   } catch (error) {
     const failure = createReviewRunTerminalFailure({
       error,
-      runTimedOut: runSignal.timedOut(),
-      timeoutMs: options.config.review.runTimeoutMs
     })
     recordObservedError(observability, failure.structuredError)
     logger.error(failure.logMessage, failure.logMetadata)

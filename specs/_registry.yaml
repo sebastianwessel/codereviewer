@@ -1,18 +1,28 @@
 schema_version: "1.0"
 status: approved
-updated_at: "2026-06-22"
+updated_at: "2026-07-31"
 spec_root: specs
 source_of_truth:
   - specs/README.md
   - specs/00-vision.md
   - specs/00-scope-and-glossary.md
+  - specs/00-architecture-overview.md
+  - specs/00-stack.md
+  - specs/00-conventions.md
+  - specs/00-file-structure.md
   - specs/01-architecture-and-structure.md
 capability_inventory: specs/02-capabilities/capability-inventory.md
 e2e_coverage: specs/03-flows/e2e-coverage.md
 contracts:
   config_schema: specs/03-contracts/config.schema.json
   review_report_schema: specs/03-contracts/review-report.schema.json
+  finding_evidence_report: specs/03-contracts/finding-evidence-report.md
   generation_map: specs/03-contracts/generation-map.md
+generated_contracts:
+  generator: scripts/generate-schemas.mjs
+  write_command: npm run generate:schemas
+  drift_command: npm run generate:schemas:check
+  hand_editing: forbidden
 planning_allowed_after:
   readiness_report: specs/.readiness-report.yaml
   human_approval_status: approved

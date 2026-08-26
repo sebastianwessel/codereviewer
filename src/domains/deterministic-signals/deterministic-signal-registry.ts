@@ -1,9 +1,4 @@
 import {
-  extractEcmascriptSignals,
-  detectEcmascriptSignalFiles,
-  discoverEcmascriptSignalTestMappings
-} from './ecmascript/ecmascript-signal-extractor.js'
-import {
   extractPolyglotSignals,
   detectPolyglotSignalFiles,
   discoverPolyglotSignalTestMappings
@@ -24,20 +19,16 @@ import {
 } from './shared/deterministic-signal-utils.js'
 import { routeFilesBySignalLanguage, routeSignalSourceFilesByLanguage } from './shared/signal-language-router.js'
 
-// The two analysis engines (ecmascript via the TypeScript compiler, polyglot via
-// ast-grep) own all supported deterministic signal languages. Each adapter binds an engine to a
+// ONE analysis engine owns every supported language. Each adapter binds it to a
 // language so the registry stays a thin, single-owner dispatch table instead of
-// six near-identical wrapper modules.
-const ecmascriptAdapter = <TLanguage extends 'typescript' | 'javascript'>(
-  language: TLanguage
-): SupportSignalExtractorAdapter<TLanguage> => ({
-  language,
-  detect: (files) => detectEcmascriptSignalFiles(language, files),
-  analyze: (files) => extractEcmascriptSignals(language, files),
-  discoverTests: (files) => discoverEcmascriptSignalTestMappings(language, files)
-})
-
-const polyglotAdapter = <TLanguage extends 'python' | 'go' | 'rust' | 'java' | 'ruby'>(
+// seven near-identical wrapper modules.
+//
+// TypeScript and JavaScript used to have an engine of their own, built on the
+// TypeScript compiler API. It used that compiler purely as a parser and reached an
+// internal field for diagnostics, so two of seven languages were a special case
+// resting on a private API — in a tool whose whole claim is to be
+// language-neutral. ast-grep supported these grammars natively all along.
+const polyglotAdapter = <TLanguage extends SupportedSignalLanguage>(
   language: TLanguage
 ): SupportSignalExtractorAdapter<TLanguage> => ({
   language,
@@ -47,8 +38,8 @@ const polyglotAdapter = <TLanguage extends 'python' | 'go' | 'rust' | 'java' | '
 })
 
 const supportSignalExtractorAdapters = {
-  typescript: ecmascriptAdapter('typescript'),
-  javascript: ecmascriptAdapter('javascript'),
+  typescript: polyglotAdapter('typescript'),
+  javascript: polyglotAdapter('javascript'),
   python: polyglotAdapter('python'),
   go: polyglotAdapter('go'),
   rust: polyglotAdapter('rust'),

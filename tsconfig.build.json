@@ -1,0 +1,48 @@
+{
+  // Build-only configuration. `tsconfig.json` deliberately covers tests and
+  // `vitest.config.ts` so `typecheck` checks them too, but including a file
+  // outside `src/` widens the inferred common root to the repository root: every
+  // emitted file moved down into `dist/src/`, which did not match the `bin` and
+  // `exports` paths in package.json, and a compiled `vitest.config.js` shipped in
+  // the build output alongside 153 compiled test files.
+  //
+  // `types` is explicit because the Node ambient types were reaching the program
+  // only through `vitest.config.ts` importing `vitest/config`. Dropping that file
+  // from the build silently removed `Buffer` and the `node:*` modules, so the
+  // build was depending on a test configuration for its platform types.
+  //
+  // `sourceMap` is off for the published build. `tsconfig.json` turns it on, but
+  // `files` in package.json ships `dist/` and `schema/` only, so every emitted
+  // `.js.map` pointed at `../../../src/*.ts` paths that are absent from the
+  // tarball: 249 maps, roughly half the unpacked size, that no debugger could
+  // resolve. The alternatives were shipping `src/` or inlining the sources into
+  // the maps; both pay real bytes for a package that is developed from a source
+  // checkout, where `tsconfig.json` still emits working maps.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "types": ["node"],
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts"],
+  // `src/shared/testing/` holds assertions and fixtures shared BETWEEN test
+  // suites. Nothing at runtime imports it, so shipping it in `dist/` would only
+  // add dead weight to the published package.
+  //
+  // The report fixture the reporter suites and `cli/run-artifacts.test.ts` share
+  // used to sit beside the `reporting` domain as `reporting-fixture.ts`, where
+  // the rule above missed it and it shipped. It is now
+  // `src/shared/testing/report-fixture.ts` and needs no entry of its own.
+  //
+  // `change-impact-fixture.ts` cannot follow it. It builds corpus cases out of
+  // `domains/change-impact` types, and `shared` must not import from `domains`
+  // (spec 01, Dependency Direction), so it stays with the corpus it belongs to
+  // and keeps a path exclusion. Only `*.test.ts` files import it — an excluded
+  // file that a shipped module imported would still be compiled in, so this
+  // exclusion drops it only because nothing at runtime needs it.
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/shared/testing/**",
+    "src/domains/evaluation/change-impact-eval/change-impact-fixture.ts"
+  ]
+}

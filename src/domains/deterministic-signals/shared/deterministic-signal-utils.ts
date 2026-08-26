@@ -2,6 +2,7 @@ import { sha256 } from '../../../shared/hash/hash.js'
 import { normalizeRepositoryRelativePath } from '../../../platform/repository-path.js'
 import type { EvidenceRecord } from '../../../shared/contracts/index.js'
 import type {
+  EverySignalLanguageCovered,
   SupportSignalDetection,
   SupportedSignalLanguage,
   SupportSignalFile,
@@ -10,6 +11,17 @@ import type {
   SupportSignalFactKind
 } from './deterministic-signal-types.js'
 
+// The extensions each supported language owns, and the ORDER every consumer sees
+// languages in — routing groups, detection results and the registry's dispatch all
+// read `supportedSignalLanguages` below, so this array's order is observable.
+//
+// An array of `{ id, extensions }` rather than a `Record` keyed by language, so the
+// order stays explicit. The cost of that shape is that `satisfies readonly
+// SupportedSignalLanguageDefinition[]` checks each entry is WELL-FORMED without
+// checking the set is COMPLETE: a language missing here type-checks and then throws
+// from `languageDefinitionFor` the first time a file of that language is routed.
+// `EverySignalLanguageCovered` below buys the completeness check back at compile
+// time, so the failure lands on whoever adds the language instead of on a run.
 export const supportedSignalLanguageDefinitions = [
   {
     id: 'typescript',
@@ -41,11 +53,20 @@ export const supportedSignalLanguageDefinitions = [
   }
 ] as const satisfies readonly SupportedSignalLanguageDefinition[]
 
+// Fails to compile, naming the language, if one is added to
+// `SupportedSignalLanguage` without extensions above.
+export type SignalLanguagesWithoutExtensions = EverySignalLanguageCovered<
+  Exclude<
+    SupportedSignalLanguage,
+    (typeof supportedSignalLanguageDefinitions)[number]['id']
+  >
+>
+
 export const supportedSignalLanguages = supportedSignalLanguageDefinitions.map(
   (definition) => definition.id
 ) as readonly SupportedSignalLanguage[]
 
-export const languageDefinitionFor = (
+const languageDefinitionFor = (
   language: SupportedSignalLanguage
 ): SupportedSignalLanguageDefinition => {
   const definition = supportedSignalLanguageDefinitions.find((candidate) => candidate.id === language)
@@ -135,11 +156,6 @@ export const detectSupportSignalFiles = (
   }
 }
 
-export const optionalModuleSpecifier = (
-  moduleSpecifier: string | undefined
-): { readonly moduleSpecifier?: string } =>
-  moduleSpecifier === undefined ? {} : { moduleSpecifier }
-
 export const createSupportSignalFact = (input: {
   readonly language: SupportedSignalLanguage
   readonly kind: SupportSignalFactKind
@@ -147,8 +163,15 @@ export const createSupportSignalFact = (input: {
   readonly name: string
   readonly moduleSpecifier?: string
   readonly line: number
+  readonly endLine: number
   readonly contentHash: string
 }): SupportSignalFact => {
+  if (input.endLine < input.line) {
+    throw new TypeError(
+      `Support signal fact for "${input.name}" ends at ${input.endLine}, before its start line ${input.line}.`
+    )
+  }
+
   const moduleText =
     input.moduleSpecifier === undefined ? '' : ` from ${input.moduleSpecifier}`
   const actionByKind = {
@@ -173,6 +196,7 @@ export const createSupportSignalFact = (input: {
       ? {}
       : { moduleSpecifier: input.moduleSpecifier }),
     line: input.line,
+    endLine: input.endLine,
     summary: `${actionByKind[input.kind]} ${input.name}${moduleText}.`,
     contentHash: input.contentHash
   }

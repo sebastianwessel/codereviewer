@@ -37,6 +37,8 @@
       "category": "security",
       "severity": "low",
       "semanticSummary": "The anchor sanitization logic has a potential issue where it consumes English matcher groups without proper validation. If the translated text has more anchor tags than the English text, this could lead to incorrect validation results.",
+      "securityMechanism": "xss",
+      "contextDepth": "implementation",
       "matchMode": "semantic-only",
       "tier": "logic"
     },
@@ -44,6 +46,8 @@
       "category": "security",
       "severity": "low",
       "semanticSummary": "The method name 'santizeAnchors' should be 'sanitizeAnchors' (missing 'i').",
+      "securityMechanism": "xss",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "nit"
     }

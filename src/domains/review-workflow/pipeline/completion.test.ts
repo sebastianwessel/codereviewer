@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import {
-  type EvidenceRecord,
-  type RefutationResult
+import type {
+  EvidenceRecord,
+  RefutationResult
 } from '../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../admission/index.js'
-import { type ContextLedgerEntry } from '../../review-planning/index.js'
+import type { CandidateFinding } from '../../admission/index.js'
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
 import { completeReviewWorkflow } from './completion.js'
 import { ReviewWorkflowInputSchema } from './contracts.js'
 
@@ -13,7 +13,7 @@ const configHash =
 
 const evidence: EvidenceRecord = {
   id: 'ev_completion1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed line can lose data.',
   location: {
     path: 'src/completion.ts',
@@ -75,7 +75,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   ],
   evidence: [evidence],
   candidates: [candidate],
-  instructions: [],
   skills: [],
   baselineConfigured: false,
   provenance: {
@@ -89,6 +88,97 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
 })
 
 describe('workflow completion', () => {
+  // The report's "Unresolved - Needs Human Decision" section looks the verdict up by
+  // `refutationId`. Nothing wrote that field, so every entry rendered "no refutation
+  // verdict was recorded" -- the reader was told a decision was needed without being
+  // told what had already been established.
+  test('carries the refutation verdict onto the finding it decided', () => {
+    const output = completeReviewWorkflow({
+      workflowInput,
+      candidateFindings: [candidate],
+      admissionCandidates: [candidate],
+      artifactOnlyCandidateIds: ['cand_completion1'],
+      refutationResults: [
+        {
+          id: 'refute_completion1',
+          candidateId: 'cand_completion1',
+          verdict: 'needs-more-evidence',
+          summary: 'The reachable caller set is not present in the reviewed context.',
+          evidenceIds: [],
+          checks: []
+        }
+      ],
+      providerIssues: [],
+      contextLedgerEntries: [],
+      evidence: [evidence],
+      preRejectedFindings: [],
+      preAdmissionDecisions: [],
+      taskEvents: [],
+      instructionHashes: [configHash],
+      skillHashes: []
+    })
+
+    expect(output.admittedFindings[0]?.refutationId).toBe('refute_completion1')
+  })
+
+  // A file too large for one packet is split into chunks that each become their
+  // own task. The task below was shown lines 201-400 only, so a candidate it
+  // reports at line 10 is a chunk-relative number that was never resolved against
+  // the file. It is inside the file, so the whole-file range check accepts it; only
+  // the chunk range its task carries can reject it.
+  test('rejects a candidate outside the source chunk its task was given', () => {
+    const secondChunkWorkflowInput = ReviewWorkflowInputSchema.parse({
+      ...workflowInput,
+      reviewedLineRanges: [
+        { path: 'src/completion.ts', startLine: 1, endLine: 400 }
+      ],
+      tasks: [
+        {
+          id: 'task_completion1',
+          kind: 'file',
+          round: 1,
+          paths: ['src/completion.ts'],
+          factIds: [],
+          evidenceIds: [],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 1,
+          reviewContext: [
+            {
+              kind: 'file',
+              path: 'src/completion.ts',
+              startLine: 201,
+              endLine: 400,
+              content: 'const tail = 1\n',
+              ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+            }
+          ]
+        }
+      ]
+    })
+    const output = completeReviewWorkflow({
+      workflowInput: secondChunkWorkflowInput,
+      candidateFindings: [candidate],
+      admissionCandidates: [candidate],
+      artifactOnlyCandidateIds: [],
+      refutationResults: [],
+      providerIssues: [],
+      contextLedgerEntries: [],
+      evidence: [evidence],
+      preRejectedFindings: [],
+      preAdmissionDecisions: [],
+      taskEvents: [],
+      instructionHashes: [configHash],
+      skillHashes: []
+    })
+
+    expect(output.admittedFindings).toHaveLength(0)
+    expect(output.rejectedFindings[0]).toMatchObject({
+      candidateId: 'cand_completion1',
+      reason: 'location-invalid'
+    })
+  })
+
   test('marks artifact-only admitted candidates before baseline and quality gate evaluation', () => {
     const output = completeReviewWorkflow({
       workflowInput,

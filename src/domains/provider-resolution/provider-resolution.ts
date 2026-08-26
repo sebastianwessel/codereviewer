@@ -2,8 +2,10 @@ import type { Logger, ModelAlias, ModelProvider } from '@purista/harness'
 import type { ProviderConfig } from '../../shared/contracts/index.js'
 import {
   createStructuredError,
+  isMissingModuleError,
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
+import { guardTruncatedProviderOutput } from './output-truncation-guard.js'
 
 type ProviderId = ProviderConfig['id']
 
@@ -69,11 +71,6 @@ const environmentValue = (
   return value === undefined || value.trim().length === 0 ? undefined : value
 }
 
-const isMissingModuleError = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ERR_MODULE_NOT_FOUND'
 
 const assertCredentialSources = (
   definition: ProviderAdapterDefinition,
@@ -87,10 +84,16 @@ const assertCredentialSources = (
     if (environmentValue(environment, credentialSource) === undefined) {
       throw createStructuredError({
         code: 'provider_credentials_missing',
-        message: `Provider credential source "${credentialSource}" is required.`,
+        // Names WHERE, not just what. The variable name alone is the half of
+        // the answer an operator already has — they are staring at the config
+        // key that produced it. What they do not know is that this engine reads
+        // a `.env` at the repository root as well as the ambient environment,
+        // which is the difference between "export it" and "it is already
+        // exported and still not found".
+        message:
+          `Provider credential source "${credentialSource}" is required, and is not set. ` +
+          `Export it in the environment, or set it in a .env file at the repository root.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           provider: definition.providerId,
           credentialSource
@@ -106,8 +109,6 @@ const assertProviderConfig = (provider: ProviderConfig): void => {
       code: 'provider_base_url_missing',
       message: 'Provider "openai-compatible" requires provider.baseUrl.',
       category: 'config',
-      recoverable: true,
-      exitCode: 2,
       details: {
         provider: provider.id
       }
@@ -135,8 +136,6 @@ const getFactory = (
     code: 'provider_adapter_invalid',
     message: `Provider adapter "${definition.packageName}" does not export "${definition.factoryName}".`,
     category: 'config',
-    recoverable: true,
-    exitCode: 2,
     details: {
       provider: definition.providerId,
       packageName: definition.packageName,
@@ -178,11 +177,28 @@ const createProviderOptions = (
 const modelSupportsTemperatureDefault = (provider: ProviderConfig): boolean =>
   provider.id !== 'openai' || !/^gpt-5(?:[.-]|$)/iu.test(provider.model)
 
+// Groups requests that share a prompt prefix. Requests from the same engine and
+// model share the static instruction prefix that precedes every call, so keying on
+// the model is the coarsest grouping that is still correct. A per-run or per-task
+// key would be worse than none: it would scatter requests across machines and
+// guarantee a miss.
+const promptCacheKeyFor = (provider: ProviderConfig): string =>
+  `codereviewer:${provider.model}`
+
 const createModelAlias = (
   provider: ProviderConfig,
   modelProvider: ModelProvider
 ): ModelAlias => ({
-  provider: modelProvider,
+  // Wrapped, not raw. `maxOutputTokens` below is installed as the adapter's
+  // `maxTokens`, and a response that hits that ceiling comes back as an ordinary
+  // success carrying `finishReason: 'length'` — indistinguishable from a complete
+  // answer to every stage downstream. The guard is attached here, where the
+  // ceiling is set, so no lane has to remember to ask for it.
+  provider: guardTruncatedProviderOutput({
+    provider: modelProvider,
+    model: provider.model,
+    maxOutputTokens: provider.maxOutputTokens
+  }),
   model: provider.model,
   capabilities: ['object', 'tool_use'],
   // Retry is handled by the harness model retry policy, which classifies
@@ -202,11 +218,23 @@ const createModelAlias = (
     ...(provider.maxOutputTokens === undefined
       ? {}
       : { maxTokens: provider.maxOutputTokens }),
-    // The OpenAI Responses adapter maps `providerOptions.reasoning_effort` to the
-    // request's `reasoning: { effort }`. Only emitted when configured.
-    ...(provider.reasoningEffort === undefined
-      ? {}
-      : { providerOptions: { reasoning_effort: provider.reasoningEffort } })
+    // `providerOptions` is spread straight into the provider request body by the
+    // adapter, so it carries both the reasoning effort and the cache-routing key.
+    //
+    // `prompt_cache_key` is what lets the provider route requests that share a
+    // prompt prefix to a machine holding that prefix cached. Without it, routing is
+    // best-effort, and a probe of two byte-identical runs measured zero cached
+    // tokens against roughly 67,000 input tokens each. Input dominates output on
+    // this workload by more than twenty to one, so an unroutable cache is the
+    // single largest avoidable cost. The key is stable across runs by design --
+    // varying it per run would defeat the entire mechanism -- and carries no
+    // request content, only the alias it groups.
+    providerOptions: {
+      ...(provider.reasoningEffort === undefined
+        ? {}
+        : { reasoning_effort: provider.reasoningEffort }),
+      prompt_cache_key: promptCacheKeyFor(provider)
+    }
   }
 })
 
@@ -246,8 +274,6 @@ export const resolveProviderModelAlias = async (
         code: 'provider_adapter_missing',
         message: `Provider adapter "${definition.packageName}" is not installed. Install it with: npm install ${definition.packageName}`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           provider: definition.providerId,
           packageName: definition.packageName

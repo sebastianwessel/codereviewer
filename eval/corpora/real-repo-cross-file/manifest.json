@@ -1,0 +1,1731 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "real-repo-cross-file",
+  "modelTrainingCutoff": "2026-01-01",
+  "splitIntegrity": {
+    "status": "single-split",
+    "contaminationNote": "Every case in this dataset is labelled held-out and there is no dev set, so the chronological-split rule has nothing to compare and verifies nothing. The cases are post-cutoff, so this is not training contamination; it is ITERATION contamination. Every baseline, A/B, and prompt change this project has measured was decided on these same 37 cases, which is exactly the role spec 15 reserves for a dev set. Read every figure produced from this corpus as a dev-set figure: it may be tuned to these cases and it does not satisfy the held-out acceptance criterion, including the pre-registered decision rule for Mechanism 2. Adding genuinely newer cases and re-labelling this set as dev is the fix; re-labelling cases without new material is not."
+  },
+  "description": "Real upstream repositories hydrated as FULL working trees at the commit before an upstream fix landed, so cross-file review defects are measurable. modelTrainingCutoff is an operator setting: re-set it to the evaluated model's cutoff each model generation, which by design invalidates held-out cases captured before it. Every commit pair below was read from upstream git objects; expected findings describe the pre-fix code that was inspected.",
+  "cases": [
+    {
+      "id": "fastify-decorator-shadows-builtin-request-properties",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/fastify/fastify.git",
+      "upstreamOwner": "fastify",
+      "upstreamRepo": "fastify",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "cc8d9a3c961d65cb1a39c4142ce63285d2de1e3c",
+      "fixCommittedAt": "2026-06-28T09:45:40+02:00",
+      "parentCommit": "6e6be153127cbe6e025f73efba78d1db7dd5788b",
+      "reviewedPaths": ["lib/decorate.js", "lib/reply.js", "lib/request.js"],
+      "reviewIntent": "Keep decorator existence checks to static props and prototype lookups",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/decorate.js",
+          "lineRange": [93, 101],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Decorator existence checks only inspect the constructor's static props list and its prototype, so properties assigned inside the Request and Reply constructor bodies (id, params, raw, query, log, body on Request; raw, request, log on Reply) are invisible. hasRequestDecorator/hasReplyDecorator report false for those built-ins and the duplicate-decorator guard does not raise FST_ERR_DEC_ALREADY_PRESENT, so decorating one silently shadows core request/reply state at runtime."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "lib/decorate.js",
+          "lineRange": [81, 91],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "checkExistence answers with the `in` operator, so every member reachable through the prototype chain counts as an existing decorator. hasDecorator reports true for Object.prototype members, and because checkDependencies is built on the same helper a plugin can declare a dependency on a name no decorator ever registered — 'name' or 'length' on the Request and Reply constructors — and the missing-dependency guard passes."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "lib/reply.js",
+          "lineRange": [319, 323],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "removeTrailer overwrites the entry with undefined instead of deleting it, while removeHeader a few dozen lines above deletes the key precisely because a leftover one is harmful. Every downstream branch tests whether the trailers object is null, not whether any trailer survives, so a trailer that was added and then removed still forces Transfer-Encoding: chunked and emits a Trailer header with an empty value, and the response loses the content length it could otherwise have declared."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/reply.js",
+          "lineRange": [913, 916],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The trailer callback's return value is tested with typeof result === 'object' before then is read, and typeof null is also 'object', so a callback that returns null makes that property read throw. The throw escapes at a point where the status line and the body have already been written and before the stream is ended, so the response is left open with everything flushed and no terminator until a timeout kills the connection."
+        }
+      ],
+      "tags": ["cross-file", "api-contract", "decorators"],
+      "notes": "Cross-file by construction: the evidence is the constructor body in lib/request.js and lib/reply.js, not the changed check in lib/decorate.js. Upstream is a popular public repository, so only the post-cutoff commit date protects this case from contamination."
+    },
+    {
+      "id": "fastify-router-options-shared-mutation",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/fastify/fastify.git",
+      "upstreamOwner": "fastify",
+      "upstreamRepo": "fastify",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b4db85b665ac99a809c633b7564d49c8a4c2c5c9",
+      "fixCommittedAt": "2026-02-20T23:08:12+01:00",
+      "parentCommit": "3653e7b92719061c6c2dfb4497d2d5b936509309",
+      "reviewedPaths": ["lib/route.js"],
+      "reviewIntent": "Reuse the caller-provided routerOptions object when building router options",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/route.js",
+          "lineRange": [616, 632],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "buildRouterOptions keeps the caller's options.routerOptions object by reference and then writes every missing router key into it. The caller's object is mutated, so a routerOptions object shared between Fastify instances (or reused across registrations) leaks the first instance's defaults into later ones instead of each instance resolving its own defaults."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/route.js",
+          "lineRange": [548, 553],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The socket-level timeout listener is attached once, but the state it later reads is written only when the matched route has onTimeout hooks. On a keep-alive connection a following request routed to a handler without such hooks leaves the previous request's context, request and reply in place, so a socket timeout runs the earlier route's hooks against a request that has already finished, while the request actually in flight gets no timeout handling. Nothing ever clears the field."
+        }
+      ],
+      "tags": ["shared-state", "mutation", "configuration"],
+      "notes": "Impact requires knowing that callers pass a shared options object into buildRouterOptions; the mutation itself is local to lib/route.js."
+    },
+    {
+      "id": "gin-clientip-multi-forwarded-header",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gin-gonic/gin.git",
+      "upstreamOwner": "gin-gonic",
+      "upstreamRepo": "gin",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "9914178584e42458ff7d23891463a880f58c9d86",
+      "fixCommittedAt": "2026-01-02T10:15:27+08:00",
+      "parentCommit": "915e4c90d28ec4cffc6eb146e208ab5a65eac772",
+      "reviewedPaths": ["context.go"],
+      "reviewIntent": "Read each forwarded IP header with a single header lookup in ClientIP",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "context.go",
+          "lineRange": [989, 996],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "ClientIP passes only the first value of each forwarded-IP header to validateHeader, because requestHeader resolves to Header.Get. With more than one X-Forwarded-For header line the proxy-appended line is dropped and only the client-controlled line is parsed; validateHeader then walks that single line right-to-left and returns its right-most entry as the trusted client IP, so a caller-supplied value becomes ClientIP and IP-based allow-listing or rate limiting can be spoofed."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "context.go",
+          "lineRange": [1367, 1383],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The comparison loop stops at the shorter of the accepted type and the offered type, and the offer is then accepted whenever the index reached the end of the accepted string. An accepted value that is a strict prefix of an offer matches with no wildcard involved: Accept: application/x selects the offered application/xml, and Accept: application/json selects an offered application/json-seq. The opposite direction is rejected correctly, which makes this an asymmetry rather than a rule."
+        }
+      ],
+      "tags": ["cross-file", "security", "trusted-proxy"],
+      "notes": "Cross-file: the trust decision lives in Engine.validateHeader/isTrustedProxy in gin.go, while the reviewed change is in context.go. Not a published advisory case; it was captured from ordinary upstream history."
+    },
+    {
+      "id": "gin-context-copy-drops-errors",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gin-gonic/gin.git",
+      "upstreamOwner": "gin-gonic",
+      "upstreamRepo": "gin",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "293ad7edebb3ae30369288bd6416ca0d78474727",
+      "fixCommittedAt": "2026-06-22T19:09:26+08:00",
+      "parentCommit": "2e4d4f38962a6f15ae496d59b294f307eef95429",
+      "reviewedPaths": ["context.go"],
+      "reviewIntent": "Trim Context.Copy() to writer, keys, and params state",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "context.go",
+          "lineRange": [122, 145],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Context.Copy() rebuilds the copy field by field and never carries over Errors or Accepted. A context copied for use in a goroutine therefore starts with an empty error list and no negotiated content types, so errors already attached by earlier middleware are invisible to anything inspecting the copy, and content negotiation on the copy silently restarts."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "context.go",
+          "lineRange": [135, 139],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Copy() reads c.Keys into a local variable before taking the read lock and clones that local inside the lock, so the field read itself is unsynchronised. Set() assigns a fresh map to c.Keys under the write lock the first time a key is stored, so a Set concurrent with a Copy races on the map header the copy just read - exactly the race the mutex around the clone exists to prevent, in the one method whose documented purpose is handing a context to another goroutine."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "context.go",
+          "lineRange": [1055, 1075],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "unsafe-config",
+          "contextDepth": "cross-function",
+          "semanticSummary": "Scheme answers from four client-supplied headers - X-Forwarded-Proto, X-Forwarded-Protocol, X-Forwarded-Ssl and X-Url-Scheme - with no trusted-proxy test of any kind, while ClientIP a few methods above gates its forwarded headers on isTrustedProxy and the configured list precisely because they are spoofable. A client on a plain connection sends X-Forwarded-Proto: https, and every decision built on Scheme - secure-cookie flags, redirects, absolute URLs - treats the connection as encrypted."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "context.go",
+          "lineRange": [992, 1023],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "On a unix-socket listener the trusted flag is set directly and the fallback block that parses RemoteIP is skipped, so remoteIP keeps its zero value. If no configured forwarded header validates - none sent, or forwarding off, or the header list nil - the function falls through to remoteIP.String(), and a zero net.IP renders as the literal text for a nil value. Access logs, per-IP limiters and allow-lists then all see one shared placeholder token instead of an address."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "context.go",
+          "lineRange": [153, 164],
+          "reason": "HandlerNames allocates a slice with the right capacity and appends the name of every non-nil handler, explicitly skipping nils. It reads no request state and is unchanged by the reviewed diff, which only touches Copy."
+        }
+      ],
+      "tags": ["contract", "async", "state-copy"],
+      "notes": "The omission is visible only against the full Context struct and the middleware that reads c.Errors (errors.go, recovery.go, logger.go)."
+    },
+    {
+      "id": "golang-jwt-zero-exp-parsed-as-absent-claim",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/golang-jwt/jwt.git",
+      "upstreamOwner": "golang-jwt",
+      "upstreamRepo": "jwt",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "e8e5b83ca9a5c5a3f287eda52c7bca78f9a6d176",
+      "fixCommittedAt": "2026-05-26T23:30:25+02:00",
+      "parentCommit": "9a70137d962aa5105727b6f2f31519bfb6ec90b4",
+      "reviewedPaths": ["map_claims.go"],
+      "reviewIntent": "Short-circuit numeric-date claim parsing when a float claim value is zero",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "map_claims.go",
+          "lineRange": [51, 57],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "parseNumericDate returns (nil, nil) for a float64 claim value of 0, so an exp of 0 becomes indistinguishable from an absent exp claim. Validation reads a nil expiration as 'claim not set' and, because exp is optional unless expiration is explicitly required, raises no error: a token that expired at the unix epoch validates as unexpired. The json.Number branch has no such carve-out, so the same token is correctly rejected when the parser is configured to decode numbers as json.Number."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "map_claims.go",
+          "lineRange": [69, 87],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "parseClaimsString has no branch for a claim value that is neither a string nor a list of strings, so an aud claim carrying a number, a boolean, or an object falls out of the type switch and returns an empty ClaimStrings with a nil error. The sibling parsers report ErrInvalidType for that case and the validator documents a wrong-typed claim as unverifiable, so a malformed audience becomes indistinguishable from an absent one."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "map_claims.go",
+          "lineRange": [58, 61],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The json.Number branch discards the error from exp.Float64() and hands the value straight to newNumericDateFromSeconds. The parser decodes numbers this way once WithJSONNumber is set, so a claim outside the float64 range, taken from the untrusted token, yields an infinite float plus an unread error, which the helper's int64 conversion turns into a nonsensical instant. A malformed nbf becomes a past date and the not-before check passes; every sibling parser here reports ErrInvalidType."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "map_claims.go",
+          "lineRange": [12, 40],
+          "reason": "The six one-line Claims-interface accessors (GetExpirationTime through GetSubject) only delegate to the parse helpers below them. They hold no branching, no arithmetic and no untrusted input handling, and the reviewed diff does not touch them."
+        }
+      ],
+      "tags": ["cross-file", "security", "claims-validation"],
+      "notes": "Cross-file: map_claims.go only parses claim values. The rule that makes the zero short-circuit dangerous lives in the unchanged validator.go, whose verifyExpiresAt (lines 175-186) maps a nil expiration onto errorIfRequired(required, \"exp\") and therefore onto 'valid' while requireExp is false. Read on its own, the zero carve-out looks like harmless normalisation."
+    },
+    {
+      "id": "nats-server-msgtrace-dest-uses-client-publish-permissions-for-leaf",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
+      "upstreamOwner": "nats-io",
+      "upstreamRepo": "nats-server",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "44414a5989f4692870bf51b7a60d349e3cbd4bb0",
+      "fixCommittedAt": "2026-06-29T16:17:34+01:00",
+      "parentCommit": "4c7fa22efc570399311f9fcd2ce59cf5ba567623",
+      "reviewedPaths": ["server/msgtrace.go"],
+      "reviewIntent": "Guard the message-trace destination with the client publish-permission check for every connection kind",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "server/msgtrace.go",
+          "lineRange": [530, 535],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "allowedToPublishOnMsgTraceDest authorises the caller-supplied trace destination with c.perms.pub and pubAllowedFullCheck, which is client-connection semantics. A LEAF connection does not carry that meaning: an accepted leaf has its pub and sub permission sets swapped at connect time, and the export ACL captured for it is held separately. The guard evaluates the wrong permission set for leaf connections and lets a leaf steer trace events to subjects its own leaf permissions deny."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "server/msgtrace.go",
+          "lineRange": [539, 546],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "sample draws with rand.Int31n(100), whose values run from 0 to 99, and then accepts everything less than or equal to the configured percentage, so sampling+1 of the hundred outcomes pass. Every configured rate is one percentage point too high, and the largest value the guard above lets through, 99, traces every message. The comparison has to be strictly less than for the draw to mean a percentage at all."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "server/msgtrace.go",
+          "lineRange": [606, 613],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The trace-flags field of the traceparent header is a full byte written as two hex digits, but it is parsed with a bit size of 8, which asks for a value that fits a signed int8. Any flags byte from 80 to ff overflows, ParseInt reports a range error, and the sampled bit is never examined - so a header ending in -81, which does request sampling, leaves the found flag false and the message is silently not traced."
+        }
+      ],
+      "tags": ["cross-file", "security", "leafnode", "permissions"],
+      "notes": "Cross-file: the evidence sits in the unchanged server/leafnode.go. processLeafNodeConnect swaps c.perms.sub and c.perms.pub for a non-solicited leaf (lines 2282-2292), and leafReceiveAllowed / leafSendAllowed (lines 3393-3434) show that a leaf's send permission is taken from c.opts.Export and its receive permission from canSubscribeInternal. Nothing in msgtrace.go hints that c.perms means something different on a LEAF connection."
+    },
+    {
+      "id": "casbin-conditional-role-transitive-check-drops-domain",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/casbin/casbin.git",
+      "upstreamOwner": "casbin",
+      "upstreamRepo": "casbin",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "1571e4f34fdad9106d05ab8d8ef59f5efc7fe987",
+      "fixCommittedAt": "2026-06-24T00:44:58+08:00",
+      "parentCommit": "f64a3c0bb196de76f4621fdd829298dfc1e2bba1",
+      "reviewedPaths": ["rbac/default-role-manager/role_manager.go"],
+      "reviewIntent": "Recurse into the next level of the conditional role tree with the remaining role set",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "rbac/default-role-manager/role_manager.go",
+          "lineRange": [805, 821],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "hasLinkHelper recurses without forwarding its variadic domains argument, so every hop past the first is evaluated with an empty domain list. checkLinkCondition branches on exactly that: with no domain it consults the undomained registry, misses the condition registered under a domain, leaves passLinkConditionFunc at its default true, and traverses the link unconditionally. A domain role reached through an intermediate role is granted even when its condition forbids it."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "rbac/default-role-manager/role_manager.go",
+          "lineRange": [823, 835],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "getNextRoles drops the error returned by checkLinkCondition and answers false, while it is used as the callback of a sync.Map range, where a false return stops the iteration. A single condition function that fails therefore loses its error and also abandons the remaining links of the role being expanded, so the breadth-first search continues from a truncated frontier and HasLink can answer false for a role that is reachable through a link it never looked at."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "rbac/default-role-manager/role_manager.go",
+          "lineRange": [1164, 1175],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "AddLink and DeleteLink fan the change out through rangeAffectedRoleManagers, the promoted plain-domain method, whose callback asserts every stored value to *RoleManagerImpl. The map it ranges is the one this type fills with *ConditionalRoleManager values, and its own load asserts them back as such, so the two assertions cannot both hold. Once a domain matching function is registered - the only thing that makes the range body run - the first link added for a domain that matches another panics."
+        }
+      ],
+      "tags": ["cross-file", "security", "rbac"],
+      "notes": "Cross-file: the changed file shows only that an argument is dropped. That the empty-domain branch means 'no condition, so allow' depends on the unchanged enforcer.go, where AddNamedDomainLinkConditionFunc registers conditions under a domain key (around lines 1018-1026), and on util/builtin_operators.go, where GenerateConditionalGFunction feeds the request domain into HasLink and TimeMatchFunc is the builtin condition being skipped."
+    },
+    {
+      "id": "authlib-oidc-scope-error-redirects-to-unvalidated-uri",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/lepture/authlib.git",
+      "upstreamOwner": "lepture",
+      "upstreamRepo": "authlib",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "7b4ecd7c88ac96ba7b759187a4b6d109d9031ee0",
+      "fixCommittedAt": "2026-05-04T09:56:42+02:00",
+      "parentCommit": "c304a216512e449d1440b159960ba319f4300d2b",
+      "reviewedPaths": ["authlib/oidc/core/grants/implicit.py"],
+      "reviewIntent": "Report a missing openid scope with the request's redirect_uri attached so the client is redirected",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [70, 77],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "validate_authorization_request raises the missing-scope error with redirect_uri taken straight from the request payload, before the super() call on the next line performs the only check that the value belongs to the client. Attaching a redirect_uri to an OAuth2Error turns the response into a 302 to that address, so an unauthenticated caller that omits the openid scope makes the authorization endpoint redirect to any address it chooses, carrying the error and state parameters with it."
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [148, 163],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "cross-file",
+          "semanticSummary": "process_implicit_token attaches c_hash and at_hash only when the half-hash helper returns a value and silently omits the claim otherwise. That helper derives a hashlib attribute name from the signing algorithm and yields nothing when the name does not resolve, so a configured algorithm whose name does not map makes the server mint an id token with no binding to the access token or the authorization code, in the one flow where that binding is required rather than optional."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [102, 110],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "callee",
+          "semanticSummary": "create_authorization_response reads response_mode straight out of the request payload and never checks it against the response types this grant serves. The helper it calls honours 'query' by appending the parameters to the redirect URI's query string, and those parameters are the freshly minted access_token and id_token. A request carrying response_mode=query hands the tokens back in the URL, where browser history, the Referer header and proxy logs keep them."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [92, 101],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "create_authorization_response reads the request's state on its first line but appends it only in the granted branch. The denied branch builds its parameters from AccessDeniedError(), constructed without state, and get_body emits state only when the error carries one. The redirect reporting a refused authorization arrives without the state the client sent, so the client cannot bind the response to its own request."
+        }
+      ],
+      "tags": ["cross-file", "security", "oauth", "open-redirect"],
+      "notes": "Cross-file on two hops, neither visible in the reviewed file: authlib/oauth2/rfc6749/grants/base.py holds validate_authorization_redirect_uri (lines 117-131), the only code that calls client.check_redirect_uri and the only thing the super() call on line 77 contributes; and authlib/oauth2/base.py shows OAuth2Error.__call__ turning a set redirect_uri into 302 Location (lines 57-62). The sibling path in authorization_server.py states the intended ordering. The same shape exists in hybrid.py, deliberately excluded from the reviewed set."
+    },
+    {
+      "id": "authlib-oidc-token-hash-check-passes-on-unknown-alg",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/lepture/authlib.git",
+      "upstreamOwner": "lepture",
+      "upstreamRepo": "authlib",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b9bb2b25bf8b7e01512d847a95c1749646eaa72b",
+      "fixCommittedAt": "2026-03-01T00:30:33+09:00",
+      "parentCommit": "1b0a1d988842bff7347c4ec0a70e45c3ba55504e",
+      "reviewedPaths": ["authlib/oidc/core/claims.py"],
+      "reviewIntent": "Treat an empty half-hash as nothing to compare when verifying at_hash and c_hash",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/claims.py",
+          "lineRange": [304, 308],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "cross-file",
+          "semanticSummary": "_verify_hash returns True when the computed half-hash is falsy, the fail-open direction for a binding check. The helper it calls returns nothing whenever the algorithm name does not resolve to a hash function, and that algorithm is read from the received token's own header. validate_at_hash and validate_c_hash therefore report success without comparing anything, so the binding between the id token and the access token or authorization code is never verified."
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "authlib/oidc/core/claims.py",
+          "lineRange": [62, 74],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "validate_auth_time only asserts that auth_time is present and numeric when the request carried max_age; it never compares auth_time with max_age. max_age is the relying party's demand that the end user have authenticated within that many seconds, and no other validation stage in the package reads max_age, so an id token whose auth_time is arbitrarily old satisfies the check and the re-authentication requirement is silently unenforced."
+        }
+      ],
+      "tags": ["cross-file", "security", "oidc", "fail-open"],
+      "notes": "Cross-file: the reviewed file makes the falsy branch look defensive and unreachable. The unchanged authlib/oidc/core/util.py is what proves it is reachable — create_half_hash derives a hashlib attribute name from the alg string and returns None when getattr misses (lines 7-18), so any algorithm whose name does not map, taken from the token header, lands in the fail-open branch."
+    },
+    {
+      "id": "werkzeug-if-range-accepts-weak-etag-as-validator",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pallets/werkzeug.git",
+      "upstreamOwner": "pallets",
+      "upstreamRepo": "werkzeug",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "8e9105fbafd3b3695e7b2f1fcbd09adcd97bd351",
+      "fixCommittedAt": "2026-04-23T13:28:11-07:00",
+      "parentCommit": "cc89c44f3819295b8f34b47b3e111ef2475cc441",
+      "reviewedPaths": ["src/werkzeug/datastructures/range.py"],
+      "reviewIntent": "Drop the weakness flag when parsing an If-Range header into its entity tag",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [44, 48],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "IfRange.from_header keeps only the first element of the unquote helper's (etag, weak) result, so a weak entity tag is stored as if it were the strong one: W/\"abc\" and \"abc\" become the same parsed value. If-Range requires a strong validator, and the consumer compares the parsed value against the current entity tag to decide whether the requested range is still valid, so a client holding only a weak validator gets a 206 partial response and can reassemble an inconsistent entity."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [91, 105],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "range_for_length resolves a suffix range by adding the entity length to the negative start without clamping the result at zero, so a suffix longer than the entity (bytes=-1000 against 500 bytes) yields a negative start, fails the byte-range validity check, and returns None. HTTP requires a suffix length larger than the representation to be answered with the whole representation, but the None result is what the response layer turns into 416 for a range that is in fact satisfiable."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [137, 147],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The suffix branch keeps the parsed value as begin and marks the entry by its negative sign, but the integer helper maps '-0' onto plain zero, so bytes=-0 is stored as (0, None) - byte for byte what bytes=0- produces. A suffix length of zero makes the byte-range-set unsatisfiable and has to be answered 416, yet range_for_length resolves this one to the whole entity and the response layer sends the complete representation under a 206."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [50, 62],
+          "reason": "IfRange.to_header/__str__/__repr__ only re-serialise the etag or date that was already parsed into the instance, choosing http_date or quote_etag and otherwise returning an empty string. No parsing, no comparison, and unchanged by the reviewed diff."
+        }
+      ],
+      "tags": ["cross-file", "http-semantics", "conditional-requests"],
+      "notes": "Cross-file: src/werkzeug/http.py shows unquote_etag returning a (etag, weak) pair and stripping the W/ prefix (lines 1016-1038), which is what makes the [0] subscript a silent loss rather than a rename; and src/werkzeug/sansio/http.py shows is_resource_modified feeding if_range.etag into the entity-tag comparison that decides the 206 (lines 71-75). The reviewed file alone shows no consequence."
+    },
+    {
+      "id": "ws-close-frame-leaks-uninitialised-buffer-bytes",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/websockets/ws.git",
+      "upstreamOwner": "websockets",
+      "upstreamRepo": "ws",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "c0327ec15a54d701eb6ccefaa8bef328cfc03086",
+      "fixCommittedAt": "2026-05-12T17:42:19+02:00",
+      "parentCommit": "ce2a3d62437995a47e6056d485a33d21b6a8f867",
+      "reviewedPaths": ["lib/sender.js"],
+      "reviewIntent": "Copy the close reason into the frame buffer for any non-string payload",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/sender.js",
+          "lineRange": [188, 206],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "caller",
+          "semanticSummary": "Sender#close sizes an uninitialised buffer from the reason's byte length and fills it with a typed-array copy in the non-string branch. For a typed array with elements wider than one byte the two disagree: the allocation follows the byte length while the copy writes one byte per element, so the tail is never written. Those bytes are whatever the allocator returned and are transmitted to the peer inside the close frame."
+        }
+      ],
+      "tags": ["security", "memory-disclosure", "websocket"],
+      "notes": "The unchanged lib/websocket.js is what makes the branch reachable from public API: WebSocket#close forwards the caller's reason straight into Sender#close (around line 296) with no type check, so an application passing any typed array reaches the else branch. Labelled contextDepth caller rather than cross-file, because the sizing mismatch itself is decidable inside the reviewed file."
+    },
+    {
+      "id": "slim-html-error-page-renders-title-unescaped",
+      "language": "php",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/slimphp/Slim.git",
+      "upstreamOwner": "slimphp",
+      "upstreamRepo": "Slim",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "f897118b1dbf157d3520aa4776ee7faa6d6de229",
+      "fixCommittedAt": "2026-05-22T08:56:22+01:00",
+      "parentCommit": "402fcbc2eed5a998bd1cf5d52dfc5572ba95a477",
+      "reviewedPaths": ["Slim/Error/Renderers/HtmlErrorRenderer.php"],
+      "reviewIntent": "Render the error title and description into the HTML error page",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "Slim/Error/Renderers/HtmlErrorRenderer.php",
+          "lineRange": [25, 36],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "xss",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The renderer interpolates the error title and description into the page unescaped, while the neighbouring detail fragment passes the exception message and trace through htmlentities. The title reaches both the document title and the heading, and the description reaches the paragraph rendered when error details are disabled, the production setting. Those two strings come from the exception, not from constants, so markup inside them is rendered as HTML."
+        },
+        {
+          "category": "security",
+          "severity": "low",
+          "path": "Slim/Error/Renderers/HtmlErrorRenderer.php",
+          "lineRange": [38, 55],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "xss",
+          "contextDepth": "local",
+          "semanticSummary": "Inside the detail fragment only the exception message and the stack trace are passed through htmlentities; the class name, the code, the file, and the line are interpolated raw into the same markup. Exception::getCode is not constrained to an integer - database driver exceptions carry string codes - so a code value containing markup reaches the rendered page unescaped, and the mixed treatment inside one method conceals that the fragment is not uniformly escaped."
+        }
+      ],
+      "tags": ["cross-file", "security", "error-rendering"],
+      "notes": "Cross-file and verdict-flipping: getErrorTitle and getErrorDescription are not defined in the reviewed file. The unchanged Slim/Error/AbstractErrorRenderer.php shows they return the exception's own title and description for an HttpException and only fall back to the class constants otherwise (lines 29-45), and Slim/Exception/HttpException.php shows both are settable at runtime (setTitle/setDescription). Without those files the reviewed code looks like it renders two fixed strings."
+    },
+    {
+      "id": "axum-multipart-part-name-not-escaped-in-content-disposition",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/tokio-rs/axum.git",
+      "upstreamOwner": "tokio-rs",
+      "upstreamRepo": "axum",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b90b8e02d0f761ce36a13610acd2afa60984a5e2",
+      "fixCommittedAt": "2026-06-29T11:26:47+02:00",
+      "parentCommit": "600e762b30dba5d1b9e253fabd36d0d23333e5d5",
+      "reviewedPaths": ["axum-extra/src/response/multiple.rs"],
+      "reviewIntent": "Format each multipart part's Content-Disposition line from its field name and file name",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "axum-extra/src/response/multiple.rs",
+          "lineRange": [186, 192],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file",
+          "semanticSummary": "Part::serialize writes the field name and the file name straight into the quoted-string parameters of the Content-Disposition line, and the constructors that set them accept any string without validating it. A name containing a double quote closes the quoted string early and appends attacker-chosen parameters, and one containing a carriage return and line feed ends the header line and injects further headers into the multipart body the response sends."
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "axum-extra/src/response/multiple.rs",
+          "lineRange": [212, 223],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "injection",
+          "contextDepth": "local",
+          "semanticSummary": "generate_boundary draws the multipart boundary from a non-cryptographic pseudo-random generator, and nothing ever checks the generated value against the parts it is about to delimit, although the function's own documentation states the boundary must be a value that does not occur in any of the data. Part contents are arbitrary caller-supplied bytes, so a body that happens to contain the boundary line splits the response into parts the application never wrote."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "axum-extra/src/response/multiple.rs",
+          "lineRange": [204, 210],
+          "reason": "The FromIterator<Part> impl collects the iterator into the parts vector and does nothing else. It performs no formatting and no header construction, and it sits outside every hunk of the reviewed diff."
+        }
+      ],
+      "tags": ["cross-file", "security", "multipart"],
+      "notes": "Cross-file: the unchanged axum-extra/src/response/content_disposition.rs already defines EscapedFilename, the wrapper that escapes backslashes and quotes for exactly this position, and its doc comment states that including an unescaped value is parameter injection. Sibling responses in attachment.rs and file_stream.rs already use it, so the crate's contract — and the fact that this call path is the one bypassing it — is only visible outside the reviewed file."
+    },
+    {
+      "id": "rack-static-header-rules-match-encoded-path",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rack/rack.git",
+      "upstreamOwner": "rack",
+      "upstreamRepo": "rack",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "d3fd39964156cb34fdf0f35f57c10bda0b66dc2e",
+      "fixCommittedAt": "2026-04-01T12:15:37+13:00",
+      "parentCommit": "d2d6c7c8ae864b0d845f76807a5240f517986c5b",
+      "reviewedPaths": ["lib/rack/static.rb"],
+      "reviewIntent": "Match the configured static header rules against the request path",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/rack/static.rb",
+          "lineRange": [167, 185],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "unsafe-config",
+          "contextDepth": "cross-file",
+          "semanticSummary": "applicable_rules is handed the still percent-encoded PATH_INFO and matches the :fonts, Array and Regexp rule forms against it without decoding; only the String branch decodes. A path whose extension is written with an escape therefore matches no extension rule, while the file server that answers the request decodes first and serves the file, so the cache-control, CORS and content-type-options headers those rules exist to attach are silently omitted."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/static.rb",
+          "lineRange": [174, 176],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The String branch assigns the decoded value back to the method parameter from inside the find_all block, so every rule evaluated after the first String rule sees a decoded path while the rules before it saw the raw one, and the outcome depends on the order the rules were configured in. The decoder used there is also the form decoder rather than the path decoder, so a literal plus sign becomes a space before the prefix comparison."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "lib/rack/static.rb",
+          "lineRange": [177, 178],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The Array rule form interpolates the configured extensions into a regular expression by joining them on the alternation character with no escaping, so a regular-expression metacharacter in a rule value is evaluated as syntax rather than matched literally: a dot matches any character, and an entry containing an alternation or a quantifier silently widens or breaks the rule."
+        }
+      ],
+      "tags": ["cross-file", "security", "static-files", "header-rules"],
+      "notes": "Cross-file: lib/rack/files.rb decodes the path before serving (unescape_path then clean_path_info, around lines 50-54), which is what makes the mismatch observable — the file is served but its rule-driven headers are not attached. The reviewed file's call method decodes into actual_path for can_serve but passes the raw env[PATH_INFO] to applicable_rules, so the inconsistency is visible there while the consequence is not."
+    },
+    {
+      "id": "rack-request-scheme-trusts-x-forwarded-ssl",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rack/rack.git",
+      "upstreamOwner": "rack",
+      "upstreamRepo": "rack",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "85a7ae09cc46571b1948c7a499328568d902b120",
+      "fixCommittedAt": "2026-04-30T22:48:56-07:00",
+      "parentCommit": "3628cea311718b9f2350bd641abfb0f8c5c7292e",
+      "reviewedPaths": ["lib/rack/request.rb"],
+      "reviewIntent": "Resolve the request scheme, taking the forwarded SSL header into account",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/rack/request.rb",
+          "lineRange": [335, 345],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "unsafe-config",
+          "contextDepth": "cross-function",
+          "semanticSummary": "scheme answers https for a bare X-Forwarded-SSL: on header before it consults forwarded_scheme, so this one forwarded header is read outside the forwarded_priority and x_forwarded_proto_priority allow-lists that gate every other forwarded source. An application that empties those lists precisely because it is not behind a trusted proxy still has its scheme flipped by a header the client sent, and ssl?, base_url, url and every redirect built from them follow."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/request.rb",
+          "lineRange": [581, 583],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "GET parses the query string once and caches the hash in the environment, with nothing tying the cache to the string it was parsed from - although the constant for exactly that comparison is still defined and is now referenced nowhere. cookies, a few methods above, does compare its cached source string and re-parses on a mismatch. Any middleware that rewrites QUERY_STRING after something has read request.params is therefore ignored, including one that strips a parameter for safety."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/rack/request.rb",
+          "lineRange": [305, 333],
+          "reason": "The one-line HTTP verb predicates (delete? through unlink?) each compare request_method to a frozen constant. They sit immediately above the changed scheme method, so a reviewer reads them as context, and there is nothing in them to report."
+        }
+      ],
+      "tags": ["security", "trusted-proxy", "forwarded-headers"],
+      "notes": "The allow-list machinery this branch sidesteps is in the same file but far from it: the class-level forwarded_priority and x_forwarded_proto_priority defaults around lines 42-43, and forwarded_scheme with FORWARDED_SCHEME_HEADERS around lines 844-872, which dispatches every other forwarded source through those lists. ssl? at line 505 and base_url at line 684 are the consumers that turn a wrong scheme into wrong behaviour."
+    },
+    {
+      "id": "puma-thread-pool-spawned-count-not-decremented",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/puma/puma.git",
+      "upstreamOwner": "puma",
+      "upstreamRepo": "puma",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "3add64eceda2557897b00358959ce47dd9196718",
+      "fixCommittedAt": "2026-07-04T11:57:29+10:00",
+      "parentCommit": "9430aca574102d80a56294e7670acf644f38fa7b",
+      "reviewedPaths": ["lib/puma/thread_pool.rb"],
+      "reviewIntent": "Retire a surplus IO thread when the pool is already at its maximum",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/puma/thread_pool.rb",
+          "lineRange": [207, 218],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The branch that retires a surplus IO thread deletes the processor and exits the thread without decrementing the spawned counter, while the trim branch a few lines below does decrement it. The counter then permanently over-counts live threads: the spawn guard compares it against the maximum and stops replacing threads, the out-of-band hook requires it to equal the waiting count and can never fire again, and the reported pool capacity and busy-thread count describe a pool that no longer exists."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/puma/thread_pool.rb",
+          "lineRange": [157, 171],
+          "reason": "reset_max, backlog and backlog_max are one-line readers that each take the pool mutex through with_mutex, consistently with their neighbours. The reviewed diff only touches the worker loop two hundred lines below."
+        }
+      ],
+      "tags": ["bug", "thread-pool", "resource-accounting"],
+      "notes": "The consequence is decidable only against the other readers of the counter in the same file: can_spawn_processor? around line 331, trigger_out_of_band_hook around line 295, pool_capacity at line 174, busy_threads at line 181, and the stats hash at line 148 that lib/puma/server.rb re-exports. The retiring branch itself reads as an ordinary early exit."
+    },
+    {
+      "id": "django-template-download-uses-server-supplied-filename",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "46c5e76f0bcc76bfce19ad7ba07f716fc653a822",
+      "fixCommittedAt": "2026-06-09T11:52:09-04:00",
+      "parentCommit": "beb40ed1d2b0503814591a37b08ecbd71f2ff729",
+      "reviewedPaths": ["django/core/management/templates.py"],
+      "reviewIntent": "Rename the downloaded template archive to the name the response suggested",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "django/core/management/templates.py",
+          "lineRange": [327, 350],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "cross-file",
+          "semanticSummary": "download takes the filename parameter out of the Content-Disposition header of the downloaded template and joins it onto the temporary directory with a plain path join before moving the file there. That value is entirely under the remote server's control: an absolute path makes the join discard the temporary directory, and parent-directory segments walk out of it, so the server the command was pointed at chooses where the archive lands."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "django/core/management/templates.py",
+          "lineRange": [225, 232],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Both temporary directories are registered on paths_to_remove while the template is being fetched, but the loop that deletes them is the last statement of handle and runs only when nothing raised. Any error after the template is in place - the CommandError raised inside the copy walk when a target file already exists, or a failure from makedirs or copyfile - aborts before it, so the downloaded archive and the whole extracted tree stay in the system temp directory. No path unwinds them."
+        }
+      ],
+      "tags": ["cross-file", "security", "path-traversal", "management-command"],
+      "notes": "Cross-file: django/utils/http.py's parse_header_parameters (around lines 347-400) lower-cases and RFC 2231-decodes the parameter but never rejects separators or absolute paths, and django/utils/_os.py holds safe_join (around lines 65-91), the project's own containment helper, which this call site does not use while other write paths do. Neither fact is visible in the reviewed file."
+    },
+    {
+      "id": "starlette-suffix-range-larger-than-file",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/encode/starlette.git",
+      "upstreamOwner": "encode",
+      "upstreamRepo": "starlette",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "014f0e2efaca4e34a0f4b4b1a28a70296035e09d",
+      "fixCommittedAt": "2026-05-31T10:24:52+02:00",
+      "parentCommit": "ef773fe9fe86d452ea014a39c6ede1029b341e73",
+      "reviewedPaths": ["starlette/responses.py"],
+      "reviewIntent": "Parse the byte ranges of a Range request header against the file size",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "starlette/responses.py",
+          "lineRange": [497, 523],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "A suffix range is resolved as the file size minus the requested suffix length with no lower bound, so a suffix longer than the file yields a negative start. The caller rejects any range whose start is not inside the file, so a request for the last thousand bytes of a five-hundred-byte file is answered with 416 although HTTP requires a suffix longer than the representation to be served as the whole representation."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "starlette/responses.py",
+          "lineRange": [478, 479],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The range parser builds an exclusive end by adding one to the last-byte-pos, so the validity check here has to reject start == end, and it only rejects start > end. A spec whose last-byte-pos sits exactly one below its first-byte-pos - bytes=5-4 against a hundred-byte file - survives as (5, 5), and the single-range handler answers 206 with content-range 'bytes 5-4/100' and content-length 0. An invalid byte-range-spec produces a nonsensical partial response instead of being ignored."
+        }
+      ],
+      "tags": ["bug", "http-semantics", "range-requests"],
+      "notes": "The consequence sits a few dozen lines above the defect in the same file: the parsed ranges are validated around line 475, where a start outside the file raises the not-satisfiable error, and the single-range writer would otherwise seek to a negative offset. Nothing outside responses.py is needed."
+    },
+    {
+      "id": "typeorm-cache-write-leaks-query-runner",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/typeorm/typeorm.git",
+      "upstreamOwner": "typeorm",
+      "upstreamRepo": "typeorm",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "a84b9b3d39c44cc0e5809b4680a5f046bda602cd",
+      "fixCommittedAt": "2026-06-04T19:29:23Z",
+      "parentCommit": "883ed8eb7efaf4dc3068632563b72c7317d7c82a",
+      "reviewedPaths": ["src/cache/DbQueryResultCache.ts"],
+      "reviewIntent": "Store a query result in the database-backed query result cache",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/cache/DbQueryResultCache.ts",
+          "lineRange": [224, 298],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "storeInCache creates its own master query runner whenever the caller did not supply a usable one, then awaits an update or an insert and releases the runner only on the method's last statement, with no try/finally around it. A rejection from any of those awaits propagates with the runner never released, so every failed cache write retains a pooled connection for the life of the process and repeated failures exhaust the pool."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "src/cache/DbQueryResultCache.ts",
+          "lineRange": [306, 310],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "clear hands its argument to the helper that creates a query runner whenever none was supplied, then returns the clearTable promise without releasing anything - not on failure and not on success. The interface declares that parameter optional and the shipped cache-clear command calls the method with nothing, so every call checks a pooled connection out for good. remove, directly below, shows the intended shape: it releases the runner exactly when it created it itself."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Displaced by re-indentation, not removed: the upstream fix wrapped the body in try/finally, so every line of the block shifted and the identical comment is present on the new side of the same hunk. It also describes Spanner's lack of auto-generated columns, which has nothing to do with either expectation (an unreleased query runner on the failure path of storeInCache, and an unreleased runner in clear).",
+        "acknowledgedComments": [
+          "// Spanner does not support auto-generated columns"
+        ]
+      },
+      "tags": ["bug", "resource-leak", "cache"],
+      "notes": "Decidable inside the reviewed file: the runner is created at the top of the method and released on its last line, with three awaited statements in between and no error path. Kept as a resource-lifetime control case."
+    },
+    {
+      "id": "typeorm-version-compare-ignores-extra-components",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/typeorm/typeorm.git",
+      "upstreamOwner": "typeorm",
+      "upstreamRepo": "typeorm",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "5543c7c462a85b79746ae61205ddd43c1d8de157",
+      "fixCommittedAt": "2026-07-17T18:37:20-04:00",
+      "parentCommit": "8748b1be17bf93fc9b62b3444e411e9055e9e017",
+      "reviewedPaths": ["src/util/VersionUtils.ts"],
+      "reviewIntent": "Compare a reported version against a required minimum version",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/util/VersionUtils.ts",
+          "lineRange": [13, 21],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "isGreaterOrEqual walks only as far as the shorter of the two component lists and then returns true, so components the target has beyond the reported version are never compared: a server reporting 10.0 is treated as satisfying 10.0.5, and 1.2 as satisfying 1.2.1. That comparison is the gate the drivers use to decide which SQL a server understands, so a version that is genuinely too old is admitted."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/util/VersionUtils.ts",
+          "lineRange": [29, 31],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "parseVersion maps every dot-separated component through parseInt and never checks the result, so a component that does not begin with digits becomes NaN. Both comparisons against NaN are false, so the loop treats it as equal and walks on, or falls through to the final return true. A version whose leading component is not numeric - the raw version() banner, left untouched whenever the CockroachDB runner's normalising regex misses - is ranked on its later components alone."
+        }
+      ],
+      "tags": ["cross-file", "bug", "feature-gating"],
+      "notes": "Cross-file for impact rather than for detection: src/driver/mysql/MysqlDriver.ts (around lines 410-431) feeds the version reported by the running server into this comparison to enable RETURNING support, CTEs and uuid column types, and src/driver/postgres/PostgresDriver.ts does the same for generated columns. The reviewed file on its own shows only an early-terminating loop."
+    },
+    {
+      "id": "tokio-util-advance-slices-keeps-written-prefix",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/tokio-rs/tokio.git",
+      "upstreamOwner": "tokio-rs",
+      "upstreamRepo": "tokio",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "c6af672353b428fb525cc34a522737924f523a93",
+      "fixCommittedAt": "2026-05-21T01:21:35-07:00",
+      "parentCommit": "2a05f364b79a7377bb21d6d5d14fd191b26e3ade",
+      "reviewedPaths": ["tokio-util/src/io/write_all_vectored.rs"],
+      "reviewIntent": "Advance the vectored write buffers past the bytes the writer accepted",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "tokio-util/src/io/write_all_vectored.rs",
+          "lineRange": [131, 164],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "Once the loop above leaves the residual count holding the bytes consumed from the first surviving buffer, that buffer is rebuilt from its first residual bytes — the part already written — instead of from the remainder, and the rebuilt slice is installed through the unsafe transmute below. Every partial vectored write that splits a buffer therefore re-sends the bytes just written and drops the unwritten tail, so the peer receives duplicated and truncated data with no error."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "tokio-util/src/io/write_all_vectored.rs",
+          "lineRange": [86, 98],
+          "reason": "write_all_vectored only moves its two borrowed arguments into the future struct. No arithmetic, no slicing, no unsafe, and unchanged by the reviewed diff, which only touches advance_slices."
+        }
+      ],
+      "tags": ["bug", "io", "data-corruption"],
+      "notes": "Decidable inside the reviewed file against the accumulation loop directly above, which is what defines the residual as bytes consumed rather than bytes remaining. The polling loop at the top of the file is what puts the wrong slice on the wire."
+    },
+    {
+      "id": "ktor-rate-limit-phase-runs-after-authentication",
+      "language": "kotlin",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/ktorio/ktor.git",
+      "upstreamOwner": "ktorio",
+      "upstreamRepo": "ktor",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "7763c0a444ce956606efb29771a20b2ab34c83ef",
+      "fixCommittedAt": "2026-06-09T10:28:25+02:00",
+      "parentCommit": "9c9af5f844e589ea5da929a26462cbed775d8417",
+      "reviewedPaths": ["ktor-server/ktor-server-plugins/ktor-server-rate-limit/common/src/io/ktor/server/plugins/ratelimit/RateLimitInterceptors.kt"],
+      "reviewIntent": "Install the rate-limit interceptor in a dedicated pipeline phase",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "ktor-server/ktor-server-plugins/ktor-server-rate-limit/common/src/io/ktor/server/plugins/ratelimit/RateLimitInterceptors.kt",
+          "lineRange": [16, 22],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The hook creates a phase inserted immediately before the pipeline's call phase, which places token consumption after the authentication phase rather than before it. Authentication answers a rejected call and marks it handled, and the interceptor's first statement returns for a handled call, so requests that fail authentication consume no token: the credential-guessing traffic a rate limit on an authenticated route exists to throttle is exactly the traffic it does not count."
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "ktor-server/ktor-server-plugins/ktor-server-rate-limit/common/src/io/ktor/server/plugins/ratelimit/RateLimitInterceptors.kt",
+          "lineRange": [72, 80],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function",
+          "semanticSummary": "Every allowed call cancels the pending eviction job for its key and stores a replacement, but the read and the store are separate operations on a shared map: two calls for one key that interleave between them both launch a job, and the second store overwrites the first without cancelling it. The orphan still fires, at the earlier refill instant, removing the limiter from the application-scoped registry. The next call rebuilds it with a full bucket, so concurrent requests win back budget early."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "A licence header whose copyright year the fix commit bumped from 2022 to 2026. It names no code, no phase and no ordering, and neither expectation (the interceptor phase sitting after authentication, and the eviction-job race) is discoverable from a copyright line.",
+        "acknowledgedComments": [
+          "* Copyright 2014-2026 JetBrains s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license."
+        ]
+      },
+      "tags": ["cross-file", "security", "rate-limit"],
+      "notes": "Cross-file and verdict-flipping: the reviewed file shows only a phase name. The unchanged AuthenticationInterceptors.kt of ktor-server-auth inserts its Authenticate phase directly after Plugins (around lines 22-29) and completes the call through executeChallenges on failure, and ApplicationCallPipeline.kt fixes the phase order as Setup, Monitoring, Plugins, Call, Fallback. Only those two files show that 'before Call' means 'after authentication'."
+    },
+    {
+      "id": "libuv-accept-failure-leaves-listener-disarmed",
+      "language": "c",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/libuv/libuv.git",
+      "upstreamOwner": "libuv",
+      "upstreamRepo": "libuv",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "d185607a829e0cb6f31c78c528ebd650b43b33f9",
+      "fixCommittedAt": "2026-04-17T09:41:36+02:00",
+      "parentCommit": "428f2c44c761fe57118db00969fd8293b4183a77",
+      "reviewedPaths": ["src/unix/stream.c"],
+      "reviewIntent": "Re-arm the listening handle after uv_accept consumes the accepted descriptor",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/unix/stream.c",
+          "lineRange": [533, 597],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "uv_accept re-arms read polling on the listening handle only when the accepted descriptor was opened successfully; on the two failure paths the descriptor is closed and the accepted slot is cleared, but the watcher is left stopped. Because the server callback stops read polling whenever the application defers uv_accept past the connection callback, one failed open wedges the listener for good: the loop never reports the socket readable again and the process silently stops accepting."
+        }
+      ],
+      "tags": ["bug", "event-loop", "availability"],
+      "notes": "Cross-function inside the reviewed file: uv__server_io (around lines 505-531) is the only place read polling is stopped, and it stops it exactly in the deferred-accept case that makes the missing re-arm permanent. Read on its own, the guarded re-arm looks like ordinary error handling."
+    },
+    {
+      "id": "aspnetcore-url-normalizer-misses-leading-backslash",
+      "language": "csharp",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/dotnet/aspnetcore.git",
+      "upstreamOwner": "dotnet",
+      "upstreamRepo": "aspnetcore",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "93148da620b4fc967f57aaafff1dad96b7ecff27",
+      "fixCommittedAt": "2026-07-21T13:50:10+02:00",
+      "parentCommit": "5c873caf315f0ff15cd75a21874299d9384afbe0",
+      "reviewedPaths": ["src/Middleware/Rewrite/src/UrlNormalizer.cs"],
+      "reviewIntent": "Collapse a leading run of separators in a rewrite or redirect target",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/Middleware/Rewrite/src/UrlNormalizer.cs",
+          "lineRange": [10, 24],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The guard enters the collapsing path only when the target's first character is a forward slash, so a target beginning with a backslash is returned untouched. The redirect action then sees no scheme delimiter and no leading slash and prepends one, producing a target that starts with a slash followed by a backslash — the scheme-relative authority shape the framework's own local-URL predicate rejects — so a Location header built from a caller-influenced target leaves the site."
+        }
+      ],
+      "tags": ["cross-file", "security", "open-redirect"],
+      "notes": "Cross-file: src/Middleware/Rewrite/src/UrlActions/RedirectAction.cs is where the normalized value is prepended with a slash and assigned to the Location header (around lines 46-52), RewriteAction.cs and RedirectRule.cs are the other two call sites, and src/Shared/ResultsHelpers/SharedUrlHelper.cs holds IsLocalUrl (around lines 33-59), the predicate this helper says it mirrors and which rejects both the double-slash and the slash-backslash shapes."
+    },
+    {
+      "id": "plug-cookie-encode-allows-attribute-separator",
+      "language": "elixir",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/elixir-plug/plug.git",
+      "upstreamOwner": "elixir-plug",
+      "upstreamRepo": "plug",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "c6575800b2c4e15af1904df87522ca8a23da020c",
+      "fixCommittedAt": "2026-07-09T11:17:32+02:00",
+      "parentCommit": "981597d3a4271ede64373c7a731702a42c500dd6",
+      "reviewedPaths": ["lib/plug/conn/cookies.ex"],
+      "reviewIntent": "Encode a cookie and its attributes into a response header value",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/plug/conn/cookies.ex",
+          "lineRange": [106, 126],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file",
+          "semanticSummary": "encode concatenates the key, the value, the path, the domain and the same-site option into one semicolon-delimited header string and rejects a semicolon in none of them. A semicolon inside any of those values ends the current attribute and appends caller-chosen ones, so a value carrying a domain attribute widens the cookie's scope and one carrying a same-site attribute removes the cross-site restriction the application configured."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/plug/conn/cookies.ex",
+          "lineRange": [139, 184],
+          "reason": "rfc2822/1, weekday_name/1, month_name/1 and add_seconds/2 are pure total helpers over calendar tuples: two exhaustive lookup tables and a gregorian-seconds conversion. They never see a cookie key, value or attribute, and the reviewed diff ends before them."
+        }
+      ],
+      "tags": ["cross-file", "security", "cookies", "header-injection"],
+      "notes": "Cross-file: lib/plug/conn.ex pipes the result of encode straight into a set-cookie response header (merge_headers, around lines 1928-1945) and its only check on the finished value is a size cap, so nothing downstream re-validates the separator. The reviewed file alone reads as ordinary string building."
+    },
+    {
+      "id": "traefik-endpointslice-port-fields-dereferenced-without-nil-check",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/traefik/traefik.git",
+      "upstreamOwner": "traefik",
+      "upstreamRepo": "traefik",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "1cb33b70aeba12a6c12599da9f9dc471be6409e5",
+      "fixCommittedAt": "2026-07-07T17:18:06+02:00",
+      "parentCommit": "17f50398766f31e77bccaa3365ad5de1e8832e74",
+      "reviewedPaths": [
+        "pkg/provider/kubernetes/crd/kubernetes_http.go",
+        "pkg/provider/kubernetes/crd/kubernetes_tcp.go",
+        "pkg/provider/kubernetes/crd/kubernetes_udp.go",
+        "pkg/provider/kubernetes/gateway/kubernetes.go",
+        "pkg/provider/kubernetes/ingress-nginx/kubernetes.go",
+        "pkg/provider/kubernetes/ingress/kubernetes.go"
+      ],
+      "reviewIntent": "Select the backend port by comparing the endpointslice port name across the Kubernetes providers",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_http.go",
+          "lineRange": [591, 596],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadServers compares svcPort.Name == *p.Name and assigns port = *p.Port for every port of every EndpointSlice. Both fields of discoveryv1.EndpointPort are optional pointers: Name is nil for an unnamed port and Port is nil when the slice targets all ports. Either shape makes the provider dereference a nil pointer and panic while building the dynamic configuration, so one malformed EndpointSlice takes down configuration refresh for every route."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_tcp.go",
+          "lineRange": [268, 273],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadTCPServers dereferences *p.Name in the port-name comparison and *p.Port in the assignment without checking either pointer. An EndpointSlice with an unnamed port (nil Name) or without an explicit port number (nil Port) panics the TCP provider instead of being skipped."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_udp.go",
+          "lineRange": [182, 187],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadUDPServers repeats the same unguarded dereference: svcPort.Name == *p.Name followed by port = *p.Port, with no nil check on the optional Name and Port fields of the EndpointSlice port, so a nil field panics the UDP provider."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/gateway/kubernetes.go",
+          "lineRange": [958, 963],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "getBackendAddresses resolves the backend port with svcPort.Name == *p.Name and port = *p.Port and never checks the pointers, so an EndpointSlice whose port carries no name or no number panics the Gateway API provider while resolving backend addresses."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/ingress-nginx/kubernetes.go",
+          "lineRange": [634, 639],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "getBackendAddresses compares servicePort.Name == *p.Name and assigns port = *p.Port unguarded. The same function already treats other optional EndpointSlice fields as nilable (ptr.Deref on the Serving condition), but the port name and value are dereferenced directly, so a nil one panics the ingress-nginx provider."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/ingress/kubernetes.go",
+          "lineRange": [681, 686],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadService dereferences *p.Name to compare against portName and *p.Port to read the port, with no nil check on either optional field, so an EndpointSlice with an unnamed port panics the Ingress provider."
+        }
+      ],
+      "tags": ["multi-file", "nil-dereference", "kubernetes", "wide-diff"],
+      "notes": "Wide-diff case: the identical unguarded dereference appears once in each of six provider files, so the case measures whether attention survives across a six-file change rather than stopping at the first file. Upstream added the nil checks in one commit; the reviewed diff is that commit read backwards and carries no explanatory prose."
+    },
+    {
+      "id": "laravel-eloquent-dictionary-key-not-normalized",
+      "language": "php",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/laravel/framework.git",
+      "upstreamOwner": "laravel",
+      "upstreamRepo": "framework",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "a03cd3c385d67314fbd663005590ea9eb2381302",
+      "fixCommittedAt": "2026-02-27T08:17:21-06:00",
+      "parentCommit": "9fcd342c5a57cc9ba325fa9746605e08b8ab9f48",
+      "reviewedPaths": [
+        "src/Illuminate/Database/Eloquent/Collection.php",
+        "src/Illuminate/Database/Eloquent/Relations/BelongsTo.php",
+        "src/Illuminate/Database/Eloquent/Relations/BelongsToMany.php",
+        "src/Illuminate/Database/Eloquent/Relations/Concerns/InteractsWithDictionary.php",
+        "src/Illuminate/Database/Eloquent/Relations/HasOneOrMany.php",
+        "src/Illuminate/Database/Eloquent/Relations/MorphTo.php"
+      ],
+      "reviewIntent": "Key eloquent relation and collection dictionaries directly on model attribute values",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Relations/Concerns/InteractsWithDictionary.php",
+          "lineRange": [20, 35],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "getDictionaryKey only handles objects and returns every other attribute unchanged, although its documented job is to produce an array key. Callers use the result directly as a PHP array offset, so a null key silently becomes the empty-string offset, a float key is truncated to an int (a deprecated implicit conversion since PHP 8.1) and a bool key becomes 0/1. Distinct model keys therefore collapse onto one dictionary entry."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Relations/BelongsTo.php",
+          "lineRange": [151, 177],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "match builds $dictionary[$attribute] from each result's related key and then looks up $dictionary[$attribute ?? ''] for each parent. A result whose owner key is null is stored under the empty-string offset, and a parent whose foreign key is null looks up that same offset, so parents with no foreign key are given an unrelated model as their loaded relation instead of the default."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Collection.php",
+          "lineRange": [664, 675],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "getDictionary keys the dictionary on the raw model key, so every model with a null key overwrites the previous one under the empty-string offset. merge, diff and intersect are all built on that dictionary, so unsaved models compare as equal to each other and merge drops all but the last of them."
+        }
+      ],
+      "tags": ["multi-file", "type-coercion", "orm", "wide-diff"],
+      "notes": "Six-file diff across the collection, the shared dictionary trait and four relation classes. The same coercion recurs in BelongsToMany, HasOneOrMany and MorphTo buildDictionary; those are deliberately left unlisted because they are consequences of the trait defect that is listed. Verified at the parent commit."
+    },
+    {
+      "id": "netty-kqueue-array-growth-operator-precedence",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/netty/netty.git",
+      "upstreamOwner": "netty",
+      "upstreamRepo": "netty",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "e855de52f5f87eb67ae29a4dad71bb4ff160cbcc",
+      "fixCommittedAt": "2026-02-20T14:47:46-08:00",
+      "parentCommit": "578588f644a50d6f2ca1c860a01143e9df51e3a4",
+      "reviewedPaths": [
+        "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+        "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/NativeLongArray.java"
+      ],
+      "reviewIntent": "Compute the new length when the native kqueue arrays outgrow their buffer",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/NativeLongArray.java",
+          "lineRange": [88, 105],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "reallocIfNeeded computes capacity + capacity >> 1, and + binds tighter than >>, so the expression is (capacity + capacity) >> 1, which is capacity again rather than the 50% growth the comment above it describes. Past 65536 the array reallocates a buffer of the same size, sets capacity to that unchanged value, and add() then writes at index == capacity: an out-of-bounds native store through Unsafe, or an IndexOutOfBoundsException without it."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+          "lineRange": [100, 125],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "realloc uses the same capacity + capacity >> 1 expression, which Java parses as (capacity + capacity) >> 1 and evaluates to the current capacity. Once the event array is larger than 65536 kevents the reallocation allocates a buffer of exactly the previous size, so the array never grows on that branch and the copy loop keeps paying an allocation for no additional room."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+          "lineRange": [100, 125],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "realloc allocates the larger buffer and swaps in the new memory and address but never assigns the new length to the capacity field; the sibling array class in this same change does exactly that at the end of its own grow path. The grow check fires only on size == capacity, so the one growth that happens is the last: size passes capacity and never equals it again, and once more than twice the original event count is queued, evSet writes kevent structures past the end of the buffer."
+        }
+      ],
+      "tags": ["multi-file", "operator-precedence", "native-memory"],
+      "notes": "Small two-file diff: one changed expression per file, and the intent comment sitting above each of them is pre-existing context, not part of the change. Line ranges are from the parent commit."
+    },
+    {
+      "id": "pydantic-dataclass-field-flags-lost-in-translation",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pydantic/pydantic.git",
+      "upstreamOwner": "pydantic",
+      "upstreamRepo": "pydantic",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "950a1c9eadd9b050a0a21febeb360ed469e0afbd",
+      "fixCommittedAt": "2026-01-27T10:12:10+01:00",
+      "parentCommit": "710f8540c90111bb38b4099f9b25c60683a7db5a",
+      "reviewedPaths": [
+        "pydantic/_internal/_dataclasses.py",
+        "pydantic/_internal/_signature.py"
+      ],
+      "reviewIntent": "Translate pydantic field metadata into stdlib dataclass fields and into the generated signature",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_dataclasses.py",
+          "lineRange": [208, 223],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "as_dataclass_field forwards kw_only to the stdlib field only when it is truthy. FieldInfo.kw_only is tri-state (bool or None for unset), so kw_only=False is indistinguishable from unset here and is dropped: a field that explicitly opts out of keyword-only cannot override a class-level kw_only=True, and the generated __init__ keeps it keyword-only. The neighbouring repr flag is forwarded with an identity check, so the two branches disagree about how an explicit False is treated."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_signature.py",
+          "lineRange": [67, 77],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "_process_param_defaults decides whether a field has a default factory by comparing default_factory against PydanticUndefined, but FieldInfo stores None when no factory was given (fields.py pops 'default_factory' with a None default, and is_required tests it against None). That check never holds, so a required field with no factory is given dataclasses._HAS_DEFAULT_FACTORY as its signature default instead of Signature.empty, and the signature advertises a default the field does not have."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_dataclasses.py",
+          "lineRange": [114, 125],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The original init is captured from the class and the next statements replace that same attribute with the validating wrapper, but this function runs again on the same class whenever the dataclass is rebuilt - which the deferred-build path and any late forward-reference resolution both do on their own. The second pass captures the wrapper, so the lazily built signature comes out as (*args, **kwargs) with every field re-synthesised as keyword-only, against the comment at the use site."
+        }
+      ],
+      "tags": ["multi-file", "sentinel-confusion", "dataclasses"],
+      "notes": "Two files, two independent defects, both readable at the parent commit: a truthiness test on a tri-state flag, and a comparison against the wrong unset sentinel. The sentinel claim was checked against FieldInfo.__init__ and FieldInfo.is_required in pydantic/fields.py, which are outside the reviewed diff."
+    },
+    {
+      "id": "vite-null-byte-escape-replaces-only-first-occurrence",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/vitejs/vite.git",
+      "upstreamOwner": "vitejs",
+      "upstreamRepo": "vite",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "833fc302f3f4a5030f49207b5fbf10422f3247a2",
+      "fixCommittedAt": "2026-06-30T08:33:53Z",
+      "parentCommit": "c94f3f2cf48049d9ee2e02b013c365e8da6ebaae",
+      "reviewedPaths": [
+        "packages/vite/src/node/plugins/css.ts",
+        "packages/vite/src/shared/utils.ts"
+      ],
+      "reviewIntent": "Escape the null byte in module ids before they are used as browser URLs and as lightningcss filenames",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "packages/vite/src/shared/utils.ts",
+          "lineRange": [11, 24],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "wrapId and unwrapId escape and restore the null byte with String#replace and a plain string pattern, which substitutes only the first occurrence. A module id that carries more than one null byte (a virtual id nested inside another) keeps its remaining raw null bytes in the /@id/ URL, and unwrapId restores only the first placeholder, so unwrapId(wrapId(id)) is not the id that went in and the id resolved on the way back does not match the one the plugin registered."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "packages/vite/src/node/plugins/css.ts",
+          "lineRange": [3223, 3227],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "compileLightningCSS builds the filename it hands to lightningcss with the same single-occurrence String#replace, so an id holding a second null byte still reaches lightningcss with a raw null byte in it. The comment on the line above states why that matters: lightningcss treats the null byte as a string terminator, so the filename it reports in diagnostics and sourcemaps is truncated at that point."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "packages/vite/src/node/plugins/css.ts",
+          "lineRange": [3371, 3384],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The glob dependency branch expands the same pattern twice. The second call asks for absolute paths, no directory expansion and an ignore for node_modules; the first call takes the library defaults, so it descends into node_modules and adds relative paths to the same dependency set. Those relative entries are handed to addWatchFile, where they can never match the absolute path a change reports, and the redundant walk runs on every transform of the file."
+        }
+      ],
+      "tags": ["multi-file", "string-handling", "module-ids"],
+      "notes": "Deliberately the smallest multi-file case in the corpus: three one-line changes over two files. Both claims rest only on JavaScript's String#replace semantics with a string pattern and are checkable at the parent commit."
+    },
+    {
+      "id": "grpc-go-xds-regex-matcher-mutates-shared-regexp",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/grpc/grpc-go.git",
+      "upstreamOwner": "grpc",
+      "upstreamRepo": "grpc-go",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "39f16539d2463c05d52b4c44137831fd5f73f7d9",
+      "fixCommittedAt": "2026-05-20T11:18:17+05:30",
+      "parentCommit": "1c8e0950eda84e87c020a7fd7099ecccd3b21218",
+      "reviewedPaths": [
+        "internal/grpcutil/regex.go",
+        "internal/xds/matcher/matcher_header.go",
+        "internal/xds/matcher/string_matcher.go",
+        "internal/xds/xdsclient/xdsresource/matcher_path.go",
+        "internal/xds/xdsclient/xdsresource/unmarshal_rds.go"
+      ],
+      "reviewIntent": "Route xDS regex route, path and header matching through one full-match helper instead of anchoring the compiled pattern",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "internal/grpcutil/regex.go",
+          "lineRange": [24, 31],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "FullMatchWithRegex calls re.Longest() on the caller's compiled pattern before every match. Longest mutates the Regexp, and regexp.Regexp is only safe for concurrent use by methods that do not modify it, so the shared xDS matchers that hold one compiled pattern for the lifetime of a route configuration (HeaderRegexMatcher.Match, StringMatcher.Match, pathRegexMatcher.match) mutate it from every RPC-handling goroutine at once. That is a data race on the request path, not a one-time setup cost."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "The doc comment of CompileSafeRegex, the helper the upstream fix introduced. It describes that helper's own behaviour - compile once to catch syntax errors, then compile an anchored pattern - and says nothing about concurrency, mutation, Longest, or shared state, which is the whole of the expectation. It points at the replaced call site, which the removed and added code already show, without giving away why the replacement was needed.",
+        "acknowledgedComments": [
+          "// CompileSafeRegex attempts to compile the provided pattern as a regular",
+          "// expression. It first compiles the unanchored pattern to catch syntax errors",
+          "// and then compiles and returns the explicitly anchored pattern to guarantee"
+        ]
+      },
+      "tags": ["multi-file", "concurrency", "xds", "wide-diff"],
+      "notes": "Five-file diff whose defect sits in the helper the other four files call; the reviewed diff adds internal/grpcutil/regex.go as a new file, so the evidence is inside the change while the concurrency argument depends on how the callers hold the compiled pattern. Upstream removed the helper rather than fixing it."
+    },
+    {
+      "id": "nats-server-schedule-snapshot-decode-trusts-header-count",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
+      "upstreamOwner": "nats-io",
+      "upstreamRepo": "nats-server",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "4fb527a086ac75abec3383c13d55ce47eac9b2dc",
+      "fixCommittedAt": "2026-06-05T18:22:55+02:00",
+      "parentCommit": "ca6311b2e1da1f20d68ccb68f20a352f3c7799d7",
+      "reviewedPaths": ["server/scheduler.go"],
+      "reviewIntent": "Decode a persisted message-scheduling snapshot back into the in-memory schedule set during store recovery",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "server/scheduler.go",
+          "lineRange": [289, 292],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "decode takes the entry count from the snapshot header and loops that many times, reading a two-byte subject length with binary.LittleEndian.Uint16(b) without checking that b still holds two bytes. Nothing validates that count against the remaining buffer, and the next statement does guard its own read with len(b) < sl, so this fixed-width read is the only unguarded one. A truncated state file drains the buffer and the next iteration indexes past its end, panicking during recovery."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "server/scheduler.go",
+          "lineRange": [297, 304],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "After the subject, decode reads the timestamp and sequence with binary.Varint and binary.Uvarint and rejects only a negative byte count. Both functions return zero when the buffer is too small to hold a complete varint, and zero passes these checks: the short tail is accepted, ts and seq are both zero, b is re-sliced by tn+vn == 0 so the cursor never advances, and the loop registers the same fabricated schedule for the whole header count instead of reporting a short buffer."
+        }
+      ],
+      "tags": ["bug", "decoding", "recovery", "multi-defect-diff"],
+      "notes": "Two in-diff expectations in one file. The upstream fix also repaired the identical varint check in server/thw/thw.go and reset partially decoded state in server/filestore.go; both are deliberately outside reviewedPaths so the answer key holds exactly one expectation per distinct root cause. Expectation one is a pure insertion upstream, so it appears as a deletion hunk in the reversed diff."
+    },
+    {
+      "id": "undici-set-cookie-value-decoded-and-samesite-substring-matched",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nodejs/undici.git",
+      "upstreamOwner": "nodejs",
+      "upstreamRepo": "undici",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "5655ea43af4add559ee5f94b6cd72e08a55aa621",
+      "fixCommittedAt": "2026-06-11T11:26:20+02:00",
+      "parentCommit": "27586ee92f7b2f78e813c97d9e7b493713eb9cdf",
+      "reviewedPaths": ["lib/web/cookies/parse.js"],
+      "reviewIntent": "Parse a Set-Cookie header string into the cookie name, value and attribute list returned by the public cookie helpers",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/web/cookies/parse.js",
+          "lineRange": [84, 86],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "parseSetCookie splits the header into a name and a value string, then returns the value after passing it through node:querystring's unescape, which percent-decodes it. RFC 6265, quoted in the comment just above, treats the cookie-value as opaque octets to be handed back unchanged and expects servers to encode data in it. A value containing %XX is silently altered before the caller sees it, and handing it back to the serializer either throws on the now-bare separator or emits a different cookie."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/web/cookies/parse.js",
+          "lineRange": [283, 308],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The SameSite branch starts from an enforcement value of 'Default', then runs three independent includes() tests for 'none', 'strict' and 'lax' against the lowercased attribute value, keeping the last that matches. Substring matching accepts any value merely containing one of those words - one containing 'none' yields None, the weakest cross-site setting - and a value containing two resolves by the order the tests are written. An unrecognised value yields 'Default', not a legal mode."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "RFC 6265 section 5.2.5 quoted beside the SameSite branch. The fix renumbered the quotation, so hydration reports nine removed lines, but every proposition in them is present on the new side of the same hunk: the pre-fix file quotes the same 'is a case-insensitive match for' rule for None, Strict and Lax and the same 'append an attribute to the cookie-attribute-list with an attribute-name of SameSite' clause. Two of the nine lines are byte-identical on the new side. Neither expectation (percent-decoding a cookie-value that must be returned verbatim, and substring matching an attribute with three legal values) is stated in any of them.",
+        "acknowledgedComments": [
+          "// 1. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"None\", append an attribute to the cookie-attribute-list with an",
+          "//    attribute-name of \"SameSite\" and an attribute-value of \"None\".",
+          "// 2. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"Strict\", append an attribute to the cookie-attribute-list with",
+          "//    an attribute-name of \"SameSite\" and an attribute-value of",
+          "// 3. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"Lax\", append an attribute to the cookie-attribute-list with an",
+          "//    attribute-name of \"SameSite\" and an attribute-value of \"Lax\"."
+        ]
+      },
+      "tags": ["bug", "http", "cookies", "parsing", "multi-defect-diff"],
+      "notes": "Two in-diff expectations in one file, both intersecting added lines of the reversed diff. Distinct root causes: decoding a value that must be preserved verbatim, versus substring-matching an attribute that has exactly three legal values."
+    },
+    {
+      "id": "puma-proxy-protocol-v1-line-unbounded-and-line-anchored",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/puma/puma.git",
+      "upstreamOwner": "puma",
+      "upstreamRepo": "puma",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "f723c060f4cecb94086de930fe3a322a007abf9b",
+      "fixCommittedAt": "2026-05-27T07:28:07+09:00",
+      "parentCommit": "2e03ade914846221b37a166af8a5cbc1c7e95008",
+      "reviewedPaths": ["lib/puma/client.rb", "lib/puma/const.rb"],
+      "reviewIntent": "Read the PROXY protocol v1 header out of a client connection's buffer before the HTTP request is parsed",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/puma/client.rb",
+          "lineRange": [215, 235],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function",
+          "semanticSummary": "try_to_parse_proxy_protocol returns false whenever the accumulated connection buffer holds no CRLF, and the read loop that calls it appends every further chunk to that same buffer before asking again. Nothing bounds that buffer, though a PROXY v1 line is at most 107 bytes. A client on a listener configured for proxy_protocol :v1 can send an endless stream containing no CRLF and hold one unbounded String per connection, exhausting worker memory before any request line is parsed."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/puma/const.rb",
+          "lineRange": [295, 295],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The PROXY v1 pattern is anchored with a caret, which in Ruby matches at the start of any line rather than of the string, and the client applies it to the whole accumulated connection buffer instead of only its first line. A client that sends an ordinary request line and then a line beginning with the PROXY keyword has that later line matched: the address it names replaces the peer IP reported to the application and the log, and the buffer is replaced by the text after it."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Both flagged lines are present unchanged on the new side of the same hunk: the upstream fix moved this two-line comment out of the branch it sat in, so hydration reports it as removed while the pre-fix file the reviewer checks out contains it verbatim. It therefore carries no information the checkout does not already carry. It also describes only the non-PROXY fall-through, and neither expectation (an unbounded PROXY v1 buffer, and a line-anchored pattern matched against the whole connection buffer) is derivable from it.",
+        "acknowledgedComments": [
+          "# if the buffer has a \\r\\n but doesn't have a PROXY protocol",
+          "# request, this is just HTTP from a non-PROXY client; move on"
+        ]
+      },
+      "tags": ["multi-defect", "security", "proxy-protocol", "multi-file"],
+      "notes": "Two independent repairs in one commit: a missing length bound on the buffered PROXY v1 line (client.rb), and a line-anchored regular expression matched against a whole-connection buffer (const.rb, used at client.rb line 219). Both are reachable only when a listener is configured with `proxy_protocol :v1`. Line ranges are from the parent commit. Cross-file: the pattern constant and the code that applies it live in different files."
+    },
+    {
+      "id": "rack-multipart-part-header-splits-return-nil",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rack/rack.git",
+      "upstreamOwner": "rack",
+      "upstreamRepo": "rack",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "83fff58206e6fec46815322e0783b6d7cb50f979",
+      "fixCommittedAt": "2026-03-31T15:27:19+13:00",
+      "parentCommit": "939f2f81b635331f50b3c933f150c8152aa2950f",
+      "reviewedPaths": ["lib/rack/multipart/parser.rb"],
+      "reviewIntent": "Parse the per-part headers of a multipart request body and tag each parsed part's character encoding",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/multipart/parser.rb",
+          "lineRange": [355, 357],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The mime-head handler looks up the first semicolon in the part's Content-Disposition value and uses that index in an addition to slice off the disposition type, without checking a semicolon was found. The lookup answers nil when the character is absent, so a part whose Content-Disposition carries only a disposition type and no parameters - which the enclosing guard admits - makes the addition run on nil and raise NoMethodError, outside the parser's declared bad-request errors."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/multipart/parser.rb",
+          "lineRange": [533, 537],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The encoding-tagging helper splits each Content-Type parameter on the first equals sign and strips the value in place without checking the split produced a second element. The split answers a one-element list when the separator is absent, so the value is nil for a parameter written with no equals sign and the strip raises NoMethodError. The loop runs after the body is read for every part with no filename whose media type is exactly text/plain."
+        }
+      ],
+      "tags": ["multi-defect", "bug", "multipart", "parser-robustness"],
+      "notes": "Two independent repairs in one commit, in two methods and two phases of the parse: a missing nil check on the semicolon lookup in the Content-Disposition value during header scanning, and a missing nil check on the second element of the Content-Type parameter split during post-parse encoding tagging. Different headers, different triggering inputs, independently fixable. The second hunk is a pure deletion when the fix is read backwards, so the expectation at 533-537 is in-diff by hunk span (head lines 533-538) and not by added lines - it is the case that motivated correcting the classifier. Line ranges are from the parent commit."
+    },
+    {
+      "id": "aspnetcore-tempdata-deferred-load-races-retained-keys",
+      "language": "csharp",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/dotnet/aspnetcore.git",
+      "upstreamOwner": "dotnet",
+      "upstreamRepo": "aspnetcore",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "e55796c6188a4b94f79129aa0a4eb7dafd2b31f6",
+      "fixCommittedAt": "2026-03-10T16:03:39Z",
+      "parentCommit": "cb2bd848a873903324e292cf9168a0048681acf2",
+      "reviewedPaths": ["src/Components/Endpoints/src/TempData/TempData.cs"],
+      "reviewIntent": "Read, remove and retain entries in the component TempData store, whose backing dictionary is populated on first access",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [52, 53],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Get drops the key from the retained-key set before it reads Data. Data is the property that runs the deferred load, and that load clears the retained-key set and re-adds every key it just read, so when Get is the first operation on the store the removal is silently undone. The value the caller consumed stays marked as retained, Save writes it back to the store, and a one-shot entry survives into the next request instead of being consumed."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [81, 82],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "Remove drops the key from the retained-key set before it touches Data. The deferred load that Data triggers re-adds every stored key to the retained set, and only afterwards is the entry deleted from the backing dictionary. Save then iterates the retained keys and indexes that dictionary directly, so a Remove issued before anything else has read the store leaves a retained key with no value behind it and Save throws KeyNotFoundException while the response is being produced."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [63, 63],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Keep unions the retained-key set with the keys of the private backing field rather than the property that performs the deferred load. Called before anything has read the store - which is the whole point of asking to keep the current entries - the field is still empty, so Keep retains nothing and Save returns an empty set, dropping every stored entry. The enumerator constructor reads the same backing field, so enumerating the store before any load likewise yields no entries."
+        }
+      ],
+      "tags": ["multi-defect", "deferred-initialization", "state"],
+      "notes": "Two distinct root causes in one 10-line diff. (a) Get and Remove mutate the retained-key set BEFORE the deferred load that repopulates it - an ordering fault; the two sites are listed separately because their failure modes differ (a stale surviving entry vs an unhandled KeyNotFoundException in Save). (b) Keep and the enumerator read the private backing field instead of the loading property - a different fault, folded into one expectation. The fix adds no comments, so the reversed diff carries no explanatory prose."
+    },
+    {
+      "id": "aspnetcore-managed-encryptor-mac-compare-reads-unwritten-buffer",
+      "language": "csharp",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/dotnet/aspnetcore.git",
+      "upstreamOwner": "dotnet",
+      "upstreamRepo": "aspnetcore",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "3741588081b33934bb7f9dd9e4fd28b7752b7d57",
+      "fixCommittedAt": "2026-03-23T10:12:25-07:00",
+      "parentCommit": "472d94239f27f92a7aefd142b5d59e12b2b5a37f",
+      "reviewedPaths": ["src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs"],
+      "reviewIntent": "Recompute and compare the authentication tag of a protected payload before its ciphertext is deciphered",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs",
+          "lineRange": [453, 454],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "local",
+          "semanticSummary": "In the non-NET branch of CalculateAndValidateMac the span correctHash is bound to a stack buffer (or a fresh array) and is never written to: ComputeHash returns a new array, assigned to the separate local correctHashArray. The constant-time comparison then compares that untouched buffer against the tag carried in the payload, so the check authenticates nothing - every genuine payload fails to decrypt, and one whose tag field equals the untouched buffer is accepted."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs",
+          "lineRange": [448, 450],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "local",
+          "semanticSummary": "The recomputed tag is taken over payloadArray from macOffset for eofOffset - macOffset bytes - that is, over the tag region of the payload itself. The caller passes ivOffset, macOffset and eofOffset precisely so the tag can be recomputed over the IV and ciphertext, the range macOffset marks the end of; the ciphertext therefore never enters the computation and no modification of it can be detected by this check."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Present unchanged on the new side of the same hunk: the fix moved this line into the try block, so hydration reports it as removed while the pre-fix file carries it verbatim. It concerns allocating the validation subkey, and says nothing about either expectation - the comparison reading a span the hash was never written into, and the hash being computed over the tag region instead of the IV and ciphertext.",
+        "acknowledgedComments": [
+          "// if validationSubkey is stackalloc'ed, there is no way we avoid an alloc here"
+        ]
+      },
+      "tags": ["multi-defect", "cryptography", "authentication-tag"],
+      "notes": "Two independent faults inside one ~25-line method, both repaired by the same commit: the comparison reads a buffer the hash was never written into, and the hash is computed over the wrong byte range. Either alone breaks tag validation. The method compiles for the net462 and netstandard2.0 targets the package ships (the #if NET arm above it is the healthy one), so it is live shipped code. The rest of the reviewed diff is nullable-annotation churn on the same file; reviewedPaths deliberately excludes the other 50+ files of the upstream commit."
+    }
+  ]
+}

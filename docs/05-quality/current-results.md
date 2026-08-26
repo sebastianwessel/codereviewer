@@ -1,0 +1,629 @@
+# Current results
+
+What the engine measures at today, on which corpus, with what caveats. Every number
+here is dated and names the corpus it came from, because a recall figure without a
+corpus is meaningless — the same engine scores 36% on one and 55% on another.
+
+Every number here — recall, precision, cost, every table below — was measured on
+`openai/gpt-5.3-codex`. The model is part of the measurement for the same reason
+the corpus is: a rate is a property of the model that produced it, and none of
+this is evidence about another provider or model.
+
+Every figure here was also **scored by a judge running that same model**: all of
+them predate `evaluation.judgeModel`, which pins the judge independently, so on
+each of these runs the reviewer's model and the judges' model were necessarily
+one and the same. That is stated rather than assumed because it constrains what
+these numbers can be compared against — see [Hold the judge fixed when the
+reviewer's model varies](comparing-runs.md#hold-the-judge-fixed-when-the-reviewers-model-varies).
+
+Read [Metrics](metrics.md) first if the terms are unfamiliar, and
+[Datasets](datasets.md) for what each corpus can and cannot show.
+
+**The [current headline](#current-headline) immediately below is the figure to
+quote for the review stage.** Everything under [Historical
+record](#historical-record) further down predates it and is kept as a dated
+record of how that figure was reached, not as an alternative to quote instead.
+
+**This page mirrors one owner; it is not itself the owner.** The published rate
+lives in the newest `reports/eval-results-ledger.md` entry that measured the
+population and corpus being quoted, and every headline below names the entry it
+was transcribed from. Nothing here recomputes a number, and no spec, report, or
+renderer should carry a rate of its own instead of citing this chain. Note also
+that a **blended** recall figure (in-diff and out-of-diff pooled) and an
+**in-diff** figure are different quantities roughly twenty points apart on the
+same run — a newer one of either kind does not supersede an older one of the
+other.
+
+**Every figure on this page predates the 2026-08-11 default flips**
+(`contextSources`, `review.citations`, `changeImpact`, `intentFulfilment`,
+`reporting.reviewComments`), so none of them describes the configuration a
+default `review` runs today.
+
+---
+
+## Current headline
+
+Measured **2026-08-06** on the **real-repository corpus** as it stands today: 37
+cases, 87 expected findings, 27 upstream projects. Model `openai/gpt-5.3-codex`,
+engine pinned `c3c0c3d`. This figure is the **control arm** of a two-arm
+`refutationRetrieval` A/B — three runs per arm, interleaved C,T,C,T,C,T so
+neither arm inherits the other's warm provider cache — run at the shipped,
+default configuration. Zero provider errors across all six runs (both arms).
+The control arm is the current, quotable figure for the review stage; it
+supersedes the 2026-08-05 headline, which has moved into [Historical
+record](#historical-record) below and is kept as a dated record of how that
+figure was reached, not as an alternative to quote instead.
+
+| Metric | Value | Per run |
+| --- | ---: | --- |
+| Recall, in-diff | **66.1%** | 60.0 / 68.3 / 70.0 |
+| Recall, out-of-diff | **0 of 27** — unchanged | 0 / 0 / 0 |
+| Precision, raw | **74.5%** (mean) | not broken out per seed in the source entry |
+| Precision, adjusted | **96.1%** (mean) | 97.3 / 93.2 / 97.7 |
+| Genuine false positives | 1 / 3 / 1 | — |
+| Cost per run | **$1.15** | — |
+
+Source: `reports/eval-results-ledger.md`, "2026-08-06 — refutation retrieval
+measured and REMOVED; control arm is the current baseline", subsection "The
+control arm supersedes the 2026-08-05 baseline".
+
+**Blended recall, line placement, and severity accuracy are not restated at
+this pin.** The 2026-08-06 ledger entry re-measured in-diff recall, precision,
+and out-of-diff recall only. The last measured figures for the other three
+metrics are the 2026-08-05 ones, now in [Historical record](#historical-record)
+below, and must not be read as current.
+
+**In-diff recall — 66.1% — is the number to quote for "does review find defects
+in the code it was asked to look at."** It is measured against the previous
+68.3% (engine `db78900`): "the recall difference is small and this run cannot
+separate it from noise; the two engines differ by a large amount of work whose
+individual effects were not isolated" (ledger, same entry). Read this as
+**measured lower, not established as a regression** — no significance test was
+run between the two pins, only within each pin against its own predecessor.
+
+**The spread is, again, the finding worth carrying forward.** The control arm
+alone produced 60.0 / 68.3 / 70.0 on identical inputs — a 10-point range across
+three runs of the same engine, restating the same warning the 2026-08-05 pin
+recorded: every single-run comparison in this project's history should be read
+against that spread, not against a point estimate.
+
+**Adjusted precision — 96.1% — is comparable to the 2026-08-05 figure of 96.2%
+without a scorer-version caveat.** Both were measured under
+`2026-08-03.plausibility-source-window`, the same metrics version, so unlike the
+99.1% → 96.2% movement one pin earlier, this small change is not an artefact of
+a scorer definition change.
+
+**No sd is restated for this arm.** The 2026-08-05 pin's sd of 2.89pp belonged
+to that run and must not be carried onto this one. The 2026-08-06 ledger entry
+does not compute or state a standard deviation for the control arm — only the
+three raw per-run values in the table above. Until one is published, treat
+2.89pp (from the 2026-08-05 pin) as the most recently *stated* resolution
+figure for judging a further change, but do not attribute it to this 66.1%
+number specifically. See [Variance: why single runs prove
+little](#variance-why-single-runs-prove-little) below.
+
+**Cost is not comparable to the $1.97 cold / $0.82 warm figures in [Historical
+record](#historical-record) below, which predate this pin.** The 2026-08-06
+entry reports **$1.15 per control run** and **$1.26 per `refutationRetrieval`
+run (+10%)**, without a cold/warm cache breakdown. Both that pair and the
+$1.97/$0.82 pair a pin earlier predate a since-landed change that runs review
+as a single process and a dependency bump; neither older figure should be
+quoted as this pin's cost.
+
+**Out-of-diff recall stayed at a hard 0 of 27, in every run — unchanged from
+the 2026-08-05 and 2026-08-02 baselines.** Nothing in this span of changes
+targeted it, and nothing moved it. The scope boundary documented in [Out-of-diff
+recall and `impact check`](#out-of-diff-recall-and-impact-check-two-different-jobs-not-one-scorecard)
+below stands exactly as written.
+
+## Security headline
+
+Measured **2026-08-07** on the **security-advisory corpus as it stood at 70 cases**:
+72 expected findings, 44 upstream projects, all seven languages, all ten mechanisms.
+Model `openai/gpt-5.3-codex`, engine pinned `359161b`, **ten seeds**, 0 dirty files
+in each. The figure is the control arm of the sub-file partitioning A/B, so it cost
+nothing extra to obtain.
+
+> **The corpus has since grown to 72 cases / 74 expectations / 46 repositories** —
+> one case re-admitted on review, one added after. Every figure in this section was
+> measured on the 70-case corpus and **must not be pooled with, or differenced
+> against, a run on the corpus as it stands now.** No figure here has been
+> re-measured, and none is restated as though it had been.
+
+| Metric | Value |
+| --- | ---: |
+| Recall | **64.0%** (sd 2.22pp over 10 seeds) |
+| Precision, adjusted | **95.0%** |
+| Precision, raw | 72.9% |
+| Genuine false positives | 25 over 886 raw findings |
+| Spend, whole arm | $18.42 |
+
+Source: `reports/eval-results-ledger.md`, "2026-08-07 — Sub-file partitioning
+REJECTED, and the 70-case baseline"; detail in
+`reports/2026-08-07-subfile-partitioning-result.md`.
+
+**This is not comparable to the in-diff figure above.** Different corpus, different
+question, different answer-key construction. Do not difference them.
+
+**Where the reviewer is weakest, on the ten-seed control arm:**
+
+| | recall |
+| --- | ---: |
+| `xss` | **40.0%** |
+| `ssrf` | 54.0% |
+| `injection` | 55.0% |
+| `authorization` | 63.3% — at the mean |
+| `cross-file` (context depth) | **49.3%** |
+
+`xss` is the lowest substantial mechanism and `cross-file` the worst context depth
+with a real denominator — and it is the largest bucket in the corpus. Cross-file
+retrieval has been on by default since 2026-08-01, so 49.3% is what the reviewer
+achieves *with* the mediated tools.
+
+**Strongest:** `path-traversal` 94.4%, `concurrency-resource` 69.3%. The classes this
+project once recorded at 0% are not at 0% on material chosen for them.
+
+### Superseded: the 50-case security baseline
+
+Kept as a dated record of how the figure above was reached. Engine pinned
+`49f0c669`, **three** seeds, 2026-08-07, 50 cases / 51 expectations / 33 projects.
+Source: `reports/2026-08-07-security-corpus-baseline.md`.
+
+| Metric | Value | Per run |
+| --- | ---: | --- |
+| Recall | 60.8% (sd 3.92pp) | 60.8 / 56.9 / 64.7 |
+| Precision (raw to adjusted bracket) | 71.0% to 100% | 70.5–100 / 69.0–100 / 73.3–100 |
+| Genuine false positives | 0, all three seeds | 0 / 0 / 0 |
+| Cost per run | $1.88 | $3.19 cold, then $1.24 / $1.22 |
+
+**60.8% and 64.0% are not a change** — the ledger supersedes the first outright, and
+the two measure different corpora at different seed counts. The earlier 57.7% on 25
+cases is superseded on the same grounds.
+
+**Do not read the sd in that table as the instrument's precision.** Four independent
+three-seed estimates of no-intervention recall on this corpus span 2.22–8.38pp;
+pooled over 8 degrees of freedom it is **5.71pp**, and three seeds resolve about
+**11 percentage points**. Twelve no-intervention runs span 53.85%–69.23%, so this
+setup cannot currently measure an improvement smaller than ~11pp on three seeds —
+which is why the current headline is taken at ten.
+
+**Its per-mechanism diagnosis was REVERSED by the ten-seed run, and it had already
+been acted on.** The 50-case arm read `authorization` at 7/18 = 39% and named it the
+worst substantial mechanism; at ten seeds on 70 cases it reads 63.3%, at the mean,
+and `xss` at 40.0% takes its place. A pre-registered authorization-scope prompt
+clause was built against the 39% figure and came back null (7 gained / 8 lost,
+p = 1.0; `reports/2026-08-07-authorization-scope-result.md`). A bad row on a small
+denominator is an artifact in exactly the way a perfect one is.
+
+**A worked example of the same thing in the other direction.** On the 25-case corpus
+`cross-function` read 9/9 — a perfect 100%. On 24 observations it is 15/24 (62%).
+
+**Analyzer ingestion (`security.signals`) stays off, for a measured reason.** On 132
+advisory-confirmed vulnerabilities, a public analyzer flags a line the fix changed
+**3.0% of the time** (4/132; 2 of those 4 describe the advisory's weakness). That
+bounds the layer's possible recall lift at 3 points against a promotion bar of 3, so
+no A/B was run — the bound answers the question. See
+`reports/2026-08-07-analyzer-firing-base-rate.md`. The 3.0% is a property of Semgrep
+OSS with public rules, not of the layer.
+
+## Out-of-diff recall and `impact check`: two different jobs, not one scorecard
+
+`review` answers "does this change introduce a defect," and its attention is
+scoped to the reviewed diff by design — a different job from a full repository
+audit ("does this codebase contain a defect, changed or not"), which is not
+built. The 2026-08-05 runs above measured **0 of 27** out-of-diff expectations
+found, across all three runs — unchanged from the 2026-08-02 baseline: a
+measured zero over a full denominator, not noise and not a defect in the
+reviewer. Every one of those 27 misses sat in a file the reviewer had been
+shown **in full** — the miss is diff-scoped attention holding exactly as
+designed, not a context or retrieval gap. Full account: [What limits
+recall](what-limits-recall.md).
+
+`impact check` is a separate command built for exactly that population. Scored
+against the same 27 out-of-diff expectations — the population it exists for — its
+deterministic core localises **20 of 27 (74.1%)** inside a symbol it flagged as
+changed (measured 2026-08-02, engine `6781a26`; this figure was not re-measured
+at the 2026-08-05 or 2026-08-06 pins — source: `reports/eval-results-ledger.md`,
+"2026-08-02 — stage 1, three runs at one pinned engine").
+
+That figure covers the deterministic core only. The command's **adjudication
+layer** (`changeImpact.adjudication.enabled`, off by default) is **unmeasured**:
+no figure for it exists, none may be quoted, and the 74.1% above must not be
+read as covering it.
+
+**That 74.1% is coverage, not detection, and it is not comparable to a recall
+figure.** `impact check` reports risk and never claims a defect is present — it
+answers "is this location worth a human look," not "is there a defect here."
+Quoting a blended recall (which folds review's in-diff and out-of-diff
+performance into one number) against `impact check`'s coverage, or treating the
+two as substitutes, scores one stage against the other stage's job. Keep the
+two figures — 66.1% in-diff recall for review, 74.1% out-of-diff coverage for
+`impact check` — separate and separately labelled wherever either is quoted.
+
+---
+
+## Historical record
+
+Everything below predates the [current headline](#current-headline) above. Read
+the date on each section before quoting anything from it.
+
+**The 2026-08-05 and 2026-08-02 entries directly below carry the same
+engine-pinning and dependency-digest guarantees as the current headline above
+them — they predate only the current headline, nothing more.** Everything
+further below both also predates 2026-08-01 engine pinning: before that date
+the harness pinned the repository under test but invoked the *engine* from the
+live working tree, so nothing in a scored artefact recorded which engine build
+produced it. None of those older figures carries engine provenance and none
+can be pooled with any pinned baseline above; treat small deltas among the
+historical figures themselves as correspondingly weaker evidence too.
+
+### 2026-08-05 — stage 1 re-baselined after the instruction and disclosure changes
+
+**Superseded by the [current headline](#current-headline) above.** Kept below
+as a dated record of the measurement it replaced.
+
+Measured **2026-08-05** on the **real-repository corpus** as it stood then: 37
+cases, 87 expected findings, 27 upstream projects. Model `openai/gpt-5.3-codex`,
+engine pinned `db78900`, dependency digest verified **identical to the
+2026-08-02 baseline's digest** before running, so the engine build was the only
+intended difference. Three runs, zero provider errors in any of them.
+
+| Metric | Value | Per run |
+| --- | ---: | --- |
+| Recall, in-diff | **68.3%** (sd 2.89pp) | 66.7 / 66.7 / 71.7 |
+| Recall, blended | **47.1%** | 46.0 / 46.0 / 49.4 |
+| Recall, out-of-diff | **0 of 27** — unchanged | 0 / 0 / 0 |
+| Precision (raw to adjusted bracket) | **77.8% to 96.2%** | 78.4–96.2 / 76.9–100 / 78.2–93.5 |
+| — lower bound, raw precision | **77.8%** | 78.4 / 76.9 / 78.2 |
+| — upper bound, adjusted precision | **96.2%** | 95.2 / 100 / 93.5 |
+| Line placement | **94.3%** | 92.5 / 95.0 / 95.3 |
+| Severity accuracy | **61.0%** | 60.0 / 65.0 / 58.1 |
+
+Source: `reports/eval-results-ledger.md`, "2026-08-05 — stage 1 re-baselined
+after the instruction and disclosure changes".
+
+**In-diff recall — 68.3% — was the number to quote at this pin.** It was
+measured **higher** than the 2026-08-02 baseline's 61.1%: the three new runs
+(66.7–71.7%) do not overlap the three old ones (60.0–61.7%) at all, and an
+exact permutation test over the 20 ways to split six runs into two arms of
+three puts one-sided **p = 0.050** — the smallest p attainable at three runs
+per arm, so this is as strong as this design can report and no stronger.
+
+The **paired** verdict on the same six reports is a sharper instrument on the
+same evidence, and agrees. Adjudicated per expectation over the in-diff
+population, pooling all three runs of each arm into one observation per
+expectation, `eval compare` reports **12 expectations gained, 3 lost, 45
+unchanged, exact two-sided sign test p = 0.0352** (reproduce it with
+`eval compare` passing all three `--base` and all three `--head` reports). This
+is a different test from the run-level permutation above, not a second reading
+of it: it discards the 27 out-of-diff expectations, which are a hard zero in
+every run of both arms and carry no information. Blended over all 87
+expectations the same data reads 12 gained against 3 lost as well — the pairs
+are the same — but over a denominator that includes a population that cannot
+move, which is why the blended recall figures in the table above were not the
+ones to quote.
+
+**Which change moved it is not established, and this document does not claim
+one did.** The eval configures no reviewer instructions, so the 2026-08-05
+instruction work — reviewer instructions reaching the discovery call, see
+[Status and limitations](../01-overview/status-and-limitations.md) — is
+**inert on this corpus**: an empty instruction set renders an empty section.
+The delta belongs to the whole span between the two engine pins, which also
+carries the prior session's disclosure work (grep/list truncation notices and
+the refutation withholding notice reaching the model) and a refutation-context
+fix for partitioned sub-tasks. Read this as "measured higher," never as
+"improved by" any one change.
+
+**Precision is a bracket, and only its lower bound is comparable across this
+measurement.** The pair above — 77.8% to 96.2% — is the reported result; under an
+incomplete answer key the true value is not identifiable between the two bounds,
+and the upper end is the less trustworthy one.
+
+**The upper bound — 96.2% — is not comparable to the earlier 99.1%, and it
+must not be read as a fall or a regression.** `EVAL_METRICS_VERSION` moved
+from `2026-08-01.discovery-telemetry` to `2026-08-03.plausibility-source-window`
+between the two measurements, and that bump's own note states it changes which
+findings are credited unlisted-real — hence `adjustedPrecision`,
+`unlistedRealFindingCount`, and `genuineFalsePositiveCount` — for **identical
+review output** on any case with a file above the cap. The 99.1% → 96.2%
+movement therefore mixes a scorer correction with whatever the engine did, and
+this run cannot separate them. The scorer change does not affect raw
+precision, and raw precision **rose**: 74.9% (2026-08-02) to 77.8% here.
+
+**The variance band was 2.89pp at this pin, against 0.96pp one pin earlier.**
+Two of the three new runs landed on 66.7% and one on 71.7% — three times the
+spread of the 2026-08-02 runs, on the same corpus and the same run count. That
+cause was not understood at the time, and remains unresolved: see [Variance:
+why single runs prove little](#variance-why-single-runs-prove-little) below.
+
+**Out-of-diff recall stayed at a hard 0 of 27, in every run — unchanged from
+the 2026-08-02 baseline.** Nothing in this span of changes targeted it, and
+nothing moved it.
+
+**Cost is two numbers, not one, and quoting either alone misrepresents the
+other.** A cold-cache run cost **$1.97**; with a warm cache, **$0.82–0.83** —
+more than 2x apart. Prompt caching was reachable at this engine pin, which
+reversed an earlier probe that found it unavailable: the first of the three
+runs cached 5% of its input, and the second and third cached 79% and 80%,
+which is what cut cost from $1.97 to $0.83 and $0.82. That also means an A/B
+run second on a shared cache inherits the first arm's warm cache — quote the
+cold figure, or state which you're quoting. The three-run sweep cost **$3.62
+review + $0.81 scoring = $4.44** for 3 × 37 cases. **These cost figures predate
+a since-landed change that runs review as a single process and a dependency
+bump, and must not be quoted as the current pin's cost** — see the [current
+headline](#current-headline) above.
+
+### 2026-08-02 — stage 1, three runs at one pinned engine
+
+**Superseded by the [2026-08-05 entry](#2026-08-05-stage-1-re-baselined-after-the-instruction-and-disclosure-changes)
+above, itself superseded by the [current headline](#current-headline).** Kept
+below as a dated record of the measurement it replaced.
+
+The figures the report renderer prints to users as of this writing. Recorded
+here so the prose in `markdown-reporter.ts` and `summary-comment.ts` can be
+traced back to the measurement it cites, even though that prose has not yet
+been updated to the current headline above. Engine `6781a26`, same dependency
+digest across all three runs.
+
+| metric | value |
+| --- | ---: |
+| in-diff recall | 61.7 / 60.0 / 61.7 — mean 61.1%, **sd 0.96pp** |
+| blended recall | 42.5 / 41.4 / 42.5 — mean 42.1%, **sd 0.66pp** |
+| precision (raw to adjusted bracket) | mean **74.9% to 99.1%** — lower bound 74.9%, upper bound 100 / 97.3 / 100 (mean 99.1%) |
+| out-of-diff recall | 0 / 0 / 0 — **0 of 27**, a measured zero over a full denominator |
+| reported findings landing in-diff | 94.2% (49 of 52); the 3 strays were all judged real |
+
+Two consequences worth keeping attached to these numbers.
+
+The **sd was ~0.7pp, not the ±4.8pp** this project used for months. That older
+band was estimated from too few samples and made every single-run comparison
+unreadable in both directions; it produced at least three wrong calls in one
+day, including two opposite readings of the same change. **This figure is
+itself superseded** — the 2026-08-05 re-baseline above measured sd 2.89pp on
+the same corpus and run count. The 2026-08-06 pin that now supersedes 2026-08-05
+did not restate an sd of its own (see [current headline](#current-headline)
+above), so 2.89pp remains the most recently *stated* resolution — use that, not
+0.96pp or ~1pp, until a fresh figure is published.
+
+The **out-of-diff zero is a scope boundary, not a defect**. `impact check` covers
+that population at 20 of 27 (74.1%). Quoting a blended recall scores stage 1
+against stage 3's job — the error spec 22 warns about by name.
+
+### Headline
+
+**Superseded by the [current headline](#current-headline) above.** Kept below as
+a dated record of the measurement it replaced.
+
+> #### Read this before quoting this section
+>
+> Until 2026-07-27 the review harness forwarded the accumulated session
+> conversation into every agent call, so each stage opened holding the output of
+> every call that had finished before it, attributed to the model itself.
+> Refutation in particular began each call appearing to have already asserted the
+> candidates it was about to adjudicate. That forwarding is now suppressed
+> harness-wide.
+>
+> **Every number in this section was produced with history-carrying stages, and
+> none of it is comparable to a current run.** The direction of the effect is
+> **unknown**: the behaviour was removed because it contradicts what those stages
+> are specified to do, not because it was shown to be harmful, and no measurement
+> of either direction exists for this specific run. Do not describe the change as
+> an improvement.
+>
+> Detail: [What limits recall](what-limits-recall.md#a-caveat-that-applies-to-every-number-here).
+
+Measured **2026-07-26** on the **real-repository corpus** as it stood then: 36
+cases, 80 expected findings, 29 upstream projects, 7 of them multi-file. Model
+`gpt-5.3-codex`, three seeds, default configuration. That corpus has since lost
+five cases removed for answer-key disclosure and gained six curated to make the
+iterative review loop measurable, so it is now 37 cases and 87 findings and
+**every number in this section was measured against an answer key that no
+longer exists** — see [datasets](datasets.md#real-repository-cross-file-corpus).
+
+| Metric | Value | Notes |
+| --- | ---: | --- |
+| Recall | **46.7%** | 46.3 / 45.0 / 48.8 |
+| Precision, UPPER bound only (adjusted) | **97.3–100%** | The matching lower bound (raw precision) was not recorded for this superseded corpus, so the bracket cannot be completed and the upper bound must not be read as "the" precision |
+| **False alarms on defect-free zones** | **0** | across every run, on ten curated zones |
+| Severity accuracy | ~44% | ~49% when the actionable floor is lowered to `low` |
+| Line placement (`linePlacementRate`) | ~97% | share of matched findings whose reported line falls inside the expected range |
+| Cost | **~$1.6–1.9** | per 36-case run, with prompt caching working |
+
+**This number is not comparable to the 53.2% published earlier the same day.** The
+corpus changed underneath it: from 30 cases and 42 findings to 36 and 80, with
+findings beyond the first added to 22 cases and one case carrying six. The
+comparison tooling refuses to diff across that change rather than reporting a
+misleading delta.
+
+The drop is the corpus getting harder, and specifically it is the
+one-defect-per-file behaviour becoming visible. A corpus of one-finding cases
+cannot see that limitation at all; this one is built to.
+
+**Precision and false alarms held under a substantially harder corpus**, which is
+the more reassuring half of the result.
+
+### The 2026-08-01 change, and why the 2026-07-26 headline understates the engine
+
+Everything in the section above was measured before the largest quality change this
+project has made. In short:
+
+- The engine had been dividing changes into pieces to fit an assumed size limit.
+  Testing showed **that limit does not exist** — the model accepted a change carrying
+  over a megabyte of source without complaint.
+- Removing the division, however, made recall *fall*, which revealed the real
+  constraint: **the reviewer finds roughly one problem per call, regardless of how
+  much it is shown.** Recall tracks the number of calls, not the amount of code.
+- Dividing the change **deliberately** — two files per review call — then raised
+  defects found by about a third relative to reviewing everything at once, with false
+  alarms at their lowest measured level. That setting now ships as the default.
+
+This is the change whose improvement is strong enough to be conventionally
+significant rather than suggestive, and it is described in full in
+[What limits recall](what-limits-recall.md#the-central-finding-in-two-parts).
+
+Separately, the ability to consult *other* files in the repository — previously
+recorded here as unhelpful — was re-tested and **the earlier verdict was wrong**. It
+had been measuring a bug that cut files off mid-read without telling the reviewer.
+
+It is now **on by default**. Two independent runs put it ahead on every dimension
+measured: more defects found, fewer false alarms, slightly *lower* cost, no added
+failures, and latency inside noise. The recall gain on its own is not statistically
+significant, and no specific improvement is claimed for it — but significance is the
+bar for claiming a benefit, not for allowing a change that is free and shows no harm.
+If a regression ever appears, this is the first switch to turn back off.
+
+**These changes are already reflected in all three pinned baselines' shipped
+defaults.** The 2026-08-02, 2026-08-05, and 2026-08-06 measurements all ran
+with partitioning and cross-file retrieval on, at their shipped settings.
+
+### What limits recall today
+
+**A single discovery pass reports about one defect per file, and the reason is that
+attention follows the diff.** Pooled over nine runs of the 36-case / 80-finding
+corpus, the first expected finding in a file is matched 72.8% of the time and any
+later one in the *same* file 4.7% of the time — while a later expectation in a
+*different* file is matched 79.8% of the time, which is higher than a first one. A
+controlled experiment then showed the reviewer answering the whole-file diff rather
+than the code it was handed: only 21% of candidates from a diff-bearing arm pointed
+inside the unit they were shown. This measurement predates the current 37-case /
+87-finding corpus and the pinned baselines above; it is the diagnosis that
+motivated the partitioning default described in the previous section, not a figure
+to quote as the corpus's current shape.
+
+Because that corpus's 80 expectations sit across 47 distinct (case, file) pairs, a
+reviewer returning one finding per file per round **cannot exceed 58.8% in a single
+pass** on it. The 46.7% figure in the 2026-07-26 headline above is roughly 80% of
+that structural ceiling rather than 47% of a perfect score, which is a materially
+different reading of the same number.
+
+The full account — the experiment, the ceiling arithmetic, the six interventions
+measured against it, and what has actually worked — is in
+[What limits recall](what-limits-recall.md). It is the page to read before
+proposing a fix.
+
+A measurement caveat that belongs with these splits: the splits above were scored
+by a matcher that assigned findings to expectations **greedily in order**, so with
+two expectations and two findings a loose accept for the first could strand the
+second — confounding precisely the multi-defect measurement they are about. Most
+cases emit only one finding, so the effect on these numbers is probably small. The
+matcher has since been replaced by maximum-cardinality bipartite matching
+(`eval-matcher.ts`): no expectation is stranded when some assignment could have
+matched it, and the pairing is identical wherever the greedy one was already
+optimal.
+
+### What was tried against it, and removed
+
+Three additional discovery passes were built, measured, and **removed** — code and
+configuration keys alike. On the 30-case / 42-finding corpus, three seeds each:
+
+| Arm | Recall (3 seeds) | Mean | Cost |
+| --- | --- | ---: | ---: |
+| Baseline | 50.0 / 54.8 / 59.5 | **54.8%** | $1.22 |
+| + enumeration sweep | 50.0 / 52.4 / 61.9 | **54.8%** | $1.71 (+40%) |
+| + diverse-lens pass | 57.1 / 52.4 / 52.4 | **54.0%** | $1.78 (+47%) |
+
+The third, an un-anchored pass that reviewed bounded units with the diff withheld,
+was measured later on the current 36-case corpus: **+0.83pp for +136% cost, 10
+expectations gained and 9 lost, p = 0.82**.
+
+Two qualifications belong with the first two verdicts:
+
+- **Unproven, not disproven.** With 3 seeds and a baseline deviation of 4.8pp on
+  this corpus the resolution is roughly ±5.5pp. A small real effect would be
+  invisible. Both were removed as unproven and expensive, not as demonstrated
+  failures. (The pinned-engine measurements above put the same kind of comparison,
+  on the current corpus, at a much tighter resolution — see
+  [Variance](#variance-why-single-runs-prove-little) below.)
+- **One signal ran the other way.** The lens pass surfaced more
+  plausibility-confirmed defects the answer key never listed — 7.3 per run against
+  5.3, at 100% adjusted precision. That is a real-world gain this corpus's recall
+  metric cannot see, and it is also inside the noise band.
+
+None of the three is configurable any more. The record of what they were and what
+the measurement established is kept in
+[extra discovery passes (removed)](../03-concepts/optional-capabilities/extra-discovery-passes.md).
+
+### Variance: why single runs prove little
+
+The same configuration, run repeatedly with nothing changed, varies by about **5
+percentage points of recall** (sd 4.8pp over 3 seeds, 42 findings, the 30-case
+corpus). A change on that corpus had to move recall by roughly **10 points** before
+a single run could distinguish it from noise, or be run across several seeds.
+
+This has already invalidated conclusions here. An earlier prompt change was reported
+as worth +18.8pp on a 16-finding corpus; measured on 133 findings it is worth about
++3.8pp. The first figure was largely that small corpus's own noise.
+
+**This ±4.8pp / ±5.5pp band was first superseded by a tighter one, which has itself
+since been revised upward — and the most recent pin does not restate a variance
+figure at all.** The 2026-08-02 measurement — three runs at one pinned
+engine, one verified dependency digest, the 37-case / 87-finding corpus —
+put the standard deviation at 0.96pp (in-diff) and 0.66pp (blended), and was quoted
+for a time as ~1pp resolution. The 2026-08-05 re-baseline, same corpus and run
+count, measured **sd 2.89pp** on in-diff recall instead — three times wider, cause
+not yet understood. The 2026-08-06 control arm that now supersedes 2026-08-05's
+headline recall number reports only its three raw per-run values (60.0 / 68.3 /
+70.0) and does not compute or state an sd for them. **Use 2.89pp, from the
+2026-08-05 pin, as the best available operating figure for judging a further
+change until a fresh sd is published — but do not read it as this pin's measured
+variance.** See the [current headline](#current-headline) above. The entries in
+this section remain correct as descriptions of what they measured, on the
+corpus and engine state of the time; none of them is a substitute for the
+current figure.
+
+### Other corpora
+
+**The 59-case benchmark** (`code-review-bench-style`, 133 expected findings) reports
+36.1% recall and 92.3% adjusted precision. Its recall number should not be compared
+with the real-repository figures above: its answer key is badly incomplete. The
+plausibility judge confirmed 86 unlisted-real findings against 48 matched, so the
+engine finds roughly **2.8× more genuine defects than the key lists**, and its
+recall understates by about that factor. Adjusted precision is the figure worth
+reading there. Note also that 10 of its 59 cases are hand-built negatives rather
+than real pull requests. This corpus was not part of either pinned-engine
+measurement above and has no comparably recent figure recorded.
+
+---
+
+## Known measurement limits
+
+Stated plainly, because each of these was a wrong number at some point:
+
+- **`lineAccuracy` is unmeasured, which is not the same as line placement being
+  unmeasured.** The two are separate metrics and the similar names have misled
+  readers of this page. `linePlacementRate` is a diagnostic over every matched
+  finding regardless of match mode. `lineAccuracy` counts only expectations whose
+  match mode is `path-line`, and the real-repository corpus contains none, so it
+  reports `n/a (0 checked)`. It previously reported `0.0%` — a metric that
+  structurally could not pass, displayed as one that had failed.
+- **Severity accuracy is a rate over matched findings**, so it is not comparable
+  across runs whose recall differs; a recall gain mechanically depresses it by adding
+  harder findings to the denominator. Compare on the intersection instead.
+- **The corpus is modest.** 87 findings across 37 cases resolves large effects
+  reliably — the current pinned baseline's own three runs span 60.0–70.0% (a
+  10-point range), and the most recently *stated* sd at this corpus and run
+  count is 2.89pp (from the superseded 2026-08-05 pin) — but a real effect much
+  smaller than that spread still needs several runs at one pinned engine to
+  separate from noise.
+- **All cases are `held-out`** by the anti-contamination policy, but the upstream
+  repositories are public and may appear in model training data. Temporal cutoff and
+  answer-key exclusion mitigate this; they do not eliminate it.
+
+## Reproducing
+
+```bash
+npm run eval:corpus
+```
+
+Hydration alone, which costs no provider spend:
+
+```bash
+npm run eval:corpus:hydrate
+```
+
+The default `stable` gate profile thresholds only parse validity and provider
+errors, so a clean run of this corpus exits `0` while saying nothing about recall.
+Passing `--gate-profile strict` restores the old bar — 100% recall, zero raw false
+positives — which exits non-zero on any realistic run. Either way the report, not
+the exit code, is the output. See
+[Running an evaluation](running-an-evaluation.md#the-regression-gate).

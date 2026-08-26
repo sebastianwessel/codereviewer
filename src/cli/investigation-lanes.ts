@@ -1,0 +1,126 @@
+// The two post-review investigation lanes (spec 12) as the `review` command
+// drives them. Both run through the same agent with the same wiring, so they
+// share one input shape and one context builder.
+import {
+  corroborateFindings,
+  runFixRun,
+  runVerificationRun,
+  type InvestigationRunContext,
+  type VerificationReport
+} from '../domains/verification/index.js'
+import type { Logger } from '../domains/observability/index.js'
+import type {
+  AdmittedFinding,
+  CodeReviewerConfig
+} from '../shared/contracts/index.js'
+import type { CliRunOptions } from './cli-contract.js'
+
+// Everything both post-review investigation lanes (spec 12) take from the CLI
+// run.
+export type InvestigationLaneInput = {
+  readonly options: CliRunOptions
+  readonly config: CodeReviewerConfig
+  readonly environment: Readonly<Record<string, string | undefined>>
+  readonly admittedFindings: readonly AdmittedFinding[]
+  readonly logger: Logger
+}
+
+// Both lanes run through the same agent with the same wiring, so the context is
+// built once here rather than assembled per lane.
+const investigationContextFor = (
+  input: InvestigationLaneInput
+): InvestigationRunContext => ({
+  config: input.config,
+  repositoryRoot: input.options.cwd,
+  environment: input.environment,
+  logger: input.logger,
+  ...(input.options.providerImport === undefined
+    ? {}
+    : { providerImport: input.options.providerImport })
+})
+
+// Runs the agentic verification flow after the general review when it is enabled
+// (spec 12). It is a separate lane: with verification disabled this returns
+// `undefined` and the general review is byte-for-byte unchanged. The flow is
+// non-fatal by construction — a missing provider or a failed claim provider
+// yields a report (empty, or carrying warnings) rather than throwing.
+export const runVerificationForReview = async (
+  input: InvestigationLaneInput
+): Promise<VerificationReport | undefined> => {
+  if (!input.config.verification.enabled) {
+    return undefined
+  }
+
+  const { report, claims } = await runVerificationRun(
+    investigationContextFor(input)
+  )
+
+  // Cross-witness: a confirmed verdict that lands on a general-review finding
+  // raises that finding's confidence (never its severity). Surfaced in the
+  // verification report so the "strong finding" signal is visible in output.
+  const corroborations = corroborateFindings({
+    findings: input.admittedFindings,
+    verdicts: report.verdicts,
+    claims
+  })
+
+  return { ...report, corroborations: [...corroborations] }
+}
+
+// Runs the agentic finding investigation-and-fix lane after the general review
+// when it is enabled (spec 12). It reuses the same investigation agent as
+// verification. With the lane disabled (or no eligible finding / unresolved
+// provider) it returns the findings unchanged and no report. It is advisory: it
+// only enriches advisory `fixProposal` metadata on `real` findings whose
+// apply-check passes, and never changes category, severity, admission, or the gate.
+/**
+ * Findings the fix lane judged NOT REAL, as run warnings.
+ *
+ * The fix lane forms a `findingJudgment` per finding and declines to write a fix
+ * when it is `false-positive`. That judgement reached `fix-report.json` and
+ * nothing else — no report, no markdown, no pull-request comment — so a human
+ * read a finding presented as real while a second stage of this engine had
+ * privately disagreed with it and said so in writing.
+ *
+ * Surfaced as a warning rather than by withdrawing the finding, deliberately.
+ * The fix lane is advisory (spec 12) and does not decide admission; letting it
+ * silently delete findings would give an advisory stage the authority the spec
+ * denies it. The reader gets both claims and decides — which is the only honest
+ * shape when two stages disagree.
+ */
+export const falsePositiveJudgementWarnings = (
+  report: VerificationReport | undefined
+): readonly string[] => {
+  const disputed = (report?.fixOutcomes ?? [])
+    .filter((outcome) => outcome.findingJudgment === 'false-positive')
+    .map((outcome) => outcome.findingId)
+
+  return disputed.length === 0
+    ? []
+    : [
+        `The fix lane judged ${disputed.length} admitted finding(s) NOT real and wrote no fix for them: ${disputed.join(', ')}. They remain in this report because the fix lane is advisory and does not decide admission — weigh both before acting.`
+      ]
+}
+
+export const runFixForReview = async (
+  input: InvestigationLaneInput
+): Promise<{
+  readonly report: VerificationReport | undefined
+  readonly findings: readonly AdmittedFinding[]
+  readonly warnings: readonly string[]
+}> => {
+  if (!input.config.fix.enabled) {
+    return {
+      report: undefined,
+      findings: input.admittedFindings,
+      warnings: []
+    }
+  }
+
+  const { report, findings } = await runFixRun({
+    ...investigationContextFor(input),
+    admittedFindings: input.admittedFindings
+  })
+
+  return { report, findings, warnings: falsePositiveJudgementWarnings(report) }
+}

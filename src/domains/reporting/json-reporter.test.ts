@@ -5,7 +5,14 @@ import {
   renderJsonReport,
   writeReportingArtifacts
 } from './index.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
+
+// The fixture finding's edit targets `src/app.ts:4`, so the apply-check needs a
+// file with at least that many lines for a suggestion to survive to the artifacts.
+const readCurrentFile = async (path: string): Promise<string | undefined> =>
+  path === 'src/app.ts'
+    ? ['one', 'two', 'three', 'return staleValue', 'five'].join('\n')
+    : undefined
 
 describe('JSON reporter', () => {
   test('renders canonical JSON that validates against the report schema', () => {
@@ -41,6 +48,65 @@ describe('JSON reporter', () => {
     expect(() => ReviewReportSchema.parse(JSON.parse(rendered))).not.toThrow()
   })
 
+  // Spec 29. The JSON report is the machine-readable contract, so the signal has
+  // to arrive there whole rather than only in the rendered Markdown.
+  test('carries the test-adequacy signal through to the JSON contract', () => {
+    const testAdequacy = {
+      consideredFileCount: 2,
+      pairedFileCount: 1,
+      unpairedPaths: ['src/alpha.ts'],
+      changedTestFileCount: 1,
+      unknown: { unsupportedLanguageFileCount: 2, notAnalysedFileCount: 0 }
+    }
+    const rendered = renderJsonReport({
+      ...createReportFixture(),
+      testAdequacy
+    })
+
+    expect(ReviewReportSchema.parse(JSON.parse(rendered)).testAdequacy).toEqual(
+      testAdequacy
+    )
+  })
+
+  // Spec 29. SARIF is a DEFECT interchange format and review comments are inline
+  // annotations on a diff; the signal is neither a defect nor tied to a line, and a
+  // reviewer must never receive it as one. Asserted over the artifacts the writer
+  // actually produces rather than trusted to the renderers.
+  test('the test-adequacy signal reaches neither SARIF nor the review-comment drafts', async () => {
+    const writes = new Map<string, string>()
+    await writeReportingArtifacts({
+      report: {
+        ...createReportFixture(),
+        testAdequacy: {
+          consideredFileCount: 1,
+          pairedFileCount: 0,
+          unpairedPaths: ['src/untested-by-this-change.ts'],
+          changedTestFileCount: 0,
+          unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+        }
+      },
+      formats: ['json', 'sarif'],
+      reviewComments: { platform: 'github', readCurrentFile },
+      writer: async (artifactPath, content) => {
+        writes.set(artifactPath, content)
+      }
+    })
+
+    for (const artifactPath of [
+      'report.sarif',
+      'review-comments.json',
+      'review-comments.github.json'
+    ]) {
+      expect(writes.get(artifactPath)).not.toContain(
+        'src/untested-by-this-change.ts'
+      )
+      expect(writes.get(artifactPath)).not.toContain('testAdequacy')
+    }
+
+    // And it is present where it belongs.
+    expect(writes.get('report.json')).toContain('testAdequacy')
+  })
+
   test('creates deterministic artifact records with hashes', () => {
     const artifact = createReportArtifact('json', 'report.json', '{"ok":true}\n')
 
@@ -67,22 +133,40 @@ describe('JSON reporter', () => {
     })
   })
 
-  test('writes GitHub review comment artifact when enabled', async () => {
+  test('writes neutral and rendered review-comment artifacts when enabled', async () => {
     const writes = new Map<string, string>()
     const artifacts = await writeReportingArtifacts({
       report: createReportFixture(),
-      formats: ['json', 'github-review-comments'],
+      formats: ['json'],
+      reviewComments: { platform: 'github', readCurrentFile },
       writer: async (artifactPath, content) => {
         writes.set(artifactPath, content)
       }
     })
 
+    // Both review-comment files record under the `json` report format.
     expect(artifacts.map((artifact) => artifact.artifact.format)).toEqual([
       'json',
-      'github-review-comments'
+      'json',
+      'json'
     ])
-    expect(writes.has('github-review-comments.json')).toBe(true)
-    expect(JSON.parse(writes.get('github-review-comments.json') ?? '[]')).toEqual([
+    expect(artifacts.map((artifact) => artifact.artifact.path)).toEqual([
+      'report.json',
+      'review-comments.json',
+      'review-comments.github.json'
+    ])
+
+    expect(writes.has('review-comments.json')).toBe(true)
+    expect(JSON.parse(writes.get('review-comments.json') ?? '[]')).toEqual([
+      expect.objectContaining({
+        path: 'src/app.ts',
+        targetRange: { startLine: 4, endLine: 4 },
+        findingId: 'find_abc123',
+        suggestion: { replacement: 'return computedValue' }
+      })
+    ])
+
+    expect(JSON.parse(writes.get('review-comments.github.json') ?? '[]')).toEqual([
       expect.objectContaining({
         path: 'src/app.ts',
         line: 4,

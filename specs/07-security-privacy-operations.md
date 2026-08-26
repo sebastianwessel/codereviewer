@@ -1,7 +1,10 @@
 # 07: Security, Privacy, And Operations
 
 Status: Approved
-Date: 2026-07-20
+Date: 2026-07-22
+Amended: 2026-08-07 — the shared mediated-read eligibility gate and the
+requirements that make directory traversal safe are stated here (see *Mediated
+Read Eligibility*)
 
 ## Threat Model
 
@@ -11,6 +14,9 @@ Trust boundaries:
 - config files are untrusted until schema-validated;
 - the repository root is the maximum local authority boundary;
 - reviewer instructions and skills are untrusted prompt inputs;
+- external change-intent context (pull-request metadata, pipeline-provided
+  context-inbox files, and change-relevant repository files) is untrusted prompt
+  input;
 - model providers are external processors;
 - model outputs are untrusted and outside the deterministic trust boundary;
 - CI environment variables can contain secrets;
@@ -31,6 +37,9 @@ Attack surfaces:
 - destructive git operations hidden behind user-controlled refs or aliases;
 - unapproved network transfer of repository content, prompts, artifacts, or
   secrets;
+- injection through external change-intent context that attempts to alter
+  findings, gates, or reviewer behavior;
+- server-side request forgery through a later-phase network context source;
 - drift between specs, docs, implementation, generated schemas, examples,
   quality gates, and shipped behavior;
 - ambiguous or interpretable requirements that allow agents or maintainers to
@@ -49,7 +58,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only R1 network path is the explicitly selected model provider endpoint after provider config validation. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation. Every model-backed stage uses that one path and no other: holistic discovery, the semantic finding merge, refutation, the change-intent summarizer, the fix and verification lanes, intent-fulfilment checking, and the evaluation match and plausibility judges. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -67,6 +76,11 @@ code, not by model behavior:
 | Provider exfiltration | malicious config points to attacker OpenAI-compatible URL | Require explicit provider config, document provider trust boundary, redact secrets, ledger context, and allow local runs with no provider. |
 | Prompt exfiltration | repository asks model to print env vars or upload code | No tools with env/filesystem/network authority are available to model output; env is never in prompt context. |
 | Report injection | finding title contains HTML/script/Markdown table breaks | Escape Markdown/SARIF user-controlled text and never emit raw source snippets by default. |
+| External context injection | PR body, inbox file, or changed doc says "ignore all findings" or "this is pre-approved" | Treat external context as untrusted data presented under an informational header; it never changes admission, severity, gates, or baseline, and never suppresses a finding. |
+| Agentic tool abuse (verification flow) | a claim or tool output steers the verification agent to read `.env`/secrets, loop unboundedly, or claim authority | The verification agent's only tools are mediated read/list/grep (`12-verification-flow.md`): read-only, path-contained, eligibility-filtered so secret/excluded files are never read, in-process (no shell), redacted, ledgered, and bounded by per-claim tool-call and byte/match budgets. No shell, network, filesystem write, environment, publishing, or gate authority is available, and claim inputs cannot change admission, severity, gates, or baseline. |
+| Agentic tool abuse (cross-file discovery) | changed source or a retrieved file steers the discovery agent to read secrets, browse the repository, or loop until its budget is gone | The discovery agent's `repo_read`/`repo_list`/`repo_grep` tools are the SAME mediated, eligibility-gated, redacted, ledgered surface as the verification agent's, bound per task through a scoped tool registry so concurrent tasks cannot spend each other's budget. A per-task tool-call cap enforced in code bounds a model that never stops requesting reads. Retrieved content is untrusted repository data on exactly the terms the changed files are, its findings pass the same refutation and admission as any other candidate, and findings stay restricted to the task's own paths. |
+| Context-source SSRF (later-phase `platform-API` provider) | ticket id or URL in repository content aims a platform-API fetch at an internal host | Contact only the explicitly configured, host-allowlisted platform host; never derive fetch targets from repository content or model output. |
+| Context-source credential leak | tracker or platform token echoed into the brief, ledger, or logs | The current-phase inbox carries no credentials because the pipeline owns the fetch; the later-phase platform-API provider reads credentials only from a configured environment variable; redact external context before use. |
 | Secret leakage | token appears in source, error, provider message, or artifact | Redact before logs, errors, reports, traces, and provider-bound summaries. If a value cannot be proven redacted, exclude it from output. |
 | Denial of service | huge files, many paths, nested skill tree | Enforce max files, max file bytes, context bytes, traversal caps, timeouts, and concurrency caps. |
 | Drift hiding | README claims a command exists but CLI rejects it | Drift checker compares docs/specs/CLI/package/config/generated schemas and emits drift findings. |
@@ -78,6 +92,7 @@ code, not by model behavior:
 | --- | --- | --- |
 | Source code | sensitive customer data | May be read locally; not logged/traced. |
 | Prompts/instructions | sensitive | Sent only to the selected provider for configured model-backed tasks; not logged/traced. |
+| External change-intent context | sensitive, untrusted | Redacted before use; summarized and injected only as a bounded context-only document; never logged/traced. |
 | Secrets/tokens | secret | Redacted before model/log/report. |
 | Evidence summaries | internal | Redacted and safe for report. |
 | Run metadata | internal | Safe for report after redaction. |
@@ -91,7 +106,17 @@ Redactor must run before:
 - errors;
 - traces;
 - report rendering;
-- model-bound context assembly where configured secret patterns are available.
+- model-bound context assembly where configured secret patterns are available;
+- **the reviewed diff, at intake** — the single point it enters a run
+  (`run/intake/repository-input.ts`), not at each consumer. Named explicitly
+  because it was the one path that did NOT redact until 2026-08-11: every changed
+  file's content was redacted before it could reach a packet and the diff was not,
+  so a credential committed inside a changed hunk went to the provider verbatim
+  while the identical string in the surrounding file body came out `[REDACTED]`.
+  Redacting at the source also keeps the context ledger honest, since the ledger
+  measures that same string;
+- ingestion of external change-intent context, before it enters the summarizer
+  call, the prompt, or the context ledger.
 
 Minimum secret patterns:
 
@@ -102,15 +127,95 @@ Minimum secret patterns:
 - AWS access key IDs;
 - user-configured exact secret values.
 
-Tests must prove known tokens are removed from logs and reports.
+User-configured exact secrets are supplied as `security.redaction.secretEnvVars`:
+a list of ENVIRONMENT VARIABLE NAMES, never literal values. Each name is resolved
+once where configuration and environment meet (`loadCodeReviewerConfig`) and the
+value applies to every redactor for the rest of the process, because no seam that
+redacts takes configuration. A literal list would commit the secret to the
+repository in order to keep it out of a run's artifacts, and the value is already
+in the environment of the job that leaks it; a variable name is not a secret, so
+it stays printable in the config summary and in errors.
+
+A named variable that is unset, empty, or shorter than 8 characters fails the run
+(`redaction_secret_env_unset`, `redaction_secret_env_too_short`) instead of being
+skipped: an operator naming a value has stated it must never appear in output, and
+a run that continues without it emits artifacts that look redacted and are not,
+while a two-character value would be replaced everywhere it occurs. An empty or
+absent list is the built-in floor and nothing else.
+
+Tests must prove known tokens are removed from logs and reports, and that a
+configured exact secret is removed at a production seam that constructs its own
+redactor — a capability no production call site can reach is not a capability, and
+this one was reachable only from its own unit test until 2026-08-11
+(`src/domains/configuration/secret-redaction.test.ts`).
+
+### What The Mechanism Supports, And What It Does Not
+
+**Amendment 2026-08-14.** `VIS-002` and `INV-SEC-001` are stated as absolutes —
+runs *"leak no … secrets"*. The mechanism is a closed list of pattern families plus
+operator-configured exact values, and the verification is snapshot tests over
+**known** tokens. Tests over known tokens establish that the listed patterns are
+removed from the covered surfaces; they cannot establish "no secrets", and the
+record shows the method missing in both directions:
+
+- **False negative, shipped for months.** The reviewed diff was the one path that did
+  not redact until 2026-08-11 (above). The verification method did not catch it.
+- **Second false negative.** The configured-exact-secret redactor was reachable only
+  from its own unit test until 2026-08-11.
+- **False positive, at a measured rate.** Over this repository's 1,019 tracked files
+  and 4,234 dependency files (52 MB), the redactor made 210 substitutions and **zero
+  were real secrets**; 76 were not credential-shaped at all, because
+  `sk-[A-Za-z0-9_-]{16,}` had no left boundary and matched the tail of any hyphenated
+  identifier containing `sk-`.
+
+**The supported claim**, which is what these invariants should be read as: the listed
+pattern families and configured exact values are removed from logs, traces, reports
+and provider-bound context, verified by snapshot tests at each seam. **Residual
+secret shapes outside the list are not covered and no completeness claim is made.**
+The invariants are not weakened as requirements — the requirement is still that
+nothing on the list reaches those surfaces — but a reader must not take "verified by
+redaction tests" as a proof of absence for shapes nobody enumerated.
+
+### Over-Redaction Of Model Input Is A First-Class Failure Mode
+
+Direction matters, and it changed with the surface on 2026-08-11. Over-redacting a
+**log** is cosmetic: a value a human would have read is hidden. Over-redacting
+**model input** is a silent quality change — the reviewer is shown `[REDACTED]` where
+the file has text and reasons about code that does not exist, which is a recall and
+precision defect with no natural detector, because a finding that was never made
+produces no output.
+
+Requirements, all shipped 2026-08-13:
+
+- **Redaction of packet-bound material MUST be counted**, separately for the reviewed
+  diff and for task context.
+- **A non-zero count MUST be disclosed as a run warning** naming both counts and the
+  remedy (search the changed files for `[REDACTED]` and decide whether a credential
+  is committed there or a pattern matched ordinary code). The warning MUST be silent
+  at zero: one that fires every run is one nobody reads, and zero is the measured
+  expected result on ordinary source.
+- **Report-artifact redaction is deliberately NOT counted**, and the asymmetry is the
+  reason: redacting an artifact is terminal, while redacting packet-bound source is
+  generative — every finding around the token is downstream of it.
+- **The context ledger MUST measure the string the model actually received.** It
+  recorded content pre-redaction while the document carried the redacted text, so
+  `contentHash` and both byte counts described a string the model never saw and a
+  reader comparing the hash against the file on disk got a match.
+- **A pattern MUST NOT match mid-identifier.** `sk-` gained `(?<![A-Za-z0-9_-])`,
+  which trades one case, stated rather than glossed: a key glued directly onto a
+  preceding identifier character is no longer redacted. Every real emission form —
+  line start, `=`, quote, `Bearer `, `(` — is pinned by a test. Re-measured after the
+  change: mid-word hits 76 → 0.
 
 ## Prompt Injection And Model Boundary
 
 Prompt injection cannot be fully prevented for arbitrary untrusted repository
 content. R1 controls the blast radius:
 
-- repository content, instructions, skills, prior artifacts, and provider
-  responses are untrusted input;
+- repository content, instructions, skills, prior artifacts, provider
+  responses, and external change-intent context are untrusted input;
+- external change-intent context is presented under an informational header and
+  cannot change admission, severity, gates, or baseline outcomes;
 - model output can propose candidate findings and refutation summaries
   only; it cannot publish, fail gates, write outside the artifact directory,
   execute commands, or read additional files without deterministic
@@ -131,7 +236,7 @@ Default permissions:
 | Repository read | allowed | Required. |
 | Filesystem write | restricted | Only run artifact directory. |
 | Shell execution | denied | Future spec required. |
-| Network | provider only | Only selected provider adapter. |
+| Network | provider only | Selected provider adapter, used by every model-backed stage listed in the "No implicit network" invariant above. Change-intent context providers are filesystem-only; a network `platform-API` provider is a later phase (`11-external-context-ingestion.md`). |
 | PR publishing | denied | Future spec required. |
 | Fix application | denied | Future spec required. |
 
@@ -152,6 +257,45 @@ provider network path explicitly defined by provider configuration.
 - For write destinations, the implementation must resolve existing parent
   directories with `realpath` when present to prevent symlink escape.
 - Public reports must use repository-relative portable paths only.
+
+## Mediated Read Eligibility
+
+Every mediated `read`/`list`/`grep` call — the verification and fix lanes
+(`12-verification-flow.md`), cross-file discovery
+(`16-agentic-cross-file-discovery.md`), change impact
+(`22-change-impact-review.md`), intent fulfilment
+(`23-intent-fulfilment-review.md`) — passes ONE shared eligibility gate, in this
+order:
+
+1. A hard floor no configuration can widen: any dotfile or hidden path segment,
+   plus `node_modules` and `dist` matched case-insensitively anywhere in the
+   path.
+2. `paths.exclude`.
+3. `paths.include`.
+
+The include layer scopes FILES: a directory is eligible for TRAVERSAL when an
+included file could live beneath it, as defined under *Paths* in
+`04-configuration-and-providers.md`. That is the only relaxation in this gate,
+and these requirements are what make it safe. They are load-bearing; the
+relaxation is not permitted without them.
+
+- The relaxation is for DIRECTORIES only. Any path served as a file — a `read`,
+  a `grep` root that turns out to be a file, a file a traversal opened — MUST be
+  gated against the file rule.
+- Every entry a traversal yields MUST be gated individually before it is opened
+  or reported: a directory listing MUST drop the entries the gate rejects, and a
+  recursive search MUST gate each child before descending into it or reading it.
+  A traversable directory therefore grants access to nothing inside it.
+- Layers 1 and 2 are unchanged and are still evaluated first, so a directory the
+  hard floor or `paths.exclude` rejects is never traversed, whatever could live
+  beneath it.
+- A path eligible ONLY under the directory rule that is not in fact a directory
+  MUST be refused as ineligible, and that refusal MUST be indistinguishable from
+  the one a path that does not exist receives. Eligibility is otherwise decided
+  from the path alone, before existence, precisely so that a refusal cannot be
+  used to probe for a file the include list does not cover; this is the single
+  check that has to consult the filesystem, so answering its two outcomes
+  differently would reintroduce that probe.
 
 ## Git Safety
 
@@ -184,6 +328,33 @@ Rules:
 ## Network And Provider Exfiltration Controls
 
 Network is off unless a provider-backed review is explicitly configured.
+
+External context source requirements (`11-external-context-ingestion.md`):
+
+- context providers are on by default (2026-08-11), and the default pair is
+  filesystem-only under the repository root — so the default posture still opens
+  no network path. A provider that CAN reach the network is a later phase and
+  remains an explicit configuration choice;
+- the current-phase providers (`inbox`, `changed-files`) are filesystem-only
+  under the repository root: the pipeline performs any external fetch and owns
+  its credentials, so no external credential enters the product;
+- gathered context is redacted and bounded before it enters the summarizer, the
+  prompt, or the context ledger;
+- required controls for the later-phase network `platform-API` provider: it
+  contacts only its explicitly configured, host-allowlisted host; fetch targets
+  are never derived from repository content or model output; and its credentials
+  are read only from a configured environment variable name, never placed in
+  config, prompts, ledger entries, or logs;
+- required controls for the later-phase `mcp` provider: the MCP client is hosted
+  in the orchestrator and driven deterministically, never by model output; its
+  server (an operator-configured stdio command or allowlisted HTTP endpoint) and
+  its tool-name allowlist come only from configuration; it invokes only
+  allowlisted tools and MCP resources; the server endpoint or launch command is
+  never derived from repository content or model output; credentials are read
+  only from a configured environment variable name, and a stdio server that owns
+  its own credentials keeps them out of the product. Launching an operator-
+  configured subprocess for a stdio MCP server is a deliberate exception to the
+  no-subprocess posture, permitted only for this explicitly configured server.
 
 Provider-backed review requirements:
 
@@ -243,6 +414,12 @@ Rules:
   directories through the harness skill registry.
 - Mounted skills expose only `read`, `list`, and `grep` by default; shell,
   write, edit, network, and publish tools remain unavailable.
+- Skill tools and the mediated repository tools are distinct surfaces and must
+  not be conflated. Skill tools are the harness builtins scoped to the mounted
+  skill directories; the mediated `repo_read`/`repo_list`/`repo_grep` tools are
+  in-process handlers that route every call through the context retriever. The
+  tool ids are prefixed so they cannot collide with a harness builtin name, which
+  would otherwise silently route a call to the unmediated builtin.
 - Raw skill content is not inlined into workflow input, reports, logs, traces, or
   shared-context artifacts.
 
@@ -299,22 +476,68 @@ R1 operations are local/CI only:
 - no alerts;
 - no persistent service state.
 
-Operational artifacts:
+Operational artifacts, all written under the configured artifact directory:
+
+Per review run, in `<artifactDir>/<runId>/`:
 
 - `report.json`;
-- `report.md`;
-- `report.sarif`;
+- `report.md` when the Markdown format is enabled;
+- `report.sarif` when the SARIF format is enabled;
+- `review-comments.json` and `review-comments.<platform>.json` when
+  `reporting.reviewComments.enabled`;
 - `run-summary.json`;
 - `context-ledger.json`;
 - `shared-context.json`;
-- `error.json` for partial failed runs;
-- optional `eval-report.json`.
+- `observability.json`;
+- `fix-report.json` when the fix lane produced one;
+- `verification-report.json` when the verification flow ran;
+- `error.json` for partial failed runs.
+
+Per artifact directory:
+
+- `index.json`, the run index.
+
+Evaluation artifacts, written to `.codereviewer/eval/` and again under
+`.codereviewer/eval/runs/<run-id>/`:
+
+- `eval-report.json`;
+- `eval-summary.md`;
+- `eval-recall-report.md`.
+
+A completed `codereviewer impact check` writes one run directory,
+`<artifactDir>/impact-<uuid>/`, containing `impact-report.md` and
+`impact-report.json` (spec 22 requires the rendered report to land beside
+`report.md` rather than only on stdout). A disabled run writes nothing.
+
+A completed `codereviewer intent check` writes one run directory,
+`<artifactDir>/intent-<uuid>/`, containing `intent-report.md` and
+`intent-report.json`, for the same reason the impact one does: the report has to
+land beside `report.md` rather than only on stdout. Every non-completed outcome
+(`disabled`, `no-intent`, `provider-unavailable`, and the other statuses that
+mapped nothing) writes nothing.
+
+Neither the impact nor the intent run directory is recorded in the run index:
+the index feeds baseline resolution, which expects a review report, and an entry
+pointing at a reference or mapping report would hand `baseline write` a document
+of the wrong shape.
+
+`codereviewer config validate`, `eval compare`, `eval recall-report`,
+`eval slice-manifest`, and `drift check` write no artifacts and print to stdout
+only.
 
 Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
 User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and
 `.codereviewer/skills/` may be committed when they do not contain secrets.
 
 ## CI/CD Hardening
+
+**The template is shipped, so this section is no longer about the future
+(2026-08-14).** `.github/workflows/code-review.yml` and `scripts/github/` are inside
+First Release Scope (`00-scope-and-glossary.md`), and until this amendment the
+section below was written in the future tense — *"R1 must document these constraints
+before any CI template is shipped"* — about a template already shipped. The
+constraints below are therefore **requirements on the shipped workflow**, not
+guidance for a later one.
 
 Future hosted CI examples and templates must use secure defaults:
 
@@ -328,7 +551,33 @@ Future hosted CI examples and templates must use secure defaults:
 - ephemeral runners or cleaned workspaces for sensitive runs;
 - separate review/report generation from publishing permissions.
 
-R1 must document these constraints before any CI template is shipped.
+**Compliance of the shipped workflow, checked 2026-08-14 and recorded rather than
+asserted.** It triggers on `pull_request` rather than `pull_request_target`, so
+untrusted code is never checked out in a privileged context; top-level `permissions`
+is `contents: read` and only the one job that must comment widens it to
+`pull-requests: write`; every action is pinned by commit SHA; nothing from the
+pull-request title or body is interpolated into a `run:` or `env:`; and the
+`concurrency` group bounds how many reviews are in flight per pull request. It uses
+the job's `GITHUB_TOKEN` rather than OIDC, which the list above requires only for
+cloud credentials, of which it has none.
+
+**This section is the workflow's threat model; the tables above are the engine's.**
+The invariant *"the only network path is the explicitly selected model provider
+endpoint"* and the attacker-vector table are written as product-level claims and were
+derived when `src/` was the whole product. They describe the engine, and the engine
+still makes no forge call and holds no forge credential. The shipped integration is a
+second network destination (the forge API) and the one credential-holding surface,
+and it reads attacker-authored pull-request text and posts model-derived content
+back. A reviewer auditing the product against the tables above alone would conclude
+there is exactly one network destination and no credential-holding surface; there are
+two and there is one. The engine-level invariants are unchanged and were not
+weakened — what was missing is that they are scoped to `src/`, which is now said
+here.
+
+**Not a live vulnerability, and the distinction is deliberate.** The gap this
+amendment closes is one of spec coverage: the controls exist in the workflow and are
+listed above; what did not exist was a spec statement that they are required, which
+is what makes a future edit to the workflow a violation rather than a preference.
 
 ## Standards Map
 
@@ -350,3 +599,34 @@ The security model follows these external references as requirements inputs:
 - Permission default tests.
 - No-content telemetry tests.
 - Artifact filename tests.
+
+## OpenTelemetry Is A Dependency Check, Not Tracing
+
+`observability.openTelemetry.enabled` verifies the two OTLP packages are
+importable and returns. **No span is created anywhere in this engine**, so no
+trace reaches the configured endpoint, and neither package is a dependency of this
+project — a default install therefore fails the run with
+`opentelemetry_dependency_missing` when the key is set.
+
+The run used to log "OpenTelemetry setup completed" at that point, which stated a
+working exporter. It now warns that nothing will arrive, and the step attributes
+record `dependenciesPresent` / `spansExported` rather than a bare `enabled: true`.
+
+This is recorded rather than removed because the key, its validation, and its
+documentation span seventeen files: deleting a documented capability is a product
+decision, not a cleanup. What is NOT acceptable, and is fixed, is a run reporting
+success for something it did not do. Emitting real spans, or withdrawing the key,
+is the follow-up — either is fine; the current state must simply not lie about
+which one it is.
+
+**"Either is fine" is not a decision, and the interim state has a cost (noted
+2026-08-14).** The paragraph above is right that both resolutions are acceptable and
+right that the choice is the product owner's. What it does not do is close, and the
+state it leaves standing is a **shipped, schema-validated configuration key whose
+only effect on a default install is to fail the run** with
+`opentelemetry_dependency_missing`. An operator who reads the key, sets it, and has
+not separately installed two packages this project does not depend on gets a failed
+run for enabling observability. That is a trap rather than a neutral holding
+position, so the follow-up is recorded here as **owed and undated** rather than as
+satisfied by the honesty fix. Nothing above is withdrawn: the fix to the lying log
+line was the urgent half and it landed.

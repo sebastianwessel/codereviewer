@@ -1,7 +1,7 @@
 # 00: Vision
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-31
 
 ## Product Vision
 
@@ -25,14 +25,20 @@ already run CodeQL, linters, formatters, tests, and build checks.
 - resolves OpenAI/OpenAI-compatible, AWS Bedrock, and Azure providers through
   optional adapter packages only when configured;
 - runs deterministic evaluation fixtures and quality gates;
+- answers, on a default run, what the change was for and whether it got there
+  (intent) and what it might break (impact) — two advisory lanes, on by default
+  since 2026-08-11, runnable on their own as `intent check` and `impact check`,
+  and unable to fail a pipeline on their own findings under any configuration;
 - denies publishing, shell execution, broad network access, and fix application.
+  The optional fix lane produces apply-checked edit suggestions in memory only:
+  it never writes a source file.
 
 ## Success Criteria
 
 | ID | Criterion | Verification |
 | --- | --- | --- |
 | VIS-001 | Actionable review output includes only admitted findings whose refutation verdict is `proved`. | Admission, refutation, and report integration tests. |
-| VIS-002 | Default runs leak no raw source, prompts, provider responses, or secrets into logs/traces/reports. | Redaction and artifact snapshot tests. |
+| VIS-002 | Default runs leak no raw source, prompts, or provider responses into logs/traces/reports, and remove every secret shape on the redactor's pattern list plus every operator-configured exact value. Completeness beyond that list is NOT claimed — see `07-security-privacy-operations.md`, *What The Mechanism Supports, And What It Does Not*. | Redaction and artifact snapshot tests over known tokens, per seam. |
 | VIS-003 | Provider packages are optional and isolated from base imports. | Provider-resolution unit tests and static import scan. |
 | VIS-004 | Reports are deterministic from canonical contracts. | Snapshot and schema validation tests. |
 | VIS-005 | Agent implementation work proceeds from approved tickets only. | Planning gate and ticket review. |

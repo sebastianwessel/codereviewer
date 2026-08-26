@@ -1,0 +1,456 @@
+# Troubleshooting
+
+Every failure surfaces as a single JSON object on stderr:
+
+```json cli-error
+{ "code": "…", "message": "…" }
+```
+
+Find your `code` below. For the exit-code contract, see
+[exit-codes-and-error-codes.md](../06-reference/exit-codes-and-error-codes.md).
+For what a failed run leaves behind, see
+[partial-and-failed-runs.md](partial-and-failed-runs.md).
+
+---
+
+## First moves
+
+Print the fully merged, redacted configuration — most problems are visible
+here:
+
+```bash
+npm run cli -- config validate
+```
+
+Re-run the failing command with debug logging to a file:
+
+```bash
+npm run cli -- review --debug --log-file .codereviewer/review.log
+```
+
+Logs are JSONL and carry run ids, step names, timings, counts and error codes.
+They never carry source, prompts, provider responses or secrets, so they are
+safe to attach to a bug report.
+
+---
+
+## Usage and configuration
+
+### `usage_error` — exit 2
+
+The command was not recognized, or a required argument was missing.
+
+The full command set is `config validate`, `review`, `baseline write`,
+`eval run`, `eval compare`, `eval recall-report`, `eval slice-manifest`,
+`drift check`, `impact check`, `intent check`.
+
+Three parsing rules cause most surprises:
+
+- **Unknown flags are rejected, before the command does any work.** A typo like
+  `--base_ref` exits `2` with `usage_error` naming the flag. That is deliberate:
+  a parser that ignored a flag it does not implement let a run proceed as though
+  the flag had been honoured, which this project paid for twice — an A/B whose
+  config flag never reached the run compared a build against itself for about
+  $11.50, and `eval run --help` ran a full default evaluation instead of printing
+  usage.
+- **The option set is per command.** A flag one command accepts is still unknown
+  to another. Only `--config` is global. `--debug`, `--log-level` and `--log-file`
+  are accepted by `review` and `eval run` **only** — the other five commands
+  reject them with exit `2`, because being told an option is unknown beats having
+  it silently ignored.
+- **`--flag=value` and `--flag value` are equivalent**, for every flag on every
+  command, `--config` and `--file` included. The joined form used to pass the
+  unknown-flag check and then be dropped by the value parsers, so `--config=path`
+  validated and the run proceeded on defaults at exit `0`. If a flag seems to have
+  no effect, that is no longer why — check the precedence chain below.
+
+### `config_error` — exit 2
+
+Schema validation failed. The message names the field path and the rule, never
+the submitted value.
+
+| Symptom | Cause |
+| --- | --- |
+| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. Removed blocks (`review.contextScout`, `review.guardedRegionContext`, `review.refutationRetrieval`, `invariantConformance`, `security.signals`) land here — delete them. |
+| `The configuration file "…" does not exist` | A config file named by `--config` or `CODEREVIEWER_CONFIG_PATH` is not there. A **named** file that is missing stops the run; continuing on defaults would review with settings nobody asked for and report success. A missing file at the **default** path is only the `config-file-missing` warning. |
+| A `security.*` key "must be false" | `allowShell`, `allowNetwork`, `allowFilesystemWrite` and `captureContentTelemetry` accept the literal `false` only. There is no override. |
+| `aiReview.requireRefutation` rejected | It accepts the literal `true` only. Refutation cannot be disabled. |
+| `Path must be repository-relative` / `must not traverse above root` | A configured path escapes the repository root. |
+| `Config file must contain a JSON object` | The file parsed but is an array or scalar. |
+| `Unsupported configuration key: __proto__` | Prototype-pollution keys are rejected. |
+| `endpoint is required when OpenTelemetry is enabled` | Add `observability.openTelemetry.endpoint`. |
+| `baseUrl is required for openai-compatible providers` | Add `provider.baseUrl`. |
+
+Config precedence, from weakest to strongest: built-in defaults →
+`.codereviewer/config.json` → process environment → `.env` file → CLI flags.
+If a value is not what you set, something later in that chain overrode it. A
+stray `.env` in the working tree beating a CI variable is the classic case.
+
+### `model_review_provider_missing` — exit 2
+
+`aiReview.enabled` is `true` (its default) and no `provider` is configured, so
+the run was asked for a model review it has no model to perform. It is refused in
+preflight, before any repository work, because the alternative was what it used
+to do: zero findings, a passing quality gate and exit `0` — a review that
+searched nothing, reported as one that found nothing.
+
+Two ways out, and they are different runs:
+
+- configure `provider.id`, `provider.model` and the credentials the adapter
+  names, to get the model review you asked for; or
+- set `aiReview.enabled: false` to run deterministic-only on purpose. That run
+  completes at exit `0` and its report records `run.modelSearch: "not-performed"`
+  and states that no model searched the change.
+
+### `invalid_git_ref` — exit 2
+
+A ref is empty or starts with `-`. This is deliberate: it blocks argument
+injection through a ref value.
+
+### `instruction_read_denied` / `skill_read_denied` — exit 2
+
+An instruction file or skill was not allowed for the run. Check that the path
+is repository-relative and resolves under the repository root.
+
+### Enabling skills fails with a missing-path error
+
+`skills.directories` entries must exist. Enabling `skills.enabled` while
+`.codereviewer/skills` does not exist fails when the index tries to resolve the
+directory. Create it, or point `skills.directories` at a directory that exists.
+
+Skill files also validate strictly: `SKILL.md` must start with a terminated
+`---` frontmatter block, `name` must be a lowercase slug (letters, digits and
+single dashes, 1–64 characters, no leading/trailing dash and no `--`), and
+`description` must be 1–1024 characters. Duplicate names across all configured
+directories fail the run.
+
+---
+
+## Repository and git
+
+### `no_reviewable_change` — exit 3
+
+Nothing was left to review. Two different runs reach it.
+
+**From a diff:** the base and head refs differ by **no files**. Almost always one
+of two things:
+
+- `--base-ref` and `--head-ref` are the wrong way round;
+- the head branch is already contained in the base (behind it, or already merged).
+
+**From an explicit file list:** `--file` / `--files` bypasses the diff, and every
+file you named was skipped. The message names each one and why — it does not
+exist or could not be read, it is binary, it is over `review.maxFileBytes`, or
+`paths.exclude` matched it (lock files, minified bundles, source maps and
+snapshots are excluded by default, so `--file package-lock.json` lands here).
+Fix the path, or drop the filter that removed it.
+
+This is refused rather than reported, deliberately. An empty change set otherwise
+travels through every later stage looking exactly like a clean one — zero files read,
+zero findings, **quality gate passed, exit 0** — so a swapped pair of refs produced a
+green CI gate on a review that examined nothing.
+
+Fix the ref order, or rebase the head onto the base, and re-run.
+
+### `merge_base_unavailable` — exit 3
+
+> No merge base exists for the configured base and head refs. Fetch enough
+> history for both refs (for example a full-depth checkout) and retry.
+
+Almost always a shallow CI clone. Fixes:
+
+| Platform | Fix |
+| --- | --- |
+| GitHub Actions | `fetch-depth: 0` on `actions/checkout` |
+| GitLab CI | `GIT_DEPTH: 0` |
+| Bitbucket Pipelines | `git fetch --unshallow` plus an explicit fetch of the destination branch |
+| Local | Make sure the base ref exists locally: `git fetch origin main` |
+
+It can also mean the two refs genuinely share no history (an unrelated branch,
+or a fresh orphan branch).
+
+### `baseline_source_unavailable` — exit 3
+
+> No completed review report was found to build a baseline from.
+
+`baseline write` looks for the newest run with a report in
+`<artifactDir>/index.json`. Run a review first, or pass the report explicitly:
+
+```bash
+npm run cli -- baseline write --report .codereviewer/runs/<runId>/report.json
+```
+
+The same code covers a `--report` path that exists but could not be read, and
+the message says which of those it was — each needs a different fix:
+
+| Message says | `details.cause` | Do this |
+| --- | --- | --- |
+| does not exist | `ENOENT` | Check the path, or omit `--report` to use the newest completed run. |
+| permission denied | `EACCES` / `EPERM` | Grant read access, or point at a report this user can read. |
+| is a directory, not a file | `EISDIR` | Point at the `report.json` inside it. |
+| refused before it was read | `path_outside_repository` | Pass a repository-relative path inside the repository. |
+
+### `baseline_source_invalid` — exit 3
+
+> The file at "…" is valid JSON but is not a review report.
+
+The path resolved to something that is not a run's `report.json` — most often a
+`run-summary.json`, an eval report, or an already-written `baseline.json`. Pass
+the report itself. `details.firstSchemaIssue` names the field that decided it,
+which distinguishes a wrong-file mistake from a truncated report.
+
+### `repository_error` / `repository_timeout` — exit 3
+
+A filesystem or git operation failed. Two causes are named outright, because both
+are things a first run hits and neither is worth reading git's own output for.
+`details.cause` says which:
+
+| `details.cause` | Message says | Do this |
+| --- | --- | --- |
+| `ref_not_found` | a named ref does not resolve to a commit in this repository | Check it with `git rev-parse <ref>`. A remote-tracking ref such as `origin/main` needs `git fetch origin` first, and does not exist at all in a repository with no remote — use a local ref like `main`. |
+| `not_a_git_repository` | the working directory is not inside a git repository | The CLI always reviews the repository at its current working directory. Run it from that repository's root. |
+
+Anything else is a generic failure: check that the artifact directory is
+writable, and that no path in the configuration points outside the repository
+root.
+
+---
+
+## Provider
+
+All of these are covered in more depth in
+[providers.md](../04-guides/providers.md).
+
+### `provider_adapter_missing` — exit 2
+
+The peer package is not installed. The message names it. Install the matching
+adapter:
+
+```bash
+npm run provider:install:openai
+```
+
+```bash
+npm run provider:install:bedrock
+```
+
+```bash
+npm run provider:install:azure
+```
+
+### `provider_credentials_missing` — exit 2
+
+A required environment variable is empty or absent. The message names it:
+`OPENAI_API_KEY`, `AWS_REGION`, `AZURE_AI_ENDPOINT` or `AZURE_AI_API_KEY`.
+
+Remember that `.env` overrides the process environment, so an empty value there
+masks a correctly exported shell variable.
+
+### `provider_base_url_missing` — exit 2
+
+`provider.id` is `openai-compatible` but `provider.baseUrl` is unset.
+
+### `provider_adapter_invalid` — exit 2
+
+The installed adapter package does not export the expected factory. Reinstall,
+and align the adapter version with the installed `@purista/harness`.
+
+### `provider_auth` — exit 4
+
+HTTP 401/403, or an "api key"/"unauthorized"/"forbidden" message. Not retried.
+Check the key, the account, and — for `openai-compatible` — that the key is
+valid for that gateway.
+
+### `provider_rate_limited` — exit 4
+
+HTTP 429 or an overload message. It **is** retried, honoring `Retry-After`, up
+to `provider.maxRetries` attempts and `provider.retryMaxDelayMs` per wait. A
+required wait longer than the cap fails rather than blocking.
+
+Reduce pressure with `review.maxConcurrentTasks`, or raise
+`provider.retryMaxDelayMs`.
+
+### `provider_context_length` — exit 4
+
+The packet exceeded the model's context window. Not retried at the provider, but
+the task is halved and each half retried until the pieces are accepted; only a
+unit that cannot be split further fails, as `review_task_indivisible`.
+
+`review.depth` is **not** the dial — it does not bound the packet at all, only the
+mediated retrieval budget. Narrow the scope (`paths.include`, `paths.exclude`, a
+smaller ref range), set `review.contextMaxBytes` to lower the packet ceiling, or
+configure a model with a larger context window.
+
+### `task_packet_budget_exceeded` — exit 4
+
+A task packet exceeded the engine's own input budget even after shedding
+optional context. For refutation this is usually invisible: an oversized batch
+splits in half and retries. When it does surface, the task has a very large
+changed file — check `review.maxFileBytes` and `paths.exclude`.
+
+### `provider_timeout` / `provider_server_error` / `provider_error` — exit 4
+
+Transient classes are retried. Persistent failures point at the endpoint.
+Raise `provider.timeoutMs` for a slow gateway.
+
+### The run is taking a long time
+
+There is no run timeout, deliberately — a deadline would abort work that was
+progressing, and a review takes as long as the change needs. If a run is slower
+than you want, shrink it (`paths.exclude`, `review.maxFiles`, a narrower ref
+range) or raise `aiReview.maxFilesPerDiscoveryCall` to spend fewer calls per file.
+A single call that hangs is already bounded by `provider.timeoutMs`.
+
+---
+
+## Gates and quality
+
+### Exit 1 with `qualityGatePassed: false`
+
+Not an error — the gate did its job. `report.json` lists
+`qualityGate.failingFindingIds`. Options:
+
+- Fix the findings.
+- Adjust `qualityGate.maxCritical` / `maxHigh` / `maxMedium`.
+- Adopt a baseline so only new findings count — see
+  [ci-cd.md](../04-guides/ci-cd.md).
+
+### Exit 1 with `qualityGatePassed: false` and an **empty** `failingFindingIds`
+
+The gate failed on an unrecovered provider issue, not on a finding. There is
+nothing to name because the failure is that findings are **missing**: a discovery
+call that errored contributed no candidates, a failed refutation rejected its
+candidates unadjudicated, a failed semantic merge left a file ungrouped. Read
+`providerIssues` in `report.json` — an issue with `recovered: false`, or with no
+`recovered` field at all, is what fired.
+
+Before this was enforced, an outage shrank the set the gate measured, so a change
+was *more* likely to clear the gate during a provider failure than on a healthy
+run. Re-run it; if the provider is genuinely unavailable, fix that first.
+`qualityGate.failOnProviderError: false` turns the check off and changes nothing
+else.
+
+### `quality_gate_missing` — exit 5
+
+A completed run's report carried no quality gate result. Every completed run
+evaluates its gate, so this is an internal inconsistency and the run refuses to
+be reported as passing one. The full artifact set **is** written and the run is
+indexed as completed before this fires, so attach the run directory to the bug
+report.
+
+### `drift_gate_failed` — exit 1
+
+Hard drift findings blocked the run. By default `generated-artifact-drift` and
+`security-drift` are errors; other categories are warnings. Run the check
+alone to see the findings:
+
+```bash
+npm run cli -- drift check
+```
+
+Generated-artifact drift usually means the checked-in JSON schemas are stale:
+
+```bash
+npm run generate:schemas
+```
+
+### `coverage_incomplete` — exit 1
+
+The run did not assign all required source to review tasks, so it refuses to
+claim success. `error.json` carries the reviewable and covered file and byte
+counts. Look for files skipped by size (`review.maxFileBytes`) or by
+`paths.exclude`.
+
+### `cost_budget_exceeded` — exit 1
+
+`review.maxCostUsd` was exceeded. The check runs **after** the review, so this
+reports what was spent rather than stopping it.
+
+A related message that is **not** this error: if the review finished inside the cap
+but left no headroom, an advisory stage reports that it produced no report because
+the run had already spent its budget. That is a warning, not a failure — the exit
+code is unchanged and the review is complete. Raise `review.maxCostUsd`, or run
+`impact check` / `intent check` separately under their own budget. See
+[controlling-cost.md](../04-guides/controlling-cost.md).
+
+---
+
+## Quality complaints
+
+| Symptom | First thing to try |
+| --- | --- |
+| Too many low-value findings | Raise `aiReview.actionableSeverityThreshold`; set `promotionPolicy.modelWeakOrRefuted` to `rejected` |
+| Report has a large "needs more evidence" section | Same: `promotionPolicy.modelWeakOrRefuted: "rejected"` |
+| Findings exist but no inline comments | `reporting.reviewComments.enabled` is true by default — check it was not explicitly turned off. A finding also needs a reported line that falls inside a reviewed hunk and severity at or above `review.inlineSeverityThreshold` (default `high`); lower the threshold to widen it |
+| Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
+| Misses security issues specifically | `security.dedicatedPass.enabled: true` |
+| Misses defects that depend on unchanged code | `review.crossFileRetrieval` is the dial and is **on by default** — its old net-negative verdict was measuring a truncation bug and does not stand. But out-of-diff recall is 0 of 27 on the 37-case corpus, and every miss sat in a file shown in full, so this is attention, not information. The context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) for the same reason |
+| Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |
+
+Depth guidance and the full dial list: [tuning-noise-and-recall.md](../04-guides/tuning-noise-and-recall.md).
+
+---
+
+## Nothing was reviewed
+
+| Cause | Check |
+| --- | --- |
+| No changed files between the refs | `git diff --name-only $(git merge-base origin/main HEAD) HEAD` |
+| Everything was excluded | `paths.include` / `paths.exclude` — setting `exclude` replaces the built-in list |
+| Files above the size cap | `skippedFiles` in `report.json`; `review.maxFileBytes` |
+| More files than the cap | `review.maxFiles` |
+| No provider configured | `provider` absent means no model findings by design; `config validate` shows whether it is set |
+
+---
+
+## Cost shows as unavailable
+
+The run warning `cost-unavailable` means no price could be resolved: the
+provider reported no cost, no `costs.*` prices are configured, and the built-in
+snapshot (OpenAI models only) has no entry for the model name. Set the prices
+explicitly:
+
+```json
+{ "costs": { "inputPerMillion": 0.25, "outputPerMillion": 2.0 } }
+```
+
+Or refresh the snapshot:
+
+```bash
+npm run update:model-pricing
+```
+
+---
+
+## Evaluation
+
+### `eval run selected no cases` — exit 2
+
+Every `--case` filter matched nothing, or the `--slice-root` directory has no
+slice directories.
+
+### `eval_semantic_judge_missing` — exit 2
+
+A case declares expected findings but no provider is configured. The matcher is
+judge-only and never falls back to a heuristic — configure a provider.
+
+### `provider_capability_missing` — exit 2
+
+The judge needs a provider with structured object output. Check the model
+supports it.
+
+### `sarif_invalid` — exit 5
+
+The rendered SARIF failed its own validation. With
+`reporting.sarif.target: "github"` the extra GitHub constraints apply (partial
+fingerprints required, rule-count limit). Switch to `generic` to confirm.
+
+---
+
+## Still stuck
+
+- `unknown_error` (exit 5) is an unexpected internal failure. `error.json`
+  carries the normalized, redacted record.
+- Re-run with `--debug --log-file`, then attach `error.json`, the log, and
+  `run-summary.json`. None of them contain source, prompts or secrets.
+- Confirm your Node version matches `.nvmrc` (`>=24.15.0`).

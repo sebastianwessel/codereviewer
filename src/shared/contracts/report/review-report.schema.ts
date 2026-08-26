@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { ReportFormatSchema, RepositoryRelativePathSchema } from '../config/config.schema.js'
+import {
+  ReportFormatSchema,
+  RepositoryRelativePathSchema,
+  ReviewDepthSchema,
+  ReviewModeSchema
+} from '../config/config.schema.js'
 import {
   AdmittedFindingSchema,
   ContractIdSchema,
@@ -10,9 +15,6 @@ import {
   Sha256Schema,
   TaskIdSchema
 } from '../findings/finding.schema.js'
-
-export const ReviewModeSchema = z.enum(['local', 'ci', 'pr', 'full'])
-export const ReviewDepthSchema = z.enum(['fast', 'balanced', 'thorough'])
 
 export const RunSummarySchema = z.strictObject({
   runId: z.string().min(1),
@@ -27,8 +29,40 @@ export const RunSummarySchema = z.strictObject({
   // headRef. Absent for explicit-file runs, which bypass git entirely.
   mergeBaseRef: z.string().optional(),
   configHash: Sha256Schema,
+  // The provider and model that PRODUCED this run's findings — never the ones
+  // configuration merely names. They used to be copied off `config.provider`
+  // unconditionally, so a run with `aiReview.enabled: false` reported a model for
+  // a change no model had seen, and every surface reads these two as provenance.
   provider: z.string().optional(),
   model: z.string().optional(),
+  // Whether a model actually searched this change for defects.
+  //
+  // WHY THIS IS A FIELD AND NOT AN INFERENCE. `aiReview.enabled: false` (or no
+  // configured provider) produces a run with zero findings, a passing gate and
+  // exit 0 — a clean bill of health for a search that never happened. Every
+  // reader-facing surface then printed the measured recall and precision of a
+  // model search over it. The surfaces need a signal to refuse that, and the two
+  // signals already on the report cannot carry it:
+  //
+  //   - `discovery` is absent both for a run that issued no discovery call AND
+  //     for a genuinely searched run that recorded no telemetry, so reading its
+  //     absence as "no search ran" would strip a real search of its rates and
+  //     accuse it of not having looked.
+  //   - `model` is absent for a run that did not RECORD its model, which is a
+  //     different fact from a run that used none.
+  //
+  // OPTIONAL FOR A LIVE REASON, not for an older artifact. `createReviewRunSummary`
+  // omits the key entirely when its caller passes undefined, and the caller's input
+  // type requires the key while allowing that value precisely so a caller that
+  // cannot say has to say so deliberately. Absent therefore means THIS REPORT DOES
+  // NOT SAY, which is not the same claim as `performed`, so a surface may only
+  // suppress its rates on an explicit `not-performed`.
+  //
+  // There is no compatibility window behind this. Producer and consumer ship in
+  // one commit, no review report is ever read back from disk by this engine, and
+  // the only one that exists anywhere is a byproduct inside a hydrated corpus
+  // fixture that nothing reads.
+  modelSearch: z.enum(['performed', 'not-performed']).optional(),
   durationMs: z.int().min(0),
   costUsd: z.number().min(0).optional(),
   inputTokens: z.int().min(0).optional(),
@@ -85,12 +119,194 @@ export const CoverageFileSchema = z
 
 export const CoverageSummarySchema = z.strictObject({
   status: z.enum(['complete', 'incomplete']),
+  // Files that never reached review at all — excluded by `review.maxFiles`, too
+  // large for `review.maxFileBytes`, binary, deleted, unsupported.
+  //
+  // The counts below have always been over the files that DID reach review, so a
+  // run that dropped 300 of 800 changed files could report "500 of 500
+  // reviewable — complete". The Skipped Files section keeps `report.md` honest,
+  // but a machine reading `coverage.status` alone — which is exactly what a CI
+  // step does — saw a clean certificate. A proof of what was read has to state
+  // what was never opened, or it is a proof of nothing.
+  excludedFileCount: z.int().min(0),
   reviewableFileCount: z.int().min(0),
   coveredFileCount: z.int().min(0),
   reviewableBytes: z.int().min(0),
   coveredBytes: z.int().min(0),
   incompleteReasons: z.array(z.string().min(1).max(500)),
   files: z.array(CoverageFileSchema)
+})
+
+// Spec 27. What DISCOVERY produced, as distinct from what survived refutation and
+// admission. Every figure here was already computed — and then thrown away in a
+// `logger.debug` line, with debug logging off for every paid evaluation run. That
+// is why no measurement this project has made can say whether the measured
+// ~1.2-findings-per-file ceiling originates in discovery or is imposed later by the
+// stages after it. Nothing new has to be measured; it only has to be recorded, and
+// recording it here answers the question from runs that were going to happen anyway.
+export const DiscoveryTelemetrySchema = z.strictObject({
+  // Discovery calls actually issued to the provider: one per partition per pass
+  // (spec 27), plus the extra calls a reactive split produced (spec 26). Yield is
+  // CALL-bound, so no discovery number means anything without the count of looks
+  // that produced it.
+  callCount: z.int().min(0),
+  // Raw findings the model returned, counted BEFORE the schema parse, the
+  // `task.paths` scope filter, the per-call candidate cap, and the merge. This is
+  // the load-bearing number: it is the only one that reflects what discovery
+  // actually produced rather than what later stages let through, and it is the
+  // difference between "the reviewer did not look harder" and "it did, and the
+  // filters removed the difference".
+  rawFindingCount: z.int().min(0),
+  // The same figure per CALL, in issue order. A total cannot answer the open
+  // question, which is about the SHAPE of the distribution: a hard ceiling at
+  // roughly one finding per file and a broad spread with the same mean imply
+  // different fixes. Length equals `callCount` by construction.
+  rawFindingsPerCall: z.array(z.int().min(0)),
+  // Candidates surviving collection: post-parse, post-scope, post-cap,
+  // post-suppression, and before the semantic merge groups duplicates away.
+  candidateCount: z.int().min(0),
+  // Raw findings that never became candidates, separated by cause. A finding that
+  // failed to parse or named an out-of-scope path is a different problem from one
+  // suppressed as a duplicate, and one counter for all of them hides each behind
+  // the others.
+  droppedCount: z.int().min(0),
+  suppressedByIdCount: z.int().min(0),
+  suppressedByLocationCount: z.int().min(0),
+  // Raw findings the PER-CALL CANDIDATE CAP refused. It was the only loss cause
+  // here without a counter: the collection loop broke out before counting, so a
+  // finding the model actually produced was discarded before refutation and left
+  // no trace — recoverable only by subtracting every other counter from
+  // `rawFindingCount`, which is not a thing a reader does. Nothing in this schema
+  // is more important to keep honest, because a capped finding is a defect the
+  // engine found and then threw away.
+  cappedByLimitCount: z.int().min(0),
+  // Spec 26: how many times the provider refused a packet and it was halved. Named
+  // apart from transient retry on purpose — an oversize split and a rate-limit retry
+  // have different causes and different meanings.
+  contextOverflowSplitCount: z.int().min(0),
+  // Spec 28: how many times a refused packet was answered by HALVING the retriever's
+  // per-read byte allowance instead of by splitting the task. Its sibling above was
+  // the only visible response to an overflow, and this one is the response that
+  // happens FIRST — so a run that narrowed its own reads repeatedly, down to the
+  // 4 000-byte floor, reported `contextOverflowSplitCount: 0` and read exactly like
+  // a run that never strained. The reduction outlives the call that caused it: it
+  // mutates the single run-wide retriever, so every later task reads less too.
+  //
+  // Optional, and absent means NOT RECORDED rather than zero — the same distinction
+  // `discovery` itself carries in `docs/06-reference/artifacts.md`. A report written
+  // before this counter existed must not be read as one that never reduced.
+  readBudgetReductionCount: z.int().min(0).optional(),
+  // Spec 05 merge counters. Both are needed: "the merge is not firing" (no calls)
+  // and "there was nothing to merge" (calls, no groups) are indistinguishable from a
+  // candidate count alone, and they have opposite fixes.
+  mergeCallCount: z.int().min(0),
+  mergeGroupCount: z.int().min(0),
+  mergedAwayCount: z.int().min(0)
+})
+
+export const TaskDiscoveryTelemetrySchema = DiscoveryTelemetrySchema.extend({
+  taskId: TaskIdSchema,
+  // Spec 16: whether this task spent its whole cross-file tool-call allowance
+  // (`review.crossFileRetrieval.maxToolCallsPerTask`) — the reviewer stopped
+  // looking because it ran out of lookups, not because it was finished.
+  //
+  // PER TASK and not summed into `totals`, because the allowance is per task: one
+  // exhausted task says the cap bound for that task's files, and adding the flags
+  // up would state a run-wide condition that does not exist.
+  //
+  // Three states, which is why this is an optional boolean rather than a defaulted
+  // one: absent means the task had NO retrieval scope at all (cross-file retrieval
+  // off, or no repository root), and "the reviewer had no lookups to run out of" is
+  // a different fact from "it had them and did not exhaust them". Until this field
+  // existed the only report of it was a `logger.debug` line, dropped twice over —
+  // once by the level and once by the `silent` default.
+  retrievalBudgetExhausted: z.boolean().optional()
+})
+
+export const ReviewDiscoveryReportSchema = z.strictObject({
+  // Summed across every task in the run. `rawFindingsPerCall` concatenates the
+  // per-task arrays, so the run-level distribution is recoverable too.
+  totals: DiscoveryTelemetrySchema,
+  // Kept per task as well because it is free: the per-task rows are what a
+  // comparison needs to pair arms case by case rather than only in aggregate.
+  tasks: z.array(TaskDiscoveryTelemetrySchema)
+})
+
+// Spec 29. Of the source files this change modified, which have no test file
+// paired with them IN THIS SAME CHANGE. Deterministic, free, and computed from
+// material the engine already produced: no model call, no configuration key.
+//
+// IT IS NOT A FINDING, AND THE SHAPE IS WHAT ENFORCES THAT. There is no id here,
+// no severity, no category, no location, no evidence, no fingerprint — nothing
+// that would let this join `admittedFindings`, cross the quality gate, reach the
+// SARIF interchange or become an inline comment. Spec 23 reports extra scope as "a
+// path and a line count and nothing else" precisely because doing more would
+// assert something it cannot know; this reports a path and nothing at all, for the
+// same reason.
+//
+// WHAT IT CANNOT KNOW, and why every count below says "in this change": the signal
+// sees the changed file set and nothing else. A changed production file may be
+// covered completely by an existing test the change had no reason to touch, and
+// nothing here can tell that apart from a file with no test at all. Every
+// rendering of this signal states that in words; a reader who takes
+// `unpairedPaths` for "these files are untested" has been told the opposite.
+const TestAdequacyUnknownSchema = z.strictObject({
+  // Changed files in a language the deterministic signal registry has no adapter
+  // for. A file the engine cannot parse cannot be paired with anything, so it is
+  // UNKNOWN — never untested. Documentation, configuration and every unsupported
+  // language land here, which is also why a docs-only change reports zero
+  // considered files rather than a list.
+  unsupportedLanguageFileCount: z.int().min(0),
+  // Changed files that never reached the registry at all: too large, binary,
+  // excluded by pattern, over the file cap, or unreadable. The pairing was
+  // computed over the files that WERE analysed, so a file outside that set has no
+  // answer rather than a negative one.
+  //
+  // Deleted paths are deliberately not counted here or anywhere else: a file the
+  // change removes has nothing at head to carry a test.
+  notAnalysedFileCount: z.int().min(0)
+})
+
+export const TestAdequacySignalSchema = z
+  .strictObject({
+    // Changed files the question could be asked of at all: analysed by the
+    // registry, in a language it supports, and not themselves test material.
+    consideredFileCount: z.int().min(0),
+    // Considered files a test file in this same change pairs with, by each
+    // language's own naming and location convention.
+    pairedFileCount: z.int().min(0),
+    // The considered files no test file in this change pairs with, sorted. A path
+    // and nothing else.
+    unpairedPaths: z.array(RepositoryRelativePathSchema),
+    // Test-side files the change touched. Stated so the unpaired list can be read
+    // against it: a change that adds tests in a tree of their own pairs nothing by
+    // name and is not a change that carries no tests.
+    changedTestFileCount: z.int().min(0),
+    unknown: TestAdequacyUnknownSchema
+  })
+  .refine(
+    (value) => value.pairedFileCount + value.unpairedPaths.length === value.consideredFileCount,
+    {
+      message:
+        'consideredFileCount must equal pairedFileCount plus the unpaired paths',
+      path: ['consideredFileCount']
+    }
+  )
+
+// Links an admitted finding to the confirming verification verdict(s) that
+// independently support it (spec 12 "Corroboration"). A CONFIDENCE signal only:
+// there is deliberately no severity field, and admission never reads it.
+//
+// Defined here, in the report contract, rather than inside the verification
+// domain, because both artifacts carry the same records and a second shape for
+// one fact is how the two drift.
+export const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
+
+export const FindingCorroborationSchema = z.strictObject({
+  findingId: z.string().min(1),
+  confidence: z.literal('corroborated'),
+  matchKinds: z.array(CorroborationMatchKindSchema),
+  witnessClaimIds: z.array(z.string().min(1))
 })
 
 export const ReviewReportSchema = z.strictObject({
@@ -114,15 +330,34 @@ export const ReviewReportSchema = z.strictObject({
   // Baseline entries resolved since the baseline was recorded. Present when
   // `baseline.includeResolvedInReport` is enabled.
   resolvedBaselineEntries: z.array(FindingFingerprintSchema).optional(),
+  // Optional because a run whose findings came from deterministic signals alone
+  // issued no discovery call and has none to state. Absent means "not recorded",
+  // which is not the same claim as a recorded zero.
+  discovery: ReviewDiscoveryReportSchema.optional(),
+  // Spec 29. Optional for the same reason `discovery` is: absent means THIS RUN
+  // DID NOT COMPUTE IT, which is a different claim from a computed result whose
+  // counts are zero. A completed run always records it, so a reader who finds it
+  // missing is looking at a report some other producer wrote.
+  testAdequacy: TestAdequacySignalSchema.optional(),
+  // Spec 12. Findings a verification verdict independently confirmed. Optional
+  // for the same reason `discovery` is: the lane is off by default, and absent
+  // means IT DID NOT RUN, which is a different claim from "it ran and confirmed
+  // nothing". These reached `verification-report.json` and no human surface —
+  // the one signal the lane exists to produce landed where nobody reads it.
+  corroborations: z.array(FindingCorroborationSchema).optional(),
   artifacts: z.array(ReportArtifactSchema)
 })
 
-export type ReviewMode = z.infer<typeof ReviewModeSchema>
-export type ReviewDepth = z.infer<typeof ReviewDepthSchema>
 export type RunSummary = z.infer<typeof RunSummarySchema>
 export type SkippedFile = z.infer<typeof SkippedFileSchema>
 export type QualityGateResult = z.infer<typeof QualityGateResultSchema>
 export type ReportArtifact = z.infer<typeof ReportArtifactSchema>
 export type CoverageFile = z.infer<typeof CoverageFileSchema>
 export type CoverageSummary = z.infer<typeof CoverageSummarySchema>
+export type DiscoveryTelemetry = z.infer<typeof DiscoveryTelemetrySchema>
+export type TaskDiscoveryTelemetry = z.infer<typeof TaskDiscoveryTelemetrySchema>
+export type ReviewDiscoveryReport = z.infer<typeof ReviewDiscoveryReportSchema>
+export type TestAdequacySignal = z.infer<typeof TestAdequacySignalSchema>
+export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
+export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
 export type ReviewReport = z.infer<typeof ReviewReportSchema>

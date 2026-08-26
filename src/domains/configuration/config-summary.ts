@@ -1,8 +1,6 @@
 import { redactText } from '../../shared/redaction/redactor.js'
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
-
-type JsonPrimitive = string | number | boolean | null
-type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue | undefined }
+import type { JsonValue } from '../../shared/json/json-value.js'
 
 const sensitiveKeyPattern = /(authorization|header|token|secret|api.?key|password|credential)/iu
 

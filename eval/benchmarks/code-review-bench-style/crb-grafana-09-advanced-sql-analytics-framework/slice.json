@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "critical",
       "semanticSummary": "The enableSqlExpressions function has flawed logic that always returns false, effectively disabling SQL expressions unconditionally:",
+      "securityMechanism": "unsafe-config",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "logic"
     },

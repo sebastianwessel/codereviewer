@@ -1,0 +1,305 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "multi-defect-2026",
+  "modelTrainingCutoff": "2026-01-01",
+  "splitIntegrity": {
+    "status": "single-split",
+    "contaminationNote": "Every case here is held-out and there is no dev counterpart, so the chronological-split check has nothing to compare and does not run. Read every figure from this corpus as an uncontrolled-for-memorization figure: it measures whether the engine reports more than one defect in a single reviewed file, not recall under a verified temporal split. Pair with security-advisory-2026's own held-out figures for the split guarantee."
+  },
+  "description": "Five composite cases probing whether the engine reports MULTIPLE defects in ONE reviewed file. Each case unions two or three independently curated, independently advisoried security-advisory-2026 cases that share both an upstream repository and a single defective file. Every union was verified by reading the actual file content at a real git commit common to all unioned defects (git ancestry plus direct inspection), never fabricated by cherry-picking or reverting; a group with no such commit was dropped rather than hand-built. expectedFindings are copied verbatim from the source manifest, never rewritten or re-derived, and never sourced from engine output.",
+  "cases": [
+    {
+      "id": "ipv4-parse-and-classifiers-multi-defect",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/beaugunderson/ip-address.git",
+      "upstreamOwner": "beaugunderson",
+      "upstreamRepo": "ip-address",
+      "license": "MIT",
+      "source": "security-advisory-2026-multi-defect-composite",
+      "capturedAt": "2026-08-10",
+      "fixCommit": "488fe9bc7c35363b4b090494fc38c266d217740d",
+      "fixCommittedAt": "2026-07-25T00:51:28Z",
+      "parentCommit": "e86ab3e19588761ce18caf4820b26f01ac25043b",
+      "reviewedPaths": [
+        "src/ipv4.ts"
+      ],
+      "reviewIntent": "Simplify Address4.parse so the address pattern is the only validation step, and have the special-use classification methods share the existing isInSubnet predicate instead of a separate host-comparison helper.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "src/ipv4.ts",
+          "lineRange": [
+            456,
+            506
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "All seven special-use checks (isMulticast, isPrivate, isLoopback, isLinkLocal, isUnspecified, isBroadcast, isCGNAT) classify a single address by calling isInSubnet, a network-containment predicate that returns false whenever this.subnetMask is shorter than the reference range's. subnetMask comes from the CIDR suffix on the parsed input, so appending /0 makes 127.0.0.1/0 or 169.254.169.254/0 report as non-internal while still resolving to the real target, defeating SSRF filters built on them.",
+          "securityMechanism": "ssrf",
+          "contextDepth": "cross-file"
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/ipv4.ts",
+          "lineRange": [
+            70,
+            78
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Address4.parse gates untrusted input on constants.RE_ADDRESS alone, whose per-octet alternative [01]?[0-9][0-9]? accepts a leading zero, and every downstream decode reads the octet with parseInt(part, 10). The URL host parser, inet_aton and getaddrinfo read a leading zero as octal, so new Address4('012.0.0.1') reports correctForm 12.0.0.1 and isPrivate() false while a fetch of http://012.0.0.1/ reaches 10.0.0.1. A trust boundary built on these checks passes an internal target.",
+          "securityMechanism": "ssrf",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "multi-defect",
+        "composite"
+      ],
+      "notes": "Unions ipv4-classifiers-suppressed-by-cidr-suffix + ipv4-parse-accepts-leading-zero-octets (security-advisory-2026). Verified co-present at e86ab3e19588761ce18caf4820b26f01ac25043b (= classifiers case's own parentCommit, reused unchanged as this case's fixCommit/parentCommit pair): src/ipv4.ts there has isMulticast/isPrivate/etc all delegating to isInSubnet with no suffix normalisation (456-506), AND Address4.parse gating only on the permissive RE_ADDRESS with correctForm() using parseInt(part,10) (70-78). Parse defect's fixCommit (56368cb) is a later descendant, confirmed by merge-base --is-ancestor. Reviewed diff equals the classifiers case's own diff (touches only the classifier helper); the parse defect is unchanged code outside the diff hunk.",
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-07",
+        "verdict": "non-disclosing",
+        "rationale": "Contract documentation for a helper the fix introduces. It states what that helper does, not that anything was previously wrong: connecting \"ignoring this address's own subnet mask\" to the expectation - that a CIDR suffix suppresses the range classifiers - requires reading the classifier code, which is the reasoning this case exists to measure.",
+        "acknowledgedComments": [
+          "* Returns true if this address's host bits fall inside the given subnet,",
+          "* ignoring this address's own subnet mask. See"
+        ]
+      }
+    },
+    {
+      "id": "micronaut-http-client-redirect-multi-defect",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/micronaut-projects/micronaut-core.git",
+      "upstreamOwner": "micronaut-projects",
+      "upstreamRepo": "micronaut-core",
+      "license": "Apache-2.0",
+      "source": "security-advisory-2026-multi-defect-composite",
+      "capturedAt": "2026-08-10",
+      "fixCommit": "c06a2715ca7f78321bc3ca05f41cca78cd351320",
+      "fixCommittedAt": "2026-06-01T09:30:09Z",
+      "parentCommit": "61c2d6610418d217233ad9269fa6a7e5fe91becf",
+      "reviewedPaths": [
+        "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java"
+      ],
+      "reviewIntent": "Simplify Netty HTTP client redirect handling: resolve the Location header directly instead of threading a per-request hop counter, and copy the original request's headers onto the redirect request through one shared static header list instead of per-configuration header sets.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java",
+          "lineRange": [
+            2059,
+            2075
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "On any 3xx with a Location header the client builds a redirect request and re-subscribes through makeRedirectHandler, which lands back in this same handler for the next response. Nothing counts or caps the hops. A server the client is pointed at (a user-supplied URL, a webhook target) can return a Location that redirects to itself, so the client loops indefinitely, holding a connection, an event-loop slot and memory until the process degrades.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "callee"
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java",
+          "lineRange": [
+            2104,
+            2119
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "setRedirectHeaders copies every header of the original request onto the redirect request, skipping only the five names in REDIRECT_HEADER_BLOCKLIST (Host, Content-Type, Content-Length, Transfer-Encoding, Connection). Authorization, Proxy-Authorization and Cookie are not among them, and the Location URL's host/scheme/port is never compared with the original request's, so a 3xx pointing at an attacker-controlled host makes the client replay the caller's credentials to that host.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "multi-defect",
+        "composite"
+      ],
+      "notes": "Unions netty-http-client-follows-redirects-without-a-depth-limit + redirect-copies-credentials-to-cross-origin-location (security-advisory-2026). Verified co-present at 61c2d6610418d217233ad9269fa6a7e5fe91becf (= redirect-depth case's own parentCommit, reused unchanged as this case's fixCommit/parentCommit pair): DefaultHttpClient.java there re-subscribes through makeRedirectHandler with no hop counter (2057-2072), AND setRedirectHeaders forwards every header outside REDIRECT_HEADER_BLOCKLIST -- which omits Authorization/Cookie -- with no origin check (2095-2110). Credential-copy defect's fixCommit (64e5397) is a later descendant, confirmed by merge-base --is-ancestor. Reviewed diff equals the redirect-depth case's own diff (touches only the hop counter); setRedirectHeaders is unchanged code outside the diff hunk."
+    },
+    {
+      "id": "traefik-gateway-httproute-multi-defect",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/traefik/traefik.git",
+      "upstreamOwner": "traefik",
+      "upstreamRepo": "traefik",
+      "license": "MIT",
+      "source": "security-advisory-2026-multi-defect-composite",
+      "capturedAt": "2026-08-10",
+      "fixCommit": "8aada7a7d52e4588a75386d8b86d270f6fe8d549",
+      "fixCommittedAt": "2026-06-18T14:40:15Z",
+      "parentCommit": "224c6a93048490b5ec200743cb2b6258099d249c",
+      "reviewedPaths": [
+        "pkg/provider/kubernetes/gateway/httproute.go"
+      ],
+      "reviewIntent": "Simplify Gateway API HTTPRoute backend wiring: derive the dynamic service key from the backend it points at instead of threading route-key and backend-index parameters, and resolve a backendRef's filters using the same namespace value already computed for that backendRef.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "pkg/provider/kubernetes/gateway/httproute.go",
+          "lineRange": [
+            256,
+            328
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "loadService builds serviceName only from the backend namespace, Service name and port, then registers conf.HTTP.Services[serviceName] with Middlewares derived from that backendRef's Filters. The key carries no route or backendRef identity, so two accepted HTTPRoutes targeting the same Service:port with different filters collide on one entry; the last written applies its filter set to both routes, letting one route impose its header and auth context on another's requests.",
+          "securityMechanism": "authorization",
+          "contextDepth": "caller"
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "pkg/provider/kubernetes/gateway/httproute.go",
+          "lineRange": [
+            254,
+            284
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "loadService sets `namespace` from backendRef.Namespace (lines 254-256), then passes that namespace to loadMiddlewares at line 284 to resolve backendRef.Filters[].ExtensionRef. The ReferenceGrant check at line 273 authorises only the Service, not other objects in that namespace. A route author holding a grant for a cross-namespace Service can therefore bind any Middleware from the backend namespace, e.g. one injecting trusted identity headers, with no grant for it.",
+          "securityMechanism": "authorization",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "multi-defect",
+        "composite"
+      ],
+      "notes": "Unions gateway-backend-service-key-omits-route-identity + gateway-extensionref-resolved-in-backend-namespace (security-advisory-2026). Verified co-present at 224c6a93048490b5ec200743cb2b6258099d249c (= backend-service-key case's own parentCommit, reused unchanged as this case's fixCommit/parentCommit pair): httproute.go's loadService there builds serviceName from namespace+Service+port with no route identity (256-328), AND overwrites `namespace` from backendRef.Namespace before the ReferenceGrant check, reusing it for loadMiddlewares's ExtensionRef resolution (240-269). Extensionref defect's fixCommit (655d632) is a later descendant, confirmed by merge-base --is-ancestor. Reviewed diff equals the backend-service-key case's own diff (touches only service-key construction); the namespace reuse is unchanged code outside the diff hunk."
+    },
+    {
+      "id": "datamodel-code-generator-jsonschema-multi-defect",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/koxudaxi/datamodel-code-generator.git",
+      "upstreamOwner": "koxudaxi",
+      "upstreamRepo": "datamodel-code-generator",
+      "license": "MIT",
+      "source": "security-advisory-2026-multi-defect-composite",
+      "capturedAt": "2026-08-10",
+      "fixCommit": "17fc235e234cbcfaaadef8c74cb72c9687db0d1d",
+      "fixCommittedAt": "2026-06-08T08:18:27Z",
+      "parentCommit": "b73abb5cd703a50471b8950bbd3bd0b82ad71de7",
+      "reviewedPaths": [
+        "src/datamodel_code_generator/parser/jsonschema.py"
+      ],
+      "reviewIntent": "Simplify three independent JSON Schema parser paths: support custom default_factory values forwarded as written, read the x-python-type extension straight from schema extras, and resolve local/file:// $ref targets into paths directly.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/jsonschema.py",
+          "lineRange": [
+            797,
+            812
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "'default_factory' is one of DEFAULT_FIELD_KEYS (line 607), so get_field_extras copies whatever the input schema places in that property straight into the field extras and returns it at line 812 with no check on its value. The generator renders field extras verbatim into the emitted module as Field(default_factory=<value>), so a schema taken from an untrusted source can plant an arbitrary Python expression that executes as soon as the generated model is imported.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file"
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/jsonschema.py",
+          "lineRange": [
+            2068,
+            2109
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_get_python_type_override reads obj.extras['x-python-type'] (line 2070) and, when it is incompatible with the schema type, passes the raw string through as DataType.type at line 2106. The only transform is the dot-prefix rewrite at 2083-2089, which inspects just the text before the first '[', so 'X[1]; __import__(...)' is emitted verbatim as the field annotation in the generated module and executes at class-definition time on import. An attacker-supplied JSON Schema thus yields code execution.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file"
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/jsonschema.py",
+          "lineRange": [
+            4870,
+            4899
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Local $ref targets become filesystem paths with no containment check against the input base path. _get_ref_body_from_url turns a file:// ref into Path(path) and loads it; _get_ref_body_from_remote loads self.base_path / resolved_ref. A ref of ../../../../etc/passwd or file:///etc/passwd therefore reads any file the process can open, and the gate in _get_ref_body fires only for non-file:// URLs so --no-allow-remote-refs blocks neither path. A hostile schema pulls local files into the models.",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "multi-defect",
+        "composite"
+      ],
+      "notes": "Unions THREE cases sharing jsonschema.py: schema-default-factory-emitted-into-generated-code, x-python-type-extension-emitted-into-generated-annotation, datamodel-code-generator-local-ref-arbitrary-file-read. Verified co-present at b73abb5cd703a50471b8950bbd3bd0b82ad71de7 (= default-factory case's own parentCommit, reused unchanged as fixCommit/parentCommit pair): get_field_extras returns extras unchecked with default_factory in DEFAULT_FIELD_KEYS (600-609,794-812); _get_python_type_override passes x-python-type through with only a dot-prefix rewrite (2055-2093); _get_ref_body_from_url/_get_ref_body_from_remote resolve file:// and relative refs uncontained (4827-4884). All sibling fixCommits are later descendants (merge-base --is-ancestor). x_python_import (schema-import-extension case) does not exist yet here and was excluded as genuinely not co-present. Reviewed diff equals the default-factory case's own diff; the other two defects sit outside the diff hunk."
+    },
+    {
+      "id": "gitpython-index-base-multi-defect",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gitpython-developers/GitPython.git",
+      "upstreamOwner": "gitpython-developers",
+      "upstreamRepo": "GitPython",
+      "license": "BSD-3-Clause",
+      "source": "security-advisory-2026-multi-defect-composite",
+      "capturedAt": "2026-08-10",
+      "fixCommit": "1d51b891d7f236044a6aa17498ec682b63dad6e6",
+      "fixCommittedAt": "2026-07-22T03:56:02Z",
+      "parentCommit": "ffcb5359e87619f4fe4a70a4aff5f08c5580ba97",
+      "reviewedPaths": [
+        "git/index/base.py"
+      ],
+      "reviewIntent": "Trim IndexFile.diff back to the shared Diffable.diff signature and align IndexFile.checkout with the thin git-checkout-index wrapper it used to be, forwarding the caller's keyword arguments to git unchanged in both.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/index/base.py",
+          "lineRange": [
+            1495,
+            1542
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "IndexFile.diff accepts arbitrary **kwargs (line 1495) and forwards them unscreened to `self.repo.git.diff(*args, **kwargs)` at line 1542, and to `other.diff(...)` at line 1563. GitPython turns a kwarg into a git command-line option, so a caller-influenced value such as output='/home/app/.ssh/authorized_keys' becomes `git diff --output=<path>`, and git opens, truncates and writes real patch bytes to that path. Result: arbitrary file overwrite at process privilege from a diff call.",
+          "securityMechanism": "injection",
+          "contextDepth": "implementation"
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/index/base.py",
+          "lineRange": [
+            1264,
+            1331
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "IndexFile.checkout accepts arbitrary **kwargs and forwards them unscreened to self.repo.git.checkout_index(*args, **kwargs) at lines 1331 and 1349. GitPython turns a kwarg into a git command-line option, so a caller-influenced value such as prefix='/home/app/.ssh/' becomes `git checkout-index --prefix=/home/app/.ssh/` and git writes index contents to that location. Result: arbitrary file creation and overwrite outside the working tree at process privilege.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "multi-defect",
+        "composite"
+      ],
+      "notes": "Unions indexfile-diff-forwards-unscreened-git-options + gitpython-checkout-index-forwards-unscreened-git-options (security-advisory-2026). Verified co-present at ffcb5359e87619f4fe4a70a4aff5f08c5580ba97 (= indexfile-diff case's own parentCommit, reused unchanged as this case's fixCommit/parentCommit pair): git/index/base.py there forwards **kwargs unscreened from IndexFile.diff to repo.git.diff (1542), AND from IndexFile.checkout to repo.git.checkout_index at both call sites (1330, 1348); no check_unsafe_options/allow_unsafe_options exists anywhere in the file at this commit. Checkout-index defect's fixCommit (3af0c25) is a later descendant, confirmed by merge-base --is-ancestor. Reviewed diff equals the indexfile-diff case's own diff (touches only diff() option screening); checkout() is unchanged code outside the diff hunk."
+    }
+  ]
+}

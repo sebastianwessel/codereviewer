@@ -1,32 +1,25 @@
-import { type Logger } from '@purista/harness'
-import {
-  type ContextDocument,
-  type FindingRefutationRunner,
-  type ProviderIssue,
-  type SkillContextDocument,
-  type TaskReviewInput,
-  type TaskReviewResult,
-  type WorkflowReviewTask,
-  type WorkflowTaskEvent
+import type { Logger } from '@purista/harness'
+import type {
+  ContextDocument,
+  FindingRefutationRunner,
+  SkillContextDocument,
+  TaskReviewInput,
+  TaskReviewResult,
+  WorkflowReviewTask,
+  WorkflowTaskEvent
 } from './agent-contracts.js'
-import { type CandidateFinding } from '../../admission/index.js'
+import type { ProviderIssue } from './provider-issues.js'
+import type { CandidateFinding } from '../../admission/index.js'
 import {
   createContextRetriever,
   type ContextRetriever
 } from '../../context-retrieval/index.js'
-import { type ContextLedgerEntry } from '../../review-planning/index.js'
-import {
-  createReviewSharedContext,
-  type ReviewSharedContext
-} from '../../shared-context/index.js'
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
-import {
-  isTaskPacketBudgetExceededError,
-  taskReviewInputFor
-} from './discovery/task-packet.js'
-import { renderSharedDigest } from './shared-digest.js'
+import { summarizeDiscoveryTelemetry } from './discovery/discovery-telemetry.js'
+import { taskReviewInputFor } from './discovery/task-packet.js'
 import { tasksForWorkflowInput } from './task-planning.js'
 import {
   ReviewTaskExecutionError,
@@ -34,9 +27,9 @@ import {
   runQueuedReviewTasks
 } from './task-queue.js'
 import { completeReviewWorkflow } from './completion.js'
-import {
-  type ReviewWorkflowInput,
-  type ReviewWorkflowOutput
+import type {
+  ReviewWorkflowInput,
+  ReviewWorkflowOutput
 } from './contracts.js'
 
 const boundedWorkflowConcurrency = (
@@ -48,6 +41,29 @@ const boundedWorkflowConcurrency = (
     harnessMaxConcurrentTasks
   )
 
+// Every instruction document any task in this run actually carried, deduplicated
+// by path, in first-seen order.
+//
+// Scoping (spec 04) makes the instruction set a property of a task, so the run's
+// set is the union of its tasks' sets rather than a list handed in whole. A run
+// where one instruction is scoped to files nothing touched genuinely did not use
+// that instruction, and its hash must not appear as if it had.
+const instructionsAcrossTasks = (
+  tasks: readonly WorkflowReviewTask[]
+): readonly ContextDocument[] => {
+  const byPath = new Map<string, ContextDocument>()
+
+  for (const task of tasks) {
+    for (const instruction of task.instructions) {
+      if (!byPath.has(instruction.path)) {
+        byPath.set(instruction.path, instruction)
+      }
+    }
+  }
+
+  return [...byPath.values()]
+}
+
 const hashAllowedInstructionContent = (
   instructions: readonly ContextDocument[]
 ): readonly string[] =>
@@ -57,8 +73,6 @@ const hashAllowedInstructionContent = (
         code: 'instruction_read_denied',
         message: `Instruction file "${instruction.path}" is not allowed for this review run.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           path: instruction.path
         }
@@ -77,8 +91,6 @@ const hashAllowedSkillContent = (
         code: 'skill_read_denied',
         message: `Skill "${skill.name}" is not allowed for this review run.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           name: skill.name,
           path: skill.path
@@ -100,18 +112,6 @@ const mergeCandidates = (
   }
 
   return [...candidatesById.values()]
-}
-
-const createWorkflowSharedContext = (
-  input: ReviewWorkflowInput
-): ReviewSharedContext => {
-  const shared = createReviewSharedContext()
-
-  for (const evidence of input.evidence) {
-    shared.appendEvidenceRecord(evidence)
-  }
-
-  return shared
 }
 
 export type ReviewWorkflowTaskRunner = (
@@ -141,9 +141,10 @@ export const runReviewWorkflowHandler = async (params: {
     reviewed_path_count: input.reviewedPaths.length,
     max_concurrent_tasks: concurrency
   })
-  const instructionHashes = hashAllowedInstructionContent(input.instructions)
+  const instructionHashes = hashAllowedInstructionContent(
+    instructionsAcrossTasks(tasks)
+  )
   const skillHashes = hashAllowedSkillContent(input.skills)
-  const shared = createWorkflowSharedContext(input)
   const contextLedgerEntries: ContextLedgerEntry[] = []
   const contextRetriever =
     input.repositoryRoot === undefined
@@ -153,6 +154,14 @@ export const runReviewWorkflowHandler = async (params: {
           ...(input.contextRetrievalBudget === undefined
             ? {}
             : { budget: input.contextRetrievalBudget }),
+          // The operator's configured scope, on the same terms every other
+          // mediated lane passes it (verification, impact, intent). Omitting it
+          // does not fall back to something stricter: the eligibility gate then
+          // compiles `**/*` plus the built-in excludes, so an operator's
+          // `paths.exclude` stopped binding on the one surface an untrusted
+          // model drives against a live working tree, and cross-file retrieval
+          // is on by default.
+          ...(input.paths === undefined ? {} : { paths: input.paths }),
           ledgerEntries: contextLedgerEntries
         })
   const queued = await runQueuedReviewTasks<TaskReviewResult>({
@@ -162,11 +171,9 @@ export const runReviewWorkflowHandler = async (params: {
     ...(params.onTaskEvent === undefined
       ? {}
       : { onTaskEvent: params.onTaskEvent }),
-    sharedDigest: () => renderSharedDigest(shared.digest()),
-    runTask: async (task, sharedDigest) => {
-      const taskPacket = taskReviewInputFor(input, task, sharedDigest)
+    runTask: async (task) => {
       return params.runTask(
-        taskPacket.input,
+        taskReviewInputFor(input, task),
         task,
         params.signal,
         contextRetriever
@@ -177,7 +184,10 @@ export const runReviewWorkflowHandler = async (params: {
       throw new ReviewTaskExecutionError({
         taskEvents: error.taskEvents,
         partialResults: error.partialResults,
-        originalError: error.originalError
+        originalError: error.originalError,
+        // Re-typed as this workflow's own result type; every field the queue
+        // recorded is carried across, including the concurrent workers' errors.
+        additionalErrors: error.additionalErrors
       })
     }
 
@@ -185,23 +195,57 @@ export const runReviewWorkflowHandler = async (params: {
   })
 
   const taskCandidates = queued.results.flatMap((result) => result.candidates)
+  // The sub-tasks discovery actually ran (partitions, reactive split halves). They
+  // are the only units carrying a genuine sub-file span, and admission needs them to
+  // check a finding's line against what its own call was shown.
+  const reviewedTasks = queued.results.flatMap((result) => result.reviewedTasks)
+  // What discovery produced, per task, before refutation and admission filtered it
+  // (spec 27). Threaded exactly like `reviewedTasks` above, and for the same
+  // reason: a number no stage downstream can recompute has to be carried, or it is
+  // gone.
+  const discovery = summarizeDiscoveryTelemetry(
+    queued.results.flatMap((result) =>
+      result.discovery === undefined ? [] : [result.discovery]
+    )
+  )
   const taskEvidenceRecords = queued.results.flatMap(
     (result) => result.evidenceRecords
   )
   const taskProviderIssues = queued.results.flatMap(
     (result) => result.providerIssues
   )
+  // Candidates a task itself decided are terminal before admission — today, the
+  // non-representative members of a semantic merge group (spec 05). They stay in
+  // `candidateFindings` so the report still shows what discovery produced and the
+  // rejection resolves to a candidate, but they are held out of refutation: a
+  // candidate already known to be terminal must not spend an adjudication slot.
+  const taskRejectedFindings = queued.results.flatMap(
+    (result) => result.rejectedFindings
+  )
+  const taskRejectedCandidateIds = new Set(
+    taskRejectedFindings.map((finding) => finding.candidateId)
+  )
   const mergedCandidates = mergeCandidates(input.candidates, taskCandidates)
   const prepared = await prepareCandidatesForAdmission({
     workflowInput: input,
-    tasks,
-    candidates: mergedCandidates,
-    sharedDigest: renderSharedDigest(shared.digest()),
+    // Planned tasks AND the sub-tasks discovery actually ran. A candidate carries
+    // the id of the call that raised it, which for a partition (spec 27) or a
+    // reactive half (spec 26) is a synthetic id matching nothing in the planned
+    // list — so refutation looked up the originating task, found none, and fell
+    // back to workflow-wide context for exactly the runs partitioning is on for.
+    // The same union `completeReviewWorkflow` already needs, for the same reason:
+    // the sub-task is the unit that was reviewed, and it is the unit carrying the
+    // instruction set and the review context its candidates must be judged against.
+    tasks: [...tasks, ...reviewedTasks],
+    candidates: mergedCandidates.filter(
+      (candidate) => !taskRejectedCandidateIds.has(candidate.id)
+    ),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
     ...(params.refuteFinding === undefined
       ? {}
       : { refuteFinding: params.refuteFinding }),
-    ...(params.signal === undefined ? {} : { signal: params.signal })
+    ...(params.signal === undefined ? {} : { signal: params.signal }),
+    logger
   }).catch((error: unknown) => {
     throw new ReviewTaskExecutionError({
       taskEvents: queued.taskEvents,
@@ -217,6 +261,8 @@ export const runReviewWorkflowHandler = async (params: {
 
   const output = completeReviewWorkflow({
     workflowInput: input,
+    reviewedTasks,
+    ...(discovery === undefined ? {} : { discovery }),
     candidateFindings: mergedCandidates,
     admissionCandidates: prepared.admissionCandidates,
     artifactOnlyCandidateIds: prepared.artifactOnlyCandidateIds,
@@ -224,11 +270,11 @@ export const runReviewWorkflowHandler = async (params: {
     providerIssues,
     contextLedgerEntries,
     evidence: [...prepared.evidence, ...taskEvidenceRecords],
-    preRejectedFindings: prepared.rejectedFindings,
+    preRejectedFindings: [...taskRejectedFindings, ...prepared.rejectedFindings],
     preAdmissionDecisions: prepared.admissionDecisions,
     taskEvents: queued.taskEvents,
     instructionHashes,
-    skillHashes
+    skillHashes,
   })
 
   logger.debug('Review workflow handler completed.', {
@@ -240,5 +286,3 @@ export const runReviewWorkflowHandler = async (params: {
 
   return output
 }
-
-export { isTaskPacketBudgetExceededError }

@@ -6,18 +6,19 @@ import {
 import type { CandidateFinding } from '../../../admission/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import { ReviewTaskExecutionError } from '../../harness/workflow.js'
-import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import {
   createProviderTaskExecutionFailure,
-  createProviderTimeoutFailure,
   createProviderWorkflowFailure
 } from './provider-failures.js'
 
 const config = CodeReviewerConfigSchema.parse({
+  provider: {
+    id: 'openai',
+    model: 'review-model'
+  },
   review: {
     mode: 'pr',
     depth: 'balanced',
-    runTimeoutMs: 10000
   },
   paths: {
     artifactDir: '.codereviewer/runs'
@@ -38,7 +39,7 @@ const driftFindings: readonly DriftFinding[] = [
 
 const evidence = EvidenceRecordSchema.parse({
   id: 'ev_alpha',
-  kind: 'deterministic-signal',
+  kind: 'diagnostic',
   summary: 'Symbol alpha was detected.',
   location: { path: 'src/a.ts', startLine: 1, side: 'file' },
   source: 'deterministic-support-signal',
@@ -68,19 +69,6 @@ const providerCandidate: CandidateFinding = {
   proposedBy: 'model'
 }
 
-const task: WorkflowReviewTask = {
-  id: 'task_alpha',
-  kind: 'file',
-  round: 1,
-  paths: ['src/a.ts'],
-  factIds: ['fact_alpha'],
-  evidenceIds: ['ev_alpha'],
-  candidateIds: [],
-  contextEntryIds: [],
-  priority: 0,
-  reviewContext: []
-}
-
 const commonInput = {
   repositoryRoot: '/repo/project',
   config,
@@ -100,6 +88,7 @@ const commonInput = {
         path: 'src/a.ts',
         name: 'alpha',
         line: 1,
+        endLine: 1,
         summary: 'alpha declaration',
         contentHash:
           '2222222222222222222222222222222222222222222222222222222222222222'
@@ -109,37 +98,10 @@ const commonInput = {
   },
   contextLedger: [],
   evidence: [evidence],
-  supportSignalCandidates: [supportCandidate],
   observability: { events: [] }
 } as const
 
 describe('review runner provider failure helpers', () => {
-  test('creates timeout partial failures with failed task events', () => {
-    const failure = createProviderTimeoutFailure({
-      ...commonInput,
-      tasks: [task],
-      timeoutMs: 10000
-    })
-
-    expect(failure.structuredError.code).toBe('review_run_timeout')
-    expect(failure.partialState.runSummary.warnings).toEqual([
-      'config-warning',
-      'drift:documentation-drift',
-      'partial-run'
-    ])
-    expect(failure.partialState.sharedContext.taskEvents.map((event) => ({
-      id: event.id,
-      state: event.state,
-      workerId: event.workerId
-    }))).toEqual([
-      { id: 'task_alpha', state: 'planned', workerId: undefined },
-      { id: 'task_alpha', state: 'failed', workerId: 'review-timeout' }
-    ])
-    expect(failure.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate
-    ])
-  })
-
   test('creates task-execution partial failures with recovered candidates', () => {
     const executionError = new ReviewTaskExecutionError({
       originalError: new Error('provider exploded'),
@@ -160,7 +122,6 @@ describe('review runner provider failure helpers', () => {
     const failure = createProviderTaskExecutionFailure({
       ...commonInput,
       executionError,
-      timedOut: false
     })
 
     expect(failure.structuredError.code).toBe('provider_error')
@@ -175,8 +136,10 @@ describe('review runner provider failure helpers', () => {
         message: 'worker failed'
       }
     ])
+    // Only the provider's own candidates survive a partial failure now. The
+    // support-signal channel that used to be prepended here carried nothing: its
+    // sole producer was the eval-gaming trusted-rule map.
     expect(failure.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate,
       providerCandidate
     ])
     expect(failure.partialState.runSummary.warnings).toEqual([
@@ -184,26 +147,15 @@ describe('review runner provider failure helpers', () => {
       'drift:documentation-drift',
       'partial-run'
     ])
-  })
-
-  test('classifies timed-out workflow errors as timeout partial failures', () => {
-    const failure = createProviderWorkflowFailure({
-      ...commonInput,
-      error: new Error('provider did not complete in time'),
-      runTimedOut: true,
-      tasks: [task],
-      timeoutMs: 10000
-    })
-
-    expect(failure?.structuredError.code).toBe('review_run_timeout')
-    expect(failure?.partialState.sharedContext.taskEvents.map((event) => ({
-      id: event.id,
-      state: event.state,
-      workerId: event.workerId
-    }))).toEqual([
-      { id: 'task_alpha', state: 'planned', workerId: undefined },
-      { id: 'task_alpha', state: 'failed', workerId: 'review-timeout' }
-    ])
+    // A task-execution failure is the ONLY error this path shapes into a run
+    // summary, and it can only be thrown after the provider was resolved and
+    // tasks were dispatched to it. So the run performed a model search — an
+    // interrupted one, which `partial-run` and `error.json` already record —
+    // and the summary states it rather than leaving the field silent and
+    // stamping the model by default.
+    expect(failure.partialState.runSummary.modelSearch).toBe('performed')
+    expect(failure.partialState.runSummary.provider).toBe('openai')
+    expect(failure.partialState.runSummary.model).toBe('review-model')
   })
 
   test('classifies task-execution workflow errors as recoverable provider partial failures', () => {
@@ -225,15 +177,11 @@ describe('review runner provider failure helpers', () => {
 
     const failure = createProviderWorkflowFailure({
       ...commonInput,
-      error: executionError,
-      runTimedOut: false,
-      tasks: [task],
-      timeoutMs: 10000
+      error: executionError
     })
 
     expect(failure?.structuredError.code).toBe('provider_error')
     expect(failure?.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate,
       providerCandidate
     ])
   })
@@ -241,10 +189,7 @@ describe('review runner provider failure helpers', () => {
   test('does not classify unrelated workflow errors', () => {
     const failure = createProviderWorkflowFailure({
       ...commonInput,
-      error: new Error('plain provider setup error'),
-      runTimedOut: false,
-      tasks: [task],
-      timeoutMs: 10000
+      error: new Error('plain provider setup error')
     })
 
     expect(failure).toBeUndefined()

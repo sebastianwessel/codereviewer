@@ -1,0 +1,2014 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`eval runner > validates fixture samples and returns a deterministic eval report 1`] = `
+{
+  "caseResults": [
+    {
+      "agenticStages": [
+        {
+          "count": 0,
+          "stage": "refutation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "fix",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "provider-recovery",
+          "status": "skipped",
+        },
+      ],
+      "artifactOnlyFalsePositiveFindingIds": [],
+      "artifactOnlyFindingIds": [],
+      "artifactOnlyGenuineFalsePositiveFindingIds": [],
+      "artifactOnlyMatchedFindings": [],
+      "artifactOnlyUnlistedRealFindingIds": [],
+      "cachedInputTokens": 0,
+      "caseId": "typescript-positive",
+      "contextLedger": [
+        {
+          "consideredForModelContext": true,
+          "kind": "tool-result",
+          "truncated": false,
+        },
+      ],
+      "costUnavailable": false,
+      "costUsd": 0.1,
+      "duplicateFindingIds": [],
+      "durationMs": 1000,
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "diffScope": "undetermined",
+          "expectedIndex": 0,
+          "lineRange": [
+            4,
+            4,
+          ],
+          "matchMode": "path-line",
+          "path": "src/app.ts",
+          "semanticSummary": "incorrect return value from changed branch",
+          "severity": "high",
+        },
+      ],
+      "falsePositiveFindingIds": [],
+      "fixOutcomes": [],
+      "genuineFalsePositiveFindingIds": [],
+      "inconclusiveExpectedIndexes": [],
+      "inconclusiveFindingIds": [],
+      "inconclusiveMatches": [],
+      "inlineFindingCount": 1,
+      "inputTokens": 0,
+      "matchedFindings": [
+        {
+          "expectedIndex": 0,
+          "findingId": "find_eval1",
+          "lineOverlaps": true,
+          "producedPath": "src/app.ts",
+          "producedStartLine": 4,
+          "semanticReason": "Both summaries describe the same defect.",
+          "severityMatches": true,
+        },
+      ],
+      "noFindingZoneFalsePositiveIds": [],
+      "outputTokens": 0,
+      "parseValid": true,
+      "producedFindings": [
+        {
+          "category": "bug",
+          "cweCount": 0,
+          "dataFlowCount": 0,
+          "description": "The changed branch can return an incorrect value for callers.",
+          "evidenceCount": 1,
+          "findingId": "find_eval1",
+          "hasFixProposal": true,
+          "line": 4,
+          "path": "src/app.ts",
+          "proposedBy": "scripted-reviewer",
+          "relatedLocationCount": 0,
+          "severity": "high",
+          "title": "Incorrect return value",
+        },
+      ],
+      "providerErrored": false,
+      "providerIssues": [],
+      "refutationResults": [],
+      "unlistedRealFindingIds": [],
+      "unmatchedExpectedIndexes": [],
+      "usageUnavailable": false,
+      "warnings": [],
+    },
+    {
+      "agenticStages": [
+        {
+          "count": 0,
+          "stage": "refutation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "fix",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "provider-recovery",
+          "status": "skipped",
+        },
+      ],
+      "artifactOnlyFalsePositiveFindingIds": [],
+      "artifactOnlyFindingIds": [],
+      "artifactOnlyGenuineFalsePositiveFindingIds": [],
+      "artifactOnlyMatchedFindings": [],
+      "artifactOnlyUnlistedRealFindingIds": [],
+      "cachedInputTokens": 0,
+      "caseId": "typescript-negative",
+      "contextLedger": [],
+      "costUnavailable": false,
+      "costUsd": 0.1,
+      "duplicateFindingIds": [],
+      "durationMs": 1000,
+      "expectedFindings": [],
+      "falsePositiveFindingIds": [
+        "find_noise1",
+      ],
+      "fixOutcomes": [],
+      "genuineFalsePositiveFindingIds": [
+        "find_noise1",
+      ],
+      "inconclusiveExpectedIndexes": [],
+      "inconclusiveFindingIds": [],
+      "inconclusiveMatches": [],
+      "inlineFindingCount": 1,
+      "inputTokens": 0,
+      "matchedFindings": [],
+      "noFindingZoneFalsePositiveIds": [
+        "find_noise1",
+      ],
+      "outputTokens": 0,
+      "parseValid": true,
+      "producedFindings": [
+        {
+          "category": "bug",
+          "cweCount": 0,
+          "dataFlowCount": 0,
+          "description": "This comment should not be emitted for formatting.",
+          "evidenceCount": 1,
+          "findingId": "find_noise1",
+          "hasFixProposal": true,
+          "line": 3,
+          "path": "src/format.ts",
+          "proposedBy": "scripted-reviewer",
+          "relatedLocationCount": 0,
+          "severity": "high",
+          "title": "Style-only note",
+        },
+      ],
+      "providerErrored": false,
+      "providerIssues": [],
+      "refutationResults": [],
+      "unlistedRealFindingIds": [],
+      "unmatchedExpectedIndexes": [],
+      "usageUnavailable": false,
+      "warnings": [],
+    },
+  ],
+  "fixtureCount": 2,
+  "generatedAt": "2026-06-20T00:00:02.000Z",
+  "metricGroups": [
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "sourceProfile",
+      "key": "project",
+      "metrics": {
+        "actionableRate": 1,
+        "adjustedPrecision": 0.5,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyGenuineFalsePositiveCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
+        "artifactOnlyUnlistedRealCount": 0,
+        "cachedInputTokens": 0,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUnavailableCount": 0,
+        "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
+        "duplicateFindingCount": 0,
+        "durationMs": 2000,
+        "durationUnavailableCount": 0,
+        "elapsedMs": 42,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "fixApplyFailureRate": null,
+        "fixAttemptedCount": 0,
+        "fixFalsePositiveDetectionRate": null,
+        "fixGroundTruthFalsePositiveCount": 0,
+        "fixJudgedFindingCount": 0,
+        "fixJudgmentAccuracy": null,
+        "fixProduceRate": null,
+        "fixRealFindingCount": 0,
+        "genuineFalsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
+        "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
+        "lineAccuracy": 1,
+        "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
+        "nitRecall": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
+        "parseValidity": 1,
+        "plausibilityJudgeAgreementPairCount": 0,
+        "precision": 0.5,
+        "productRecall": 1,
+        "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
+        "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
+        "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": null,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": null,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": null,
+          "callee": null,
+          "caller": null,
+          "cross-file": null,
+          "cross-function": null,
+          "implementation": null,
+          "local": null,
+        },
+        "securityRecallByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "severityAccuracy": 1,
+        "severityCheckCount": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+        "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "language",
+      "key": "typescript",
+      "metrics": {
+        "actionableRate": 1,
+        "adjustedPrecision": 0.5,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyGenuineFalsePositiveCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
+        "artifactOnlyUnlistedRealCount": 0,
+        "cachedInputTokens": 0,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUnavailableCount": 0,
+        "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
+        "duplicateFindingCount": 0,
+        "durationMs": 2000,
+        "durationUnavailableCount": 0,
+        "elapsedMs": 42,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "fixApplyFailureRate": null,
+        "fixAttemptedCount": 0,
+        "fixFalsePositiveDetectionRate": null,
+        "fixGroundTruthFalsePositiveCount": 0,
+        "fixJudgedFindingCount": 0,
+        "fixJudgmentAccuracy": null,
+        "fixProduceRate": null,
+        "fixRealFindingCount": 0,
+        "genuineFalsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
+        "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
+        "lineAccuracy": 1,
+        "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
+        "nitRecall": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
+        "parseValidity": 1,
+        "plausibilityJudgeAgreementPairCount": 0,
+        "precision": 0.5,
+        "productRecall": 1,
+        "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
+        "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
+        "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": null,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": null,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": null,
+          "callee": null,
+          "caller": null,
+          "cross-file": null,
+          "cross-function": null,
+          "implementation": null,
+          "local": null,
+        },
+        "securityRecallByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "severityAccuracy": 1,
+        "severityCheckCount": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+        "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-negative",
+      ],
+      "fixtureCount": 1,
+      "groupBy": "tag",
+      "key": "negative",
+      "metrics": {
+        "actionableRate": 1,
+        "adjustedPrecision": 0,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyGenuineFalsePositiveCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 1,
+        "artifactOnlyUnlistedRealCount": 0,
+        "cachedInputTokens": 0,
+        "commentsPerDiffHunk": 1,
+        "commentsPerKloc": 100,
+        "contextMutationRate": 0,
+        "costUnavailableCount": 0,
+        "costUsd": 0.1,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "duplicateFindingCount": 0,
+        "durationMs": 1000,
+        "durationUnavailableCount": 0,
+        "elapsedMs": 42,
+        "f1": 0,
+        "falsePositiveCount": 1,
+        "fixApplyFailureRate": null,
+        "fixAttemptedCount": 0,
+        "fixFalsePositiveDetectionRate": null,
+        "fixGroundTruthFalsePositiveCount": 0,
+        "fixJudgedFindingCount": 0,
+        "fixJudgmentAccuracy": null,
+        "fixProduceRate": null,
+        "fixRealFindingCount": 0,
+        "genuineFalsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
+        "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
+        "lineAccuracy": null,
+        "lineCheckCount": 0,
+        "linePlacementCheckCount": 0,
+        "linePlacementRate": null,
+        "nitRecall": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
+        "parseValidity": 1,
+        "plausibilityJudgeAgreementPairCount": 0,
+        "precision": 0,
+        "productRecall": 1,
+        "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
+        "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": null,
+        },
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
+        "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": null,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": null,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": null,
+          "callee": null,
+          "caller": null,
+          "cross-file": null,
+          "cross-function": null,
+          "implementation": null,
+          "local": null,
+        },
+        "securityRecallByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "severityAccuracy": null,
+        "severityCheckCount": 0,
+        "severityWeightedF1": 0,
+        "severityWeightedPrecision": 0,
+        "severityWeightedRecall": 1,
+        "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+      ],
+      "fixtureCount": 1,
+      "groupBy": "tag",
+      "key": "positive",
+      "metrics": {
+        "actionableRate": 1,
+        "adjustedPrecision": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyGenuineFalsePositiveCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
+        "artifactOnlyUnlistedRealCount": 0,
+        "cachedInputTokens": 0,
+        "commentsPerDiffHunk": 0.5,
+        "commentsPerKloc": 20,
+        "contextMutationRate": 0,
+        "costUnavailableCount": 0,
+        "costUsd": 0.1,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
+        "duplicateFindingCount": 0,
+        "durationMs": 1000,
+        "durationUnavailableCount": 0,
+        "elapsedMs": 42,
+        "f1": 1,
+        "falsePositiveCount": 0,
+        "fixApplyFailureRate": null,
+        "fixAttemptedCount": 0,
+        "fixFalsePositiveDetectionRate": null,
+        "fixGroundTruthFalsePositiveCount": 0,
+        "fixJudgedFindingCount": 0,
+        "fixJudgmentAccuracy": null,
+        "fixProduceRate": null,
+        "fixRealFindingCount": 0,
+        "genuineFalsePositiveCount": 0,
+        "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
+        "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
+        "lineAccuracy": 1,
+        "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
+        "nitRecall": 1,
+        "noFindingZoneFalsePositiveCount": 0,
+        "outputTokens": 0,
+        "parseValidity": 1,
+        "plausibilityJudgeAgreementPairCount": 0,
+        "precision": 1,
+        "productRecall": 1,
+        "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
+        "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
+        "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": null,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": null,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": null,
+          "callee": null,
+          "caller": null,
+          "cross-file": null,
+          "cross-function": null,
+          "implementation": null,
+          "local": null,
+        },
+        "securityRecallByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "severityAccuracy": 1,
+        "severityCheckCount": 1,
+        "severityWeightedF1": 1,
+        "severityWeightedPrecision": 1,
+        "severityWeightedRecall": 1,
+        "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "tag",
+      "key": "typescript",
+      "metrics": {
+        "actionableRate": 1,
+        "adjustedPrecision": 0.5,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyGenuineFalsePositiveCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
+        "artifactOnlyUnlistedRealCount": 0,
+        "cachedInputTokens": 0,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUnavailableCount": 0,
+        "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
+        "duplicateFindingCount": 0,
+        "durationMs": 2000,
+        "durationUnavailableCount": 0,
+        "elapsedMs": 42,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "fixApplyFailureRate": null,
+        "fixAttemptedCount": 0,
+        "fixFalsePositiveDetectionRate": null,
+        "fixGroundTruthFalsePositiveCount": 0,
+        "fixJudgedFindingCount": 0,
+        "fixJudgmentAccuracy": null,
+        "fixProduceRate": null,
+        "fixRealFindingCount": 0,
+        "genuineFalsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
+        "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
+        "lineAccuracy": 1,
+        "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
+        "nitRecall": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
+        "parseValidity": 1,
+        "plausibilityJudgeAgreementPairCount": 0,
+        "precision": 0.5,
+        "productRecall": 1,
+        "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
+        "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
+        "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": null,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "open-redirect": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": null,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": null,
+          "callee": null,
+          "caller": null,
+          "cross-file": null,
+          "cross-function": null,
+          "implementation": null,
+          "local": null,
+        },
+        "securityRecallByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "open-redirect": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
+        "severityAccuracy": 1,
+        "severityCheckCount": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+        "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
+      },
+    },
+  ],
+  "metrics": {
+    "actionableRate": 1,
+    "adjustedPrecision": 0.5,
+    "artifactOnlyFalsePositiveCount": 0,
+    "artifactOnlyFindingCount": 0,
+    "artifactOnlyGenuineFalsePositiveCount": 0,
+    "artifactOnlyMatchedFindingCount": 0,
+    "artifactOnlyPrecision": 1,
+    "artifactOnlyRecall": 0,
+    "artifactOnlyUnlistedRealCount": 0,
+    "cachedInputTokens": 0,
+    "commentsPerDiffHunk": 0.666667,
+    "commentsPerKloc": 33.333333,
+    "contextMutationRate": 0,
+    "costUnavailableCount": 0,
+    "costUsd": 0.2,
+    "diffScopeCounts": {
+      "in-diff": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "out-of-diff": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "undetermined": {
+        "expected": 1,
+        "matched": 1,
+      },
+    },
+    "duplicateFindingCount": 0,
+    "durationMs": 2000,
+    "durationUnavailableCount": 0,
+    "elapsedMs": 42,
+    "f1": 0.666667,
+    "falsePositiveCount": 1,
+    "fixApplyFailureRate": null,
+    "fixAttemptedCount": 0,
+    "fixFalsePositiveDetectionRate": null,
+    "fixGroundTruthFalsePositiveCount": 0,
+    "fixJudgedFindingCount": 0,
+    "fixJudgmentAccuracy": null,
+    "fixProduceRate": null,
+    "fixRealFindingCount": 0,
+    "genuineFalsePositiveCount": 1,
+    "incompleteCoverageRate": 0,
+    "inconclusiveMatchCount": 0,
+    "inputTokens": 0,
+    "judgeAgreement": 1,
+    "judgeAgreementPairCount": 12,
+    "lineAccuracy": 1,
+    "lineCheckCount": 1,
+    "linePlacementCheckCount": 1,
+    "linePlacementRate": 1,
+    "nitRecall": 1,
+    "noFindingZoneFalsePositiveCount": 1,
+    "outputTokens": 0,
+    "parseValidity": 1,
+    "plausibilityJudgeAgreementPairCount": 0,
+    "precision": 0.5,
+    "productRecall": 1,
+    "providerErrorRate": 0,
+    "providerIssueCount": 0,
+    "providerIssueRate": 0,
+    "recall": 1,
+    "recallByDiffScope": {
+      "in-diff": null,
+      "out-of-diff": null,
+      "undetermined": 1,
+    },
+    "recallByTier": {
+      "logic": 1,
+      "nit": 1,
+      "runtime-critical": 1,
+      "security": 1,
+    },
+    "refutationFalseNegativeCount": 0,
+    "refutationFalsePositiveCount": 0,
+    "rejectionReasonBySeverityCounts": {},
+    "rejectionReasonCounts": {},
+    "rejectionSeverityCounts": {},
+    "scoringCachedInputTokens": 0,
+    "scoringCostUnavailable": false,
+    "scoringCostUsd": 0,
+    "scoringInputTokens": 0,
+    "scoringOutputTokens": 0,
+    "securityAdjustedPrecisionByMechanism": {
+      "authorization": null,
+      "concurrency-resource": null,
+      "cryptography": null,
+      "deserialization": null,
+      "injection": null,
+      "open-redirect": null,
+      "path-traversal": null,
+      "secret-flow": null,
+      "ssrf": null,
+      "unsafe-config": null,
+      "xss": null,
+    },
+    "securityContextDepthCounts": {
+      "analyzer-path-dependent": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "callee": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "caller": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cross-file": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cross-function": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "implementation": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "local": {
+        "expected": 0,
+        "matched": 0,
+      },
+    },
+    "securityFindingMechanismCounts": {
+      "authorization": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "concurrency-resource": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "cryptography": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "deserialization": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "injection": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "open-redirect": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "path-traversal": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "secret-flow": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "ssrf": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "unknown": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "unsafe-config": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "xss": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+    },
+    "securityHardCount": 0,
+    "securityHardRecall": null,
+    "securityMechanismAttributionCounts": {
+      "cwe": 0,
+      "expectation": 0,
+      "unknown": 0,
+    },
+    "securityMechanismCounts": {
+      "authorization": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "concurrency-resource": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cryptography": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "deserialization": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "injection": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "open-redirect": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "path-traversal": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "secret-flow": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "ssrf": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "unsafe-config": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "xss": {
+        "expected": 0,
+        "matched": 0,
+      },
+    },
+    "securityObviousCount": 0,
+    "securityObviousRecall": null,
+    "securityRecallByContextDepth": {
+      "analyzer-path-dependent": null,
+      "callee": null,
+      "caller": null,
+      "cross-file": null,
+      "cross-function": null,
+      "implementation": null,
+      "local": null,
+    },
+    "securityRecallByMechanism": {
+      "authorization": null,
+      "concurrency-resource": null,
+      "cryptography": null,
+      "deserialization": null,
+      "injection": null,
+      "open-redirect": null,
+      "path-traversal": null,
+      "secret-flow": null,
+      "ssrf": null,
+      "unsafe-config": null,
+      "xss": null,
+    },
+    "severityAccuracy": 1,
+    "severityCheckCount": 1,
+    "severityWeightedF1": 0.666667,
+    "severityWeightedPrecision": 0.5,
+    "severityWeightedRecall": 1,
+    "unlistedRealFindingCount": 0,
+    "usageUnavailableCount": 0,
+  },
+  "metricsVersion": "2026-08-16.hunk-aware-changed-line-count",
+  "provenance": {
+    "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
+    "answerKeyDigestByCase": {
+      "typescript-negative": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "typescript-positive": "84bbdb14b451f6f31220f6aa92c329c206251bd89767aaec60dbfe4ad5ef8a01",
+    },
+    "configHash": "unspecified",
+    "engine": {
+      "commit": "unknown",
+    },
+  },
+  "regressionGate": {
+    "failingCaseIds": [
+      "typescript-negative",
+    ],
+    "notEvaluableReasons": [],
+    "outcome": "failed",
+    "reasons": [
+      "falsePositiveCount above threshold: 1 > 0",
+    ],
+    "thresholds": {
+      "failOnProviderError": true,
+      "maxFalsePositiveCount": 0,
+      "minParseValidity": 1,
+      "minRecall": 1,
+    },
+  },
+  "schemaVersion": "1.0",
+  "scoring": {
+    "adjustedPrecisionTrustworthy": true,
+    "judgeAgreement": 1,
+    "judgeTrustworthy": true,
+    "plausibilityJudged": false,
+  },
+  "selection": {
+    "caseFilters": [],
+    "fixtureSource": "default",
+    "selectedCaseIds": [
+      "typescript-positive",
+      "typescript-negative",
+    ],
+  },
+}
+`;
+
+exports[`eval runner > validates fixture samples and returns a deterministic eval report 2`] = `
+"# Evaluation Summary
+
+Gate: FAIL
+Generated: 2026-06-20T00:00:02.000Z
+Fixtures: 2
+
+## Headline
+
+| Priority | Metric | Value |
+| --- | --- | ---: |
+| Findings | Product recall | 100.0% |
+| Findings | Recall (all tiers) | 100.0% |
+| Findings | Recall (in-diff) | n/a (0 checked) |
+| Findings | Recall (out-of-diff) | n/a (0 checked) |
+| Findings | Unmatched but plausible | 0 |
+| False positives | Precision (raw to adjusted bracket) | 50.0% to not measured (no plausibility judge) |
+| False positives | Genuine false positives | 1 |
+| False positives | Duplicate findings | 0 |
+| Priority | Severity accuracy | 100.0% (1 checked) |
+| Health | Provider error rate | 0.0% |
+| Health | Review cost | $0.2000 |
+| Health | Scoring cost (judge, separate from review cost) | $0.00 |
+
+## Selection
+
+| Field | Value |
+| --- | --- |
+| Fixture source | default |
+| Slice root | - |
+| Case filters | - |
+| Selected cases | typescript-positive, typescript-negative |
+| Judge agreement | 100.0% (12 pairs) |
+| Judge trustworthy | yes |
+| Plausibility judge agreement | not scored |
+| Adjusted precision trustworthy | yes |
+
+## Metrics
+
+| Metric | Value |
+| --- | --- |
+| Recall | 100.0% |
+| Product recall | 100.0% |
+| Nit recall | 100.0% |
+| In-diff recall | n/a (0 checked) |
+| Out-of-diff recall | n/a (0 checked) |
+| Security obvious recall | n/a (0 expected) |
+| Security hard recall | n/a (0 expected) |
+| Precision (raw to adjusted bracket) | 50.0% to not measured (no plausibility judge) |
+| Precision (lower bound, raw) | 50.0% |
+| Precision (upper bound, adjusted) | not measured (no plausibility judge) |
+| F1 | 66.7% |
+| Severity weighted F1 | 66.7% |
+| Line accuracy | 100.0% (1 checked) |
+| Line placement rate (diagnostic, all match modes) | 100.0% (1 checked) |
+| Severity accuracy | 100.0% (1 checked) |
+| Parse validity | 100.0% |
+| Provider error rate | 0.0% |
+| Provider issue rate | 0.0% (0 cases) |
+| False positives | 1 |
+| Genuine false positives | 1 |
+| Unmatched but plausible | 0 |
+| Plausibility judge agreement | not scored |
+| Inconclusive matches | 0 |
+| Artifact-only recall | 0.0% |
+| Artifact-only precision | 100.0% |
+| Artifact-only findings | 0 |
+| Artifact-only matched | 0 |
+| Artifact-only false positives | 0 |
+| Rejected candidates by reason | none |
+| Rejected candidates by severity | none |
+| Refutation false negatives (upper bound) | 0 |
+| Refutation false positives | 0 |
+| Fix judgment accuracy | n/a (0 judged) |
+| Fix false-positive detection rate | n/a (0 false positives) |
+| Fix produce rate | n/a (0 real) |
+| Fix apply failure rate | n/a (0 attempted) |
+| Duplicate findings | 0 |
+| No-finding-zone hits | 1 |
+| Actionable rate | 100.0% |
+| Incomplete coverage rate | 0.0% |
+| Context mutation rate | 0.0% |
+| Elapsed (wall clock) | 42ms |
+| Duration (summed review time) | 2.0s |
+| Input tokens | 0 |
+| Input tokens (cached) | 0 |
+| Output tokens | 0 |
+| Review cost | $0.2000 |
+| Scoring input tokens (judge + plausibility judge) | 0 |
+| Scoring output tokens (judge + plausibility judge) | 0 |
+| Scoring cost (judge, separate from review cost) | $0.00 |
+
+## Recall by Tier
+
+| Tier | Recall |
+| --- | ---: |
+| runtime-critical | 100.0% |
+| security | 100.0% |
+| logic | 100.0% |
+| nit | 100.0% |
+
+## Recall by Diff Scope
+
+| Diff scope | Recall | Matched/Expected |
+| --- | ---: | ---: |
+| undetermined | 100.0% (1 checked) | 1/1 |
+
+## Metric Groups
+
+| Group | Key | Fixtures | Recall | Precision (raw to adjusted) | F1 | Line accuracy | False positives |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sourceProfile | project | 2 | 100.0% | 50.0% to not measured (no plausibility judge) | 66.7% | 100.0% (1 checked) | 1 |
+| language | typescript | 2 | 100.0% | 50.0% to not measured (no plausibility judge) | 66.7% | 100.0% (1 checked) | 1 |
+
+## Cases
+
+| Case | Profile | Status | Provider | Expected | Matched | Inline | Artifact-only | False positives | Duplicates | Notes |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| typescript-positive | project | PASS | - | 1 | 1 | 1 | 0 | 0 | 0 | - |
+| typescript-negative | project | FAIL | - | 0 | 0 | 1 | 0 | 1 | 0 | false positives 1; no-finding-zone hits 1 |
+
+## Agentic Stage Coverage
+
+| Case | Refutation | Fix | Provider recovery |
+| --- | --- | --- | --- |
+| typescript-positive | skipped 0 | skipped 0 | skipped 0 |
+| typescript-negative | skipped 0 | skipped 0 | skipped 0 |
+
+## Context Ledger Kinds
+
+| Case | Kinds | Considered | Truncated |
+| --- | --- | ---: | ---: |
+| typescript-positive | tool-result: 1 | 1 | 0 |
+
+## Gate Reasons
+
+- falsePositiveCount above threshold: 1 > 0
+
+## Semantic Judge Matches
+
+| Case | Finding | Expected | Reason |
+| --- | --- | --- | --- |
+| typescript-positive | find_eval1 | expected #0 high bug | Both summaries describe the same defect. |
+
+## Attention Needed
+
+### typescript-negative
+
+False positive findings:
+- find_noise1 high bug src/format.ts:3 - Style-only note
+No-finding-zone hit IDs: find_noise1
+
+## Artifacts
+
+- .codereviewer/eval/eval-report.json
+- .codereviewer/eval/eval-summary.md
+- .codereviewer/eval/eval-recall-report.md
+"
+`;

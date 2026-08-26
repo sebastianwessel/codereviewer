@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { createRedactor } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import {
   reviewedLineRangeForContent,
+  sourceLineCount,
   type ReviewedDiffRange,
   type ReviewedLineRange
 } from '../../../admission/index.js'
@@ -13,15 +14,12 @@ import {
   type DeterministicSignalExtraction,
   type SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
-import { type ReviewTask } from '../../../review-planning/index.js'
-import {
-  createContextLedgerEntry,
-  type ContextLedgerEntry
-} from '../../../review-planning/context-ledger.js'
+import type {
+  ContextLedgerEntry,
+  ReviewTask
+} from '../../../review-planning/index.js'
 import type { DiffMap } from '../../../repository-intake/index.js'
 import type { SkillsConfig } from '@purista/harness'
-import type { ReviewWorkflowInput } from '../../harness/workflow.js'
-import { sourceChunkBudgetFor } from '../support/budgets.js'
 import {
   provenanceHashesFromContextLedger,
   type ReviewRunnerProvenanceHashes
@@ -31,19 +29,25 @@ import {
   type InstructionContextDocument,
   type SkillContextDocument
 } from './static-context.js'
-import { collectReferencedDefinitions } from './referenced-definitions.js'
+import {
+  collectReferencedDefinitions,
+  createReferencedDefinitionCache
+} from './referenced-definitions.js'
+import { supportSignalContextsForPaths } from './support-signal-context.js'
+import {
+  createWorkflowTask,
+  type ContextInput,
+  type ReviewContextDocument,
+  type WorkflowReviewTask
+} from './workflow-task.js'
 
 export type {
   InstructionContextDocument,
   SkillContextDocument
 } from './static-context.js'
 
-type ReviewContextDocument = NonNullable<
-  ReviewWorkflowInput['reviewContext']
->[number]
-export type WorkflowReviewTask = NonNullable<
-  ReviewWorkflowInput['tasks']
->[number]
+export type { WorkflowReviewTask } from './workflow-task.js'
+
 export type ContextAssemblyResult = {
   readonly reviewContext: readonly ReviewContextDocument[]
   readonly tasks: readonly WorkflowReviewTask[]
@@ -52,6 +56,12 @@ export type ContextAssemblyResult = {
   readonly skillDefinitions: SkillsConfig
   readonly skillIds: readonly string[]
   readonly contextLedger: readonly ContextLedgerEntry[]
+  readonly referencedDefinitionsDroppedCount: number
+  readonly referencedDefinitionsUnreadableCount: number
+  // Spans redaction replaced in the documents this assembly hands to the model.
+  // See the note at the substitution itself for why this is counted and the
+  // redactions in logs and report artifacts are not.
+  readonly redactedContextSpanCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -59,17 +69,28 @@ export type ReviewRunnerContextStateMetrics = {
   readonly workflowTaskCount: number
   readonly instructionCount: number
   readonly skillCount: number
+  // Dependency digests the referenced-definition caps kept out, summed over
+  // every task. Zero is the expected case and the one worth noticing when it
+  // stops being true: a run whose dependency context was cut reviewed something
+  // different from one whose was not, and before this the difference was
+  // invisible — the counts were computed and discarded at the call site.
+  readonly referencedDefinitionsDroppedCount: number
+  // Dependencies that resolved and then failed to read, summed over every task.
+  // Separate from the dropped count because the two ask for different actions:
+  // a cap that bound is answered by raising a bound, an unreadable dependency is
+  // answered by looking at the repository. Summing them would put a filesystem
+  // failure behind a message that says the caps were too tight.
+  readonly referencedDefinitionsUnreadableCount: number
+  // Spans redaction replaced across this run's context documents. Same argument
+  // as the dropped count above and a sharper version of it: a capped dependency
+  // is context the model never saw, a redacted span is context the model saw
+  // WRONG — it reads `[REDACTED]` where the file has source, and reasons from it.
+  readonly redactedContextSpanCount: number
 }
 
 export type ReviewRunnerContextState = ReviewRunnerProvenanceHashes & {
   readonly assembledContext: ContextAssemblyResult
   readonly metrics: ReviewRunnerContextStateMetrics
-}
-
-type ContextInput = {
-  readonly content: string
-  readonly kind: ReviewContextDocument['kind']
-  readonly path?: string
 }
 
 export const readChangedSourceFiles = async (
@@ -98,71 +119,69 @@ export const reviewedLineRangesForSourceFiles = (
     })
   )
 
+/**
+ * The head-side span every hunk occupies, per changed file: the reviewed change
+ * footprint admission scopes candidates by and the discovery packet shows the
+ * model as change metadata.
+ *
+ * A PURE-DELETION hunk reports `newLineCount === 0` and occupies no head-side
+ * line. This used to drop those hunks, which is not a smaller range but the FILE
+ * disappearing from the list — and `candidateWithinReviewedScope` admits by PATH,
+ * treating a non-empty list as authoritative. So a change whose file A only
+ * deletes lines while file B adds some produced a list with no entry for A, and
+ * every model candidate in A was rejected as out-of-diff scope. That is not an
+ * exotic shape: intake fetches the diff with `--unified=0`, so any hunk that only
+ * removes lines reports zero, and deleting a function is precisely how a change
+ * breaks its callers.
+ *
+ * A deletion hunk is therefore anchored at `newStartLine` — the head-side line the
+ * removal sits after — which is the answer `changedSymbols`' `hunkRange`,
+ * `eval-diff-scope` and `git-diff-header`'s `hunksWithinRange` already derive for
+ * this shape. Four derivations of one coordinate, one of them disagreeing, is what
+ * produced the bug.
+ *
+ * `deletionAnchor` marks it, and the mark is load-bearing. The anchor line is NOT
+ * a changed head-side line: under `--unified=0` it is not in the diff at all, so
+ * no inline comment can be placed on it. Inline-comment eligibility is a separate
+ * decision (`locationDiffRangeIsInlineEligible`) but it reads THIS array, so the
+ * two only stay separable if a range says which kind it is.
+ *
+ * A whole-file deletion reports `newStartLine === 0`: no head-side position exists
+ * and no head-side content exists for a candidate to point at, so it contributes
+ * nothing. Such a range would also fail `ReviewedDiffRangeSchema`, whose
+ * `startLine` is 1-based.
+ */
 export const reviewedDiffRangesForDiffMaps = (
   diffMaps: readonly DiffMap[]
 ): readonly ReviewedDiffRange[] =>
   diffMaps.flatMap((diffMap) =>
-    diffMap.hunks
-      .filter((hunk) => hunk.newLineCount > 0)
-      .map((hunk) => ({
-        path: diffMap.path,
-        startLine: hunk.newStartLine,
-        endLine: hunk.newStartLine + hunk.newLineCount - 1,
-        changeKind: diffMap.changeKind
-      }))
+    diffMap.hunks.flatMap((hunk) => {
+      if (hunk.newLineCount > 0) {
+        return [
+          {
+            path: diffMap.path,
+            startLine: hunk.newStartLine,
+            endLine: hunk.newStartLine + hunk.newLineCount - 1,
+            changeKind: diffMap.changeKind
+          }
+        ]
+      }
+
+      return hunk.newStartLine < 1
+        ? []
+        : [
+            {
+              path: diffMap.path,
+              startLine: hunk.newStartLine,
+              endLine: hunk.newStartLine,
+              changeKind: diffMap.changeKind,
+              deletionAnchor: true
+            }
+          ]
+    })
   )
 
-const bytesOf = (value: string): number => Buffer.byteLength(value)
-
-const sliceUtf8 = (value: string, maxBytes: number): string =>
-  Buffer.from(value).subarray(0, Math.max(0, maxBytes)).toString('utf8')
-
-const redacted = (value: string): string => createRedactor().redact(value)
-
-export const splitTextByUtf8Bytes = (
-  content: string,
-  maxBytes: number
-): readonly string[] => {
-  if (maxBytes < 1) {
-    throw new TypeError('maxBytes must be greater than 0.')
-  }
-
-  if (content.length === 0) {
-    return ['']
-  }
-
-  const chunks: string[] = []
-  let current = ''
-  let currentBytes = 0
-
-  for (const character of content) {
-    const characterBytes = bytesOf(character)
-
-    if (currentBytes > 0 && currentBytes + characterBytes > maxBytes) {
-      chunks.push(current)
-      current = ''
-      currentBytes = 0
-    }
-
-    current += character
-    currentBytes += characterBytes
-  }
-
-  if (current.length > 0 || chunks.length === 0) {
-    chunks.push(current)
-  }
-
-  return chunks
-}
-
-const uniqueSorted = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
-
-const contextBytes = (contexts: readonly ContextInput[]): number =>
-  contexts.reduce((total, context) => total + bytesOf(context.content), 0)
-
 const workflowTaskPaths = (
-  task: ReviewTask,
   contexts: readonly ContextInput[],
   fallbackPaths: readonly string[]
 ): readonly string[] => {
@@ -180,6 +199,13 @@ export const assembleContext = async (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly analysis: DeterministicSignalExtraction
     readonly tasks: readonly ReviewTask[]
+    // The reviewed diff, for ACCOUNTING only. Every discovery packet carries the
+    // task's own segments of it, and the ledger recorded none of them — so "how
+    // much context did this run send" answered low by the size of the diff, which
+    // on a large change is the biggest single input there is. The packet still
+    // builds its own copy from this same text through the same shared splitter;
+    // this does not put the diff into the task documents.
+    readonly reviewedDiffText: string
   }
 ): Promise<ContextAssemblyResult> => {
   const staticContext = await loadStaticReviewContext({
@@ -187,102 +213,39 @@ export const assembleContext = async (
     config: input.config
   })
   const contextLedger: ContextLedgerEntry[] = [...staticContext.contextLedger]
+  // Accumulated across every task, next to the ledger and for the same reason:
+  // it records what the model was actually given.
+  let redactedContextSpans = 0
 
-  const createWorkflowTask = (
-    task: ReviewTask,
-    taskId: string,
-    inputContexts: readonly ContextInput[],
-    paths: readonly string[],
-    // Referenced-definition contexts (R4) are appended to reviewContext but MUST
-    // NOT influence task.paths: they are unchanged dependency files included for
-    // context only, never review targets. They are passed separately so the
-    // caller can derive paths solely from the changed-file/support-signal batch.
-    referencedDefinitionContexts: readonly ContextInput[] = []
-  ): WorkflowReviewTask => {
-    const reviewContext: ReviewContextDocument[] = []
-    const contextEntryIds: string[] = []
-    const pathSet = new Set(paths)
-
-    for (const inputContext of [
-      ...inputContexts,
-      ...referencedDefinitionContexts
-    ]) {
-      const contentBytes = bytesOf(inputContext.content)
-      const ledgerEntry = createContextLedgerEntry({
-        // The context ledger has no dedicated kinds for 'test-mapping' or
-        // 'referenced-definition'; both are recorded as support-signal-output
-        // (derived context, not a reviewed changed file).
-        kind:
-          inputContext.kind === 'test-mapping' ||
-          inputContext.kind === 'referenced-definition'
-            ? 'support-signal-output'
-            : inputContext.kind,
-        ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
-        taskId,
-        reason:
-          inputContext.kind === 'file'
-            ? 'task-context-source-chunk'
-            : inputContext.kind === 'referenced-definition'
-              ? 'task-context-referenced-definition'
-              : 'task-context-support-signal-chunk',
-        decision: 'included',
-        bytesConsidered: contentBytes,
-        bytesIncluded: contentBytes,
-        content: inputContext.content
-      })
-      const contextDocument: ReviewContextDocument = {
-        kind: inputContext.kind,
-        ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
-        content: redacted(inputContext.content),
-        ledgerEntryId: ledgerEntry.id
-      }
-
-      contextLedger.push(ledgerEntry)
-      reviewContext.push(contextDocument)
-      contextEntryIds.push(ledgerEntry.id)
-    }
-
-    return {
-      ...task,
-      id: taskId,
-      paths: [...paths],
-      factIds: input.analysis.facts
-        .filter((fact) => pathSet.has(fact.path))
-        .map((fact) => fact.id),
-      evidenceIds: input.analysis.evidence
-        .filter(
-          (record) =>
-            task.evidenceIds.includes(record.id) &&
-            pathSet.has(record.location?.path ?? '')
-        )
-        .map((record) => record.id),
-      candidateIds: [],
-      reviewContext,
-      contextEntryIds
-    }
-  }
-
+  // A single-file task carrying only its own source keeps the planner's id, so the
+  // common case stays traceable straight back to planning; anything else gets an id
+  // derived from what it actually carries.
+  //
+  // The literal `batch:0` is a fossil of the removed proactive byte-budget split,
+  // which numbered several batches per task. It is kept verbatim rather than tidied
+  // away because the id is hashed into every candidate and evidence id the task
+  // produces, and rewriting the seed would silently renumber all of them.
   const workflowTaskId = (
     task: ReviewTask,
-    input: {
-      readonly contexts: readonly ContextInput[]
-      readonly batchIndex: number
-      readonly batchCount: number
-    }
+    contexts: readonly ContextInput[]
   ): string =>
-    input.batchCount === 1 &&
-    input.contexts.length === 1 &&
-    input.contexts[0]?.kind === 'file' &&
+    contexts.length === 1 &&
+    contexts[0]?.kind === 'file' &&
     task.paths.length === 1
       ? task.id
       : `task_${sha256(
-          `${task.id}:batch:${input.batchIndex}:${input.contexts
+          `${task.id}:batch:0:${contexts
             .map((context) => `${context.kind}:${context.path ?? ''}`)
             .join('|')}`
         ).slice(0, 16)}`
 
   const tasks: WorkflowReviewTask[] = []
-  const chunkBudget = sourceChunkBudgetFor(input.config)
+  let referencedDefinitionsDropped = 0
+  let referencedDefinitionsUnreadable = 0
+  // Shared by every task in this assembly. Tasks legitimately import the same
+  // dependencies, and without this each one re-probed the same import candidates
+  // and re-ran the extractor over the same dependency files.
+  const referencedDefinitionCache = createReferencedDefinitionCache()
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
   // Every changed/source file path: referenced-definition resolution must never
   // surface one of these (they are reviewed directly, not injected as context).
@@ -290,168 +253,111 @@ export const assembleContext = async (
     input.sourceFiles.map((sourceFile) => sourceFile.path)
   )
 
-  const supportSignalContextsForPaths = (
-    task: ReviewTask,
-    pathSet: ReadonlySet<string>
-  ): readonly ContextInput[] => {
-    // `deterministicSignalMode: 'disabled'` keeps deterministic facts for free
-    // task clustering (already applied by the planner) but does not inject the
-    // serialized support-signal facts into the model packet, since that structural
-    // summary is largely redundant with the source the model already reads.
-    if (input.config.aiReview.deterministicSignalMode === 'disabled') {
-      return []
-    }
-
-    const supportSignalFacts = input.analysis.facts.filter(
-      (fact) => task.factIds.includes(fact.id) && pathSet.has(fact.path)
-    )
-    const supportSignalTestMappings = testMappings.filter(
-      (mapping) =>
-        pathSet.has(mapping.sourcePath) || pathSet.has(mapping.testPath)
-    )
-    const supportSignalContext =
-      supportSignalFacts.length === 0 && supportSignalTestMappings.length === 0
-        ? ''
-        : JSON.stringify({
-            facts: supportSignalFacts,
-            testMappings: supportSignalTestMappings
-          })
-
-    return bytesOf(supportSignalContext) === 0
-      ? []
-      : splitTextByUtf8Bytes(supportSignalContext, chunkBudget).map((chunk) => ({
-          kind: 'support-signal-output' as const,
-          content: chunk
-        }))
-  }
-
-  const packContexts = (
-    contexts: readonly ContextInput[]
-  ): readonly (readonly ContextInput[])[] => {
-    const batches: ContextInput[][] = []
-    let pending: ContextInput[] = []
-    let pendingBytes = 0
-
-    const flush = (): void => {
-      if (pending.length > 0) {
-        batches.push(pending)
-        pending = []
-        pendingBytes = 0
-      }
-    }
-
-    for (const context of contexts) {
-      const currentBytes = bytesOf(context.content)
-
-      if (pending.length > 0 && pendingBytes + currentBytes > chunkBudget) {
-        flush()
-      }
-
-      pending.push(context)
-      pendingBytes += currentBytes
-    }
-
-    flush()
-
-    return batches
-  }
-
   for (const task of input.tasks) {
     const taskPathSet = new Set(task.paths)
     const taskSourceFiles = input.sourceFiles.filter((sourceFile) =>
       taskPathSet.has(sourceFile.path)
     )
-    const sourceContexts = taskSourceFiles.flatMap((file) =>
-      splitTextByUtf8Bytes(file.content, chunkBudget).map((chunk) => ({
-        kind: 'file' as const,
-        path: file.path,
-        content: chunk
-      }))
-    )
-    const batches: ContextInput[][] = []
-    const supportSignalAttachedPaths = new Set<string>()
-
-    for (const batch of packContexts(sourceContexts)) {
-      const batchPaths = workflowTaskPaths(task, batch, task.paths)
-      const newSupportSignalPaths = batchPaths.filter(
-        (pathValue) => !supportSignalAttachedPaths.has(pathValue)
-      )
-      const supportSignalContexts = supportSignalContextsForPaths(
-        task,
-        new Set(newSupportSignalPaths)
-      )
-      const packedBatch = [...batch]
-      const standaloneSupportSignalContexts: ContextInput[] = []
-      let packedBytes = contextBytes(packedBatch)
-
-      for (const supportSignalContext of supportSignalContexts) {
-        const supportSignalBytes = bytesOf(supportSignalContext.content)
-
-        if (packedBytes + supportSignalBytes <= chunkBudget) {
-          packedBatch.push(supportSignalContext)
-          packedBytes += supportSignalBytes
-        } else {
-          standaloneSupportSignalContexts.push(supportSignalContext)
-        }
-      }
-
-      batches.push(packedBatch)
-      batches.push(
-        ...packContexts(standaloneSupportSignalContexts).map((contextBatch) => [
-          ...contextBatch
-        ])
-      )
-
-      for (const pathValue of newSupportSignalPaths) {
-        supportSignalAttachedPaths.add(pathValue)
-      }
-    }
-
-    if (sourceContexts.length === 0) {
-      batches.push(
-        ...packContexts(supportSignalContextsForPaths(task, taskPathSet)).map(
-          (contextBatch) => [...contextBatch]
-        )
-      )
-    }
+    // Spec 26: assembly does NOT split. Each changed file is ONE document spanning
+    // the whole file, and the task is ONE batch, however large it comes out. The
+    // span is still recorded because a document that the PROVIDER later refuses is
+    // split reactively into pieces that must keep the file's real line numbers.
+    //
+    // What this replaces was a byte budget guessed in advance, and it was wrong in
+    // both directions at once: bytes are a poor proxy for tokens, so the guess erred
+    // by a content-dependent factor, and the value was small enough to fire on 37%
+    // of this repository's last 60 commits against context windows one to two orders
+    // of magnitude larger. Every one of those splits substituted several partial
+    // reviews for the whole-file holistic review this project MEASURED as better,
+    // and charged an extra discovery-plus-refutation pair for the privilege.
+    const sourceContexts = taskSourceFiles.map((file) => ({
+      kind: 'file' as const,
+      path: file.path,
+      content: file.content,
+      startLine: 1,
+      endLine: Math.max(1, sourceLineCount(file.content))
+    }))
+    // Spec 26 again: the task's whole context is ONE document set, not a series of
+    // byte-sized batches.
+    const taskContexts: ContextInput[] = [
+      ...sourceContexts,
+      ...supportSignalContextsForPaths({
+        factIds: task.factIds,
+        pathSet:
+          sourceContexts.length === 0
+            ? taskPathSet
+            : new Set(workflowTaskPaths(sourceContexts, task.paths)),
+        deterministicSignalMode: input.config.aiReview.deterministicSignalMode,
+        facts: input.analysis.facts,
+        testMappings
+      })
+    ]
 
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
     // never enter task.paths and are not review targets. `allSourcePaths` covers
     // every changed file so a dependency that happens to be changed is excluded.
-    const referencedDefinitionContexts: ContextInput[] =
+    // The collector counts what its caps kept out, with the comment "count them
+    // so the omission is reportable" — and this call site used to read `.digests`
+    // and throw both counts away, so nothing was reported anywhere. A task whose
+    // dependency view was cut looked exactly like one with no dependencies.
+    const referenced =
       input.config.aiReview.deterministicSignalMode === 'disabled'
-        ? []
-        : (
-            await collectReferencedDefinitions({
-              repositoryRoot: input.repositoryRoot,
-              taskPaths: task.paths,
-              facts: input.analysis.facts,
-              knownPaths: allSourcePaths
-            })
-          ).map((digest) => ({
-            kind: 'referenced-definition' as const,
-            path: digest.path,
-            content: digest.content
-          }))
+        ? {
+            digests: [],
+            droppedByFileCap: 0,
+            droppedByBudget: 0,
+            droppedByReadFailure: 0
+          }
+        : await collectReferencedDefinitions({
+            repositoryRoot: input.repositoryRoot,
+            taskPaths: task.paths,
+            facts: input.analysis.facts,
+            knownPaths: allSourcePaths,
+            cache: referencedDefinitionCache
+          })
 
-    batches.forEach((batch, index) => {
-      const paths = workflowTaskPaths(task, batch, task.paths)
+    // The two caps sum into one "dropped" count because they say the same thing
+    // to a reader — the section was too small for this task's dependencies. A read
+    // failure does not, so it is carried on its own.
+    referencedDefinitionsDropped +=
+      referenced.droppedByFileCap + referenced.droppedByBudget
+    referencedDefinitionsUnreadable += referenced.droppedByReadFailure
 
-      tasks.push(
-        createWorkflowTask(
-          task,
-          workflowTaskId(task, {
-            contexts: batch,
-            batchIndex: index,
-            batchCount: batches.length
-          }),
-          batch,
-          paths,
-          referencedDefinitionContexts
-        )
-      )
-    })
+    const referencedDefinitionContexts: ContextInput[] = referenced.digests.map(
+      (digest) => ({
+        kind: 'referenced-definition' as const,
+        path: digest.path,
+        content: digest.content
+      })
+    )
+
+    // A task with nothing to show the reviewer produces no workflow task at all.
+    if (taskContexts.length > 0) {
+      const created = createWorkflowTask({
+        task,
+        taskId: workflowTaskId(task, taskContexts),
+        inputContexts: taskContexts,
+        paths: workflowTaskPaths(taskContexts, task.paths),
+        referencedDefinitionContexts,
+        reviewedDiffText: input.reviewedDiffText,
+        instructions: staticContext.instructions,
+        instructionScopes: staticContext.instructionScopes,
+        facts: input.analysis.facts,
+        evidence: input.analysis.evidence,
+        // Decides which stage the support-signal document's ledger entry claims to
+        // have reached. Read from config here, where config already is, rather than
+        // handing the whole config to a module that needs one boolean.
+        signalFactsEnabled: input.config.review.signalFacts.enabled
+      })
+
+      // Appended here, in task order, rather than inside the creation above: the
+      // ledger's order is the loop's, and it stays a property a reader can check
+      // by reading this loop.
+      contextLedger.push(...created.ledgerEntries)
+      redactedContextSpans += created.redactedSpanCount
+      tasks.push(created.task)
+    }
   }
   const reviewContextById = new Map<string, ReviewContextDocument>()
 
@@ -468,8 +374,42 @@ export const assembleContext = async (
     skills: staticContext.skills,
     skillDefinitions: staticContext.skillDefinitions,
     skillIds: staticContext.skillIds,
-    contextLedger
+    contextLedger,
+    referencedDefinitionsDroppedCount: referencedDefinitionsDropped,
+    referencedDefinitionsUnreadableCount: referencedDefinitionsUnreadable,
+    redactedContextSpanCount: redactedContextSpans
   }
+}
+
+/**
+ * The run's disclosure that redaction altered the material the model reviewed.
+ *
+ * One warning for both surfaces, because the reader's question is the same for
+ * the diff and for a context document — "did the reviewer see this file as it
+ * is?" — and the remedy is the same too: search the changed files for
+ * `[REDACTED]` and decide whether a real credential is committed there or a
+ * pattern matched ordinary code. The two counts are reported separately anyway,
+ * because a diff-only redaction and a context-only one point at different halves
+ * of the same material.
+ *
+ * Silent at zero. A warning on every run is one nobody reads, which is the rule
+ * the referenced-definition caps already follow, and zero is the expected result:
+ * measured over this repository's tracked files and its installed dependencies
+ * (5,253 files, 52.3 MB), no production source file matches any pattern.
+ */
+export const redactedReviewMaterialWarnings = (input: {
+  readonly redactedDiffSpanCount: number
+  readonly redactedContextSpanCount: number
+}): readonly string[] => {
+  const total = input.redactedDiffSpanCount + input.redactedContextSpanCount
+
+  if (total === 0) {
+    return []
+  }
+
+  return [
+    `Secret redaction replaced ${total} span(s) of the material this review read (${input.redactedDiffSpanCount} in the reviewed diff, ${input.redactedContextSpanCount} in task context), so the reviewer saw \`[REDACTED]\` where those files have text. Findings that touch those spans were reasoned about altered source. Check whether a credential is committed there; if not, a redaction pattern matched ordinary code.`
+  ]
 }
 
 export const prepareReviewRunnerContextState = async (
@@ -484,7 +424,12 @@ export const prepareReviewRunnerContextState = async (
       ledgerEntryCount: assembledContext.contextLedger.length,
       workflowTaskCount: assembledContext.tasks.length,
       instructionCount: assembledContext.instructions.length,
-      skillCount: assembledContext.skills.length
+      skillCount: assembledContext.skills.length,
+      referencedDefinitionsDroppedCount:
+        assembledContext.referencedDefinitionsDroppedCount,
+      referencedDefinitionsUnreadableCount:
+        assembledContext.referencedDefinitionsUnreadableCount,
+      redactedContextSpanCount: assembledContext.redactedContextSpanCount
     }
   }
 }

@@ -29,7 +29,9 @@ const createDebugLogger = (): {
       records.push({ message, ...(fields === undefined ? {} : { fields }) })
     },
     info: () => {},
-    warn: () => {},
+    warn: (message, fields) => {
+      records.push({ message, ...(fields === undefined ? {} : { fields }) })
+    },
     error: () => {},
     fatal: () => {},
     child: () => logger
@@ -44,7 +46,7 @@ const sourceFiles: readonly SupportSignalSourceFile[] = [
 
 const evidence: EvidenceRecord = {
   id: 'ev_app',
-  kind: 'symbol',
+  kind: 'file',
   summary: 'app export is available.',
   location: {
     path: 'src/app.ts',
@@ -64,6 +66,7 @@ const analysis: DeterministicSignalExtraction = {
       path: 'src/app.ts',
       name: 'app',
       line: 1,
+      endLine: 1,
       summary: 'Exports app.',
       contentHash: 'hash-app'
     }
@@ -96,7 +99,10 @@ describe('review runner context assembly state', () => {
         skills: [],
         skillDefinitions: {},
         skillIds: [],
-        contextLedger: []
+        contextLedger: [],
+        referencedDefinitionsDroppedCount: 0,
+        referencedDefinitionsUnreadableCount: 0,
+      redactedContextSpanCount: 0
       },
       instructionHashes: ['instruction-hash'],
       skillHashes: ['skill-hash'],
@@ -104,7 +110,10 @@ describe('review runner context assembly state', () => {
         ledgerEntryCount: 3,
         workflowTaskCount: 1,
         instructionCount: 1,
-        skillCount: 1
+        skillCount: 1,
+        referencedDefinitionsDroppedCount: 0,
+        referencedDefinitionsUnreadableCount: 0,
+      redactedContextSpanCount: 0
       }
     }
     let receivedInput:
@@ -114,6 +123,7 @@ describe('review runner context assembly state', () => {
           readonly sourceFiles: typeof sourceFiles
           readonly analysis: typeof analysis
           readonly tasks: readonly ReviewTask[]
+          readonly reviewedDiffText: string
         }
       | undefined
 
@@ -123,6 +133,7 @@ describe('review runner context assembly state', () => {
       sourceFiles,
       analysis,
       tasks: [task],
+      reviewedDiffText: '',
       observability,
       logger,
       prepareContextState: async (input) => {
@@ -137,7 +148,8 @@ describe('review runner context assembly state', () => {
       config,
       sourceFiles,
       analysis,
-      tasks: [task]
+      tasks: [task],
+      reviewedDiffText: ''
     })
     expect(
       observability
@@ -151,7 +163,14 @@ describe('review runner context assembly state', () => {
       {
         step: 'context_assembly',
         attributes: {
-          ledgerEntryCount: 3
+          ledgerEntryCount: 3,
+          // Zero, and recorded as zero: a run that dropped dependency digests
+          // must be distinguishable from one that had none to drop.
+          referencedDefinitionsDroppedCount: 0,
+          referencedDefinitionsUnreadableCount: 0,
+          // Same rule for redaction: zero is the expected result and has to be
+          // stated, or a run that reviewed altered source reads like every other.
+          redactedContextSpanCount: 0
         }
       }
     ])
@@ -163,8 +182,68 @@ describe('review runner context assembly state', () => {
           ledger_entry_count: 3,
           workflow_task_count: 1,
           instruction_count: 1,
-          skill_count: 1
+          skill_count: 1,
+          referenced_definitions_dropped_count: 0,
+          referenced_definitions_unreadable_count: 0,
+          redacted_context_span_count: 0
         }
+      }
+    ])
+  })
+
+  // A dependency that resolved and then failed to read is not the caps binding.
+  // Reporting it under the "was capped" warning would send a reader to raise a
+  // bound that was never reached.
+  test('warns about unreadable dependencies apart from capped ones', async () => {
+    const config = CodeReviewerConfigSchema.parse({})
+    const { logger, records } = createDebugLogger()
+    const contextState: ReviewRunnerContextState = {
+      assembledContext: {
+        reviewContext: [],
+        tasks: [],
+        instructions: [],
+        skills: [],
+        skillDefinitions: {},
+        skillIds: [],
+        contextLedger: [],
+        referencedDefinitionsDroppedCount: 0,
+        referencedDefinitionsUnreadableCount: 2,
+        redactedContextSpanCount: 0
+      },
+      instructionHashes: [],
+      skillHashes: [],
+      metrics: {
+        ledgerEntryCount: 0,
+        workflowTaskCount: 0,
+        instructionCount: 0,
+        skillCount: 0,
+        referencedDefinitionsDroppedCount: 0,
+        referencedDefinitionsUnreadableCount: 2,
+        redactedContextSpanCount: 0
+      }
+    }
+
+    await prepareReviewRunnerContextAssemblyState({
+      repositoryRoot: '/repo/project',
+      config,
+      sourceFiles,
+      analysis,
+      tasks: [task],
+      reviewedDiffText: '',
+      observability: createNoContentEventRecorder(),
+      logger,
+      prepareContextState: async () => contextState
+    })
+
+    const warnings = records.filter((record) =>
+      record.message.startsWith('Referenced-definition')
+    )
+
+    expect(warnings).toEqual([
+      {
+        message:
+          'Referenced-definition dependencies resolved but could not be read; they were not shown to the reviewer.',
+        fields: { referenced_definitions_unreadable_count: 2 }
       }
     ])
   })

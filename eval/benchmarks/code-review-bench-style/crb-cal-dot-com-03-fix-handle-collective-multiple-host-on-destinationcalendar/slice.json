@@ -37,6 +37,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId === externalCalendarId, but this will always fail since you're looking for a calendar that matches itself. Should likely find by credentialId or use different logic.",
+      "securityMechanism": "authorization",
+      "contextDepth": "cross-function",
       "matchMode": "semantic-only",
       "tier": "logic"
     },
@@ -51,6 +53,8 @@
       "category": "security",
       "severity": "low",
       "semanticSummary": "The Calendar interface now requires createEvent(event, credentialId), but some implementations (e.g., Lark/Office365) still declare createEvent(event) only—this breaks the interface contract (also applies to other locations in the PR).",
+      "securityMechanism": "authorization",
+      "contextDepth": "cross-file",
       "matchMode": "semantic-only",
       "tier": "runtime-critical"
     }

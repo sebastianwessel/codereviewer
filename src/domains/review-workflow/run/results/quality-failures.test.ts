@@ -4,6 +4,7 @@ import {
   EvidenceRecordSchema
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { evaluateQualityGate } from '../../../admission/index.js'
 import type { ReviewRunnerAdmissionState } from '../admission.js'
 import { createCoverageSummary } from './results.js'
 import {
@@ -24,7 +25,7 @@ const config = CodeReviewerConfigSchema.parse({
 
 const evidence = EvidenceRecordSchema.parse({
   id: 'ev_alpha',
-  kind: 'deterministic-signal',
+  kind: 'diagnostic',
   summary: 'Symbol alpha was detected.',
   location: { path: 'src/a.ts', startLine: 1, side: 'file' },
   source: 'deterministic-support-signal',
@@ -40,6 +41,7 @@ const analysis = {
       path: 'src/a.ts',
       name: 'alpha',
       line: 1,
+      endLine: 1,
       summary: 'alpha declaration',
       contentHash: sha256('let alpha = 1')
     }
@@ -52,7 +54,9 @@ const admission = {
   candidateFindings: [],
   admittedFindings: [],
   rejectedFindings: [],
-  qualityGate: undefined,
+  // Admission always carries a gate result; this is the one a run with no
+  // admitted findings produces.
+  qualityGate: evaluateQualityGate({ admittedFindings: [], thresholds: {} }),
   refutationResults: [],
   providerIssues: [],
   contextLedgerEntries: [],
@@ -85,6 +89,9 @@ const commonInput = {
   },
   analysis,
   admission,
+  // These fixtures fail their gate on a run that DID search; the no-search case
+  // is covered where the fact is established, in `results.test.ts`.
+  modelSearch: 'performed',
   contextLedger: [],
   observability: { events: [] }
 } as const
@@ -93,7 +100,8 @@ describe('review runner quality failure helpers', () => {
   test('creates coverage-incomplete partial failures with admission shared context', () => {
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: 'let alpha = 1' }],
-      contextLedger: []
+      contextLedger: [],
+      skippedFileCount: 0
     })
 
     const failure = createReviewRunnerCoverageFailure({
@@ -103,6 +111,9 @@ describe('review runner quality failure helpers', () => {
 
     expect(failure.structuredError.code).toBe('coverage_incomplete')
     expect(failure.structuredError.details).toEqual({
+      // Named in the failure too: a coverage error that counts only the files
+      // which reached review says nothing about the ones that never did.
+      excludedFileCount: 0,
       reviewableFileCount: 1,
       coveredFileCount: 0,
       reviewableBytes: 13,

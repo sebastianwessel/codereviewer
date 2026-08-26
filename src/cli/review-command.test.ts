@@ -2,6 +2,13 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
+import type {
+  JsonValue,
+  ModelProvider,
+  ObjectRequest,
+  ObjectResponse
+} from '@purista/harness'
+import { ReviewStdoutEnvelopeSchema } from '../shared/contracts/index.js'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -10,13 +17,80 @@ const createTempDir = async (): Promise<string> => {
   return directory
 }
 
+// The three capabilities promoted to on by default on 2026-08-11, switched back off
+// for tests that assert an EXACT warning list.
+//
+// These tests run over a scratch directory that is not a git repository, so all
+// three have something true and unhelpful to say about it: no inbox and no changed
+// markdown means no change intent, and no `.git` means neither advisory lane can
+// resolve a diff to work from. Each warning is correct and each is noise relative to
+// what the test is about — a context budget, a file cap, an empty verification
+// report. Turning them off keeps every one of those assertions about its own
+// subject; `context-ingestion.test.ts` is where the defaulted providers' own
+// behaviour on absent inputs is pinned.
+const promotedDefaultsOff = {
+  contextSources: { enabled: false },
+  changeImpact: { enabled: false },
+  intentFulfilment: { enabled: false }
+} as const
+
+// The tests below configure no provider and are about deterministic artifacts —
+// coverage, context ledgers, budgets, log sinks, the verification lane. A run
+// that asks for a model review and has no model is refused in preflight, so the
+// deterministic-only intent those runs always had is now written down instead of
+// arriving as a defaulted `aiReview.enabled: true` with nothing behind it.
+const deterministicOnly = { aiReview: { enabled: false } } as const
+
+// A resolvable model provider whose model methods are never expected to run in
+// these tests: the general review keeps AI review disabled and verification
+// gathers no claims (its only claim provider fails), so no request is issued.
+class UnusedModelProvider implements ModelProvider {
+  readonly id = 'unused-model-provider'
+  readonly genAiSystem = 'unused'
+
+  async object<T extends JsonValue = JsonValue>(): Promise<ObjectResponse<T>> {
+    throw new Error('UnusedModelProvider.object must not be called in this test')
+  }
+}
+
+// A minimal scripted provider that reports zero findings for every discovery
+// call. Records every request it receives so a test can prove it was actually
+// invoked (as opposed to the real `@purista/harness` SDK provider that the CLI
+// falls back to when it fails to forward `providerImport`).
+class EmptyFindingProvider implements ModelProvider {
+  readonly id = 'empty-finding-provider'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(request)
+
+    return {
+      object: { findings: [] } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
 describe('review CLI', () => {
   test('runs a real local review for explicit files and writes artifacts', async () => {
     const root = await createTempDir()
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify(deterministicOnly)
+      )
 
       const result = await runCli(['review', '--file', 'src/app.ts'], {
         cwd: root,
@@ -27,6 +101,12 @@ describe('review CLI', () => {
       expect(result.stderr).toBe('')
       expect(result.stdout).toContain('"qualityGatePassed": true')
       expect(result.stdout).not.toContain('test-run')
+      // Against the CONTRACT, not just against the two keys this test happens to
+      // read: `scripts/github/pipeline.ts` and every documented CI recipe parse
+      // this document, and a renamed or dropped field used to fail nothing here.
+      expect(
+        ReviewStdoutEnvelopeSchema.parse(JSON.parse(result.stdout)).qualityGatePassed
+      ).toBe(true)
 
       const artifactDir = JSON.parse(result.stdout).artifactDir as string
       await expect(stat(join(root, artifactDir, 'report.json'))).resolves.toBeDefined()
@@ -36,6 +116,10 @@ describe('review CLI', () => {
       await expect(stat(join(root, artifactDir, 'context-ledger.json'))).resolves.toBeDefined()
       await expect(stat(join(root, artifactDir, 'shared-context.json'))).resolves.toBeDefined()
       await expect(stat(join(root, artifactDir, 'observability.json'))).resolves.toBeDefined()
+      // Verification is off by default, so its lane writes no artifact.
+      await expect(
+        stat(join(root, artifactDir, 'verification-report.json'))
+      ).rejects.toThrow()
 
       const report = JSON.parse(
         await readFile(join(root, artifactDir, 'report.json'), 'utf8')
@@ -88,10 +172,19 @@ describe('review CLI', () => {
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify(deterministicOnly)
+      )
 
       const result = await runCli(
-        ['review', '--debug', '--file', 'src/app.ts', '--resume', 'run-debug-cli'],
+        // `--resume run-debug-cli` used to be passed here. It is parsed nowhere in
+        // `src/cli`, documented nowhere, and implemented nowhere: the assertion
+        // below only ever passed because unknown options were silently ignored,
+        // which is the behaviour `unknownCliOption` now removes.
+        ['review', '--debug', '--file', 'src/app.ts'],
         {
           cwd: root,
           environment: {},
@@ -141,11 +234,12 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
           review: {
             contextMaxBytes: 10000
           },
           instructions: {
-            files: ['.codereviewer/instructions/review.md']
+            files: [{ path: '.codereviewer/instructions/review.md' }]
           },
           skills: {
             enabled: true,
@@ -205,6 +299,8 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
+          ...promotedDefaultsOff,
           review: {
             contextMaxBytes: 10000
           }
@@ -260,6 +356,8 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
+          ...promotedDefaultsOff,
           review: {
             maxFileBytes: 2000000
           }
@@ -311,6 +409,69 @@ describe('review CLI', () => {
     }
   })
 
+  // The default configuration asks for a model review (`aiReview.enabled`
+  // defaults true) and configures no provider, so an unconfigured repository
+  // used to get a clean green review at exit 0 that had searched nothing.
+  test('refuses a review asked for a model review with no provider configured', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('model_review_provider_missing')
+      // No report was assembled, so nothing exists to be mistaken for one.
+      expect(result.stdout).toBe('')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The other half of the same fork, and the one that must NOT change: an
+  // operator who switched the model review off asked for a deterministic-only
+  // run and gets one, at exit 0, with the report disclosing that no model
+  // searched the change.
+  test('completes a deliberately deterministic-only review with no provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({ aiReview: { enabled: false } })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(0)
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(report.run.modelSearch).toBe('not-performed')
+      expect(report.run.provider).toBeUndefined()
+      expect(report.run.model).toBeUndefined()
+      const markdown = await readFile(
+        join(root, artifactDir, 'report.md'),
+        'utf8'
+      )
+      expect(markdown).toContain('NO MODEL SEARCHED THIS CHANGE')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('maps provider credential and repository errors to documented exit codes', async () => {
     const root = await createTempDir()
 
@@ -341,6 +502,190 @@ describe('review CLI', () => {
       expect(credentialsMissing.stderr).toContain('provider_credentials_missing')
       expect(repositoryFailure.exitCode).toBe(2)
       expect(repositoryFailure.stderr).toContain('invalid_git_ref')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Regression test for `review` dropping `providerImport`: every other seam
+  // that resolves a provider (`eval run`'s judge/case-runner resolution, and
+  // verification's claim-provider resolution earlier in this file) forwards
+  // `options.providerImport`, but `review`'s call into `runReviewPipeline` did
+  // not, so a test-supplied fake provider factory was silently ignored and the
+  // CLI fell back to importing the real `@purista/harness` SDK provider (which
+  // would attempt a genuine network call). This test configures a model-backed
+  // review (a `provider` makes `aiReview` model-backed by default; see
+  // `provider-workflow.ts`) and asserts the SCRIPTED provider handed in via
+  // `providerImport` is the one actually invoked.
+  test('forwards providerImport so the review pipeline uses the scripted provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'sentinel-model'
+          }
+        })
+      )
+
+      const provider = new EmptyFindingProvider()
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {
+          OPENAI_API_KEY: 'sk-test'
+        },
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(result.exitCode).toBe(0)
+      // Only reachable if the CLI actually handed our scripted factory to the
+      // pipeline instead of falling back to the real SDK import.
+      expect(provider.requests.length).toBeGreaterThan(0)
+
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(report.run.provider).toBe('openai')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('writes an empty verification report when verification is enabled without a provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'claims'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          ...deterministicOnly,
+          ...promotedDefaultsOff,
+          verification: {
+            enabled: true,
+            providers: [
+              { type: 'claims-file', path: '.codereviewer/claims/claims.json' }
+            ]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(0)
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const verification = JSON.parse(
+        await readFile(
+          join(root, artifactDir, 'verification-report.json'),
+          'utf8'
+        )
+      )
+
+      // No provider is configured, so the flow produces an empty report rather
+      // than failing the review (spec 12: off/degraded is non-fatal).
+      expect(verification).toMatchObject({
+        verdicts: [],
+        observations: [],
+        warnings: [],
+        claimCount: 0
+      })
+      const summary = JSON.parse(
+        await readFile(join(root, artifactDir, 'run-summary.json'), 'utf8')
+      )
+      expect(summary.warnings).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('surfaces a failed verification claim provider as a run warning', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'claims'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      // A claims file that is valid JSON but not an array is a genuine provider
+      // failure; the flow records it as a non-fatal warning and proceeds.
+      await writeFile(
+        join(root, '.codereviewer', 'claims', 'bad.json'),
+        JSON.stringify({ not: 'an-array' })
+      )
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'review-model'
+          },
+          aiReview: {
+            enabled: false
+          },
+          drift: {
+            enabled: false
+          },
+          verification: {
+            enabled: true,
+            providers: [
+              { type: 'claims-file', path: '.codereviewer/claims/bad.json' }
+            ]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {
+          OPENAI_API_KEY: 'sk-test'
+        },
+        providerImport: async () => ({
+          openai: () => new UnusedModelProvider()
+        })
+      })
+
+      expect(result.exitCode).toBe(0)
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const providerId = 'claims-file:.codereviewer/claims/bad.json'
+
+      const summary = JSON.parse(
+        await readFile(join(root, artifactDir, 'run-summary.json'), 'utf8')
+      )
+      expect(summary.warnings).toContain(
+        `Verification claim provider "${providerId}" failed and was skipped.`
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(report.run.warnings).toContain(
+        `Verification claim provider "${providerId}" failed and was skipped.`
+      )
+
+      const verification = JSON.parse(
+        await readFile(
+          join(root, artifactDir, 'verification-report.json'),
+          'utf8'
+        )
+      )
+      expect(verification.warnings).toContain(
+        `claim-provider-failed:${providerId}`
+      )
+      expect(verification.verdicts).toEqual([])
+      expect(verification.claimCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

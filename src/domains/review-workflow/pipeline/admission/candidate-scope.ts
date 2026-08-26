@@ -2,9 +2,9 @@ import {
   RejectedFindingSchema,
   type RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import {
-  type CandidateFinding,
-  type ReviewedDiffRange
+import type {
+  CandidateFinding,
+  ReviewedDiffRange
 } from '../../../admission/index.js'
 
 export const isModelProposedCandidate = (
@@ -40,5 +40,6 @@ export const rejectedFindingForOutOfDiffScope = (
     reason: 'not-in-scope',
     message:
       'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
-    evidenceIds: candidate.evidenceIds
+    evidenceIds: candidate.evidenceIds,
+    severity: candidate.severity
   })

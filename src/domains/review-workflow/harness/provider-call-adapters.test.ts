@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../admission/index.js'
+import type { EvidenceRecord } from '../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../admission/index.js'
 import {
-  FindingRefutationInputSchema,
-  ModelFindingRefutationResultSchema,
-  normalizeFindingRefutationResult
+  FindingRefutationBatchInputSchema,
+  ModelRefutationBatchVerdictSchema,
+  normalizeFindingRefutationResult,
+  refutationVerdictsByCandidateId
 } from '../pipeline/agent-contracts.js'
 import { runRefutationProviderCall } from './provider-call-adapters.js'
 
@@ -29,7 +30,7 @@ const candidate: CandidateFinding = {
 
 const evidence: EvidenceRecord = {
   id: 'ev_provider',
-  kind: 'diff',
+  kind: 'file',
   summary: 'The changed provider path loses data.',
   location: {
     path: 'src/provider.ts',
@@ -71,29 +72,35 @@ const createLogger = () => {
 describe('model provider call adapters', () => {
   test('logs and normalizes refutation output', async () => {
     const { entries, logger } = createLogger()
-    const refutationInput = FindingRefutationInputSchema.parse({
-      runId: 'run-provider-adapters',
-      candidate,
+    const refutationInput = FindingRefutationBatchInputSchema.parse({
+      candidates: [candidate],
       reviewedDiffRanges: [],
       evidence: [evidence],
       supportSignalCandidates: [],
-      reviewContext: [],
       instructions: [],
+      reviewContext: [],
       skills: [],
-      sharedDigest: '(no admitted shared context yet)',
       provenance
     })
 
     const result = await runRefutationProviderCall({
       refutationInput,
-      refuteFinding: async () => ({
-        verdict: 'proved',
-        rationaleSummary: 'The proof is still valid.'
+      refuteFinding: async (input) => ({
+        verdicts: input.candidates.map((batched) => ({
+          candidateId: batched.id,
+          verdict: 'proved',
+          rationaleSummary: 'The proof is still valid.'
+        }))
       }),
       logger
     })
 
-    expect(result.verdict).toBe('proved')
+    // The adapter passes the batch through untouched; binding a verdict back to its
+    // candidate is the resolver's job.
+    expect(refutationVerdictsByCandidateId(result).get('cand_provider')).toEqual({
+      verdict: 'proved',
+      rationaleSummary: 'The proof is still valid.'
+    })
     expect(entries.map((entry) => entry.message)).toEqual([
       'Refutation check provider call started.',
       'Refutation check provider call completed.'
@@ -101,16 +108,42 @@ describe('model provider call adapters', () => {
   })
 
   test('accepts common model refutation output variants before normalization', () => {
-    const parsed = ModelFindingRefutationResultSchema.parse({
+    // Exercises the LIVE batched path: providers word the verdict differently and
+    // over-run the length caps, and a batch entry must still normalize.
+    const parsed = ModelRefutationBatchVerdictSchema.parse({
+      candidateId: 'cand_0000000000000001',
       decision: 'false_positive',
       summary: 'The finding is contradicted. '.repeat(80),
-      suggestedFix: 'No code change is needed. '.repeat(80)
+      fix_summary: 'No code change is needed. '.repeat(80)
     })
 
     const normalized = normalizeFindingRefutationResult(parsed)
 
     expect(normalized.verdict).toBe('refuted')
-    expect(normalized.rationaleSummary).toHaveLength(1200)
-    expect(normalized.fixSummary).toHaveLength(1200)
+    // Cut to the contract bound and MARKED. The exact length is 1200 or one less —
+    // the mark is reserved inside the bound and the text before it is trimmed of
+    // trailing space — so the bound is asserted as a bound and the disclosure is
+    // asserted directly. A reader of a suppressed finding's reason must be able to
+    // see that the reason does not simply end.
+    expect(normalized.rationaleSummary.length).toBeLessThanOrEqual(1200)
+    expect(normalized.rationaleSummary.endsWith('…')).toBe(true)
+    expect(normalized.fixSummary?.length ?? 0).toBeLessThanOrEqual(1200)
+    expect(normalized.fixSummary?.endsWith('…')).toBe(true)
+  })
+
+  test('ignores the retired suggestedFix spelling', () => {
+    // `suggestedFix` was removed from the candidate contract end-to-end, so it is
+    // not a spelling this engine ever asked a refuter for. Reading it back would
+    // resurrect a retired name through the one door still open to free-form model
+    // JSON; the surviving `fixSummary`/`fix_summary` pair is producer tolerance,
+    // which is a different thing.
+    const parsed = ModelRefutationBatchVerdictSchema.parse({
+      candidateId: 'cand_0000000000000002',
+      verdict: 'proved',
+      rationaleSummary: 'The proof holds.',
+      suggestedFix: 'Guard the null case.'
+    })
+
+    expect(normalizeFindingRefutationResult(parsed).fixSummary).toBeUndefined()
   })
 })

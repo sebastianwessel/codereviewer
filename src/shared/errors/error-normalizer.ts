@@ -1,4 +1,4 @@
-import { createRedactor, type RedactorOptions } from '../redaction/redactor.js'
+import { createRedactor } from '../redaction/redactor.js'
 
 type ZodLikeIssue = {
   readonly path?: ReadonlyArray<string | number>
@@ -19,6 +19,45 @@ export const isZodError = (value: unknown): value is ZodLikeError =>
   value.name === 'ZodError' &&
   'issues' in value &&
   Array.isArray((value as { issues: unknown }).issues)
+
+/**
+ * True when `value` is an errno-style error carrying `code`.
+ *
+ * The predicate every "is this a missing file / missing module" check should be
+ * built from. Six hand-rolled copies of this same four-line shape existed across
+ * four domains — each correct, each independently maintainable into being wrong.
+ * They have since been folded in; see `isFileNotFoundError` below for the one
+ * variant that is deliberately still its own.
+ */
+export const hasErrorCode = (value: unknown, code: string): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  'code' in value &&
+  (value as { readonly code: unknown }).code === code
+
+/**
+ * A file (or directory) that is simply not there.
+ *
+ * Every "is this missing" check in the tree is now built from this, and the
+ * copies had already begun to diverge before they were folded in — one returned
+ * `false` where its siblings returned `undefined`, which is a difference in the
+ * caller's control flow, not in the predicate.
+ *
+ * ONE DELIBERATE EXCEPTION, and it is not an oversight: `context-retrieval`'s
+ * `isMissingEntryError` also accepts `ENOTDIR`, which is the same "nothing is
+ * there" statement made about an intermediate path segment. It is NOT widened
+ * into a shared helper here because it has exactly one caller, and a shared
+ * helper with one caller is the speculative generality this module exists to
+ * argue against. Widen it here when a second caller needs it — and note that
+ * ENOTDIR is the wrong answer for most callers, which want a path under a
+ * regular file to be a fault rather than an absence.
+ */
+export const isFileNotFoundError = (value: unknown): boolean =>
+  hasErrorCode(value, 'ENOENT')
+
+/** An optional dependency that is not installed. */
+export const isMissingModuleError = (value: unknown): boolean =>
+  hasErrorCode(value, 'ERR_MODULE_NOT_FOUND')
 
 // Errno-style filesystem errors expose a string `code` such as `ENOENT`.
 export const isFileSystemError = (value: unknown): boolean =>
@@ -51,18 +90,27 @@ export type StructuredErrorCategory =
   | 'config'
   | 'repository'
   | 'provider'
+  // Input exceeded a runaway guard — the intent lane's line/obligation/byte
+  // ceilings. Its own category because spec 23 requires the refusal to exit 4,
+  // "distinct from configuration/usage (2) and repository failure (3)", and the
+  // exit code is derived from the category. Before this existed the three call
+  // sites declared `category: 'config'` and then overrode `exitCode: 4` by hand,
+  // which is the disagreement the derivation exists to make unrepresentable.
+  | 'input-limit'
   | 'admission'
   | 'report'
   | 'quality-gate'
   | 'internal'
 
-export type ErrorSource =
-  | 'config'
-  | 'repository'
-  | 'provider'
-  | 'admission'
-  | 'report'
-  | 'internal'
+// The categories a raw error can be normalized INTO. Derived from the category
+// union rather than restated, so a new category cannot be added to one list and
+// silently forgotten in the other. `quality-gate` is excluded because it is a
+// completion signal a gate constructs deliberately, never a classification
+// `normalizeError` infers from an arbitrary thrown value.
+export type ErrorSource = Exclude<
+  StructuredErrorCategory,
+  'quality-gate' | 'input-limit'
+>
 
 export type StructuredErrorDetailValue = string | number | boolean | null
 
@@ -79,7 +127,7 @@ export type StructuredError = {
   readonly details: StructuredErrorDetails
 }
 
-export type NormalizeErrorOptions = RedactorOptions & {
+export type NormalizeErrorOptions = {
   readonly source?: ErrorSource
   readonly operation?: string
   readonly details?: StructuredErrorDetails
@@ -87,28 +135,12 @@ export type NormalizeErrorOptions = RedactorOptions & {
 
 // Construct a StructuredError, defaulting `details` to an empty object. Shared
 // so domains do not each redefine the same helper.
-export const createStructuredError = (
-  error: Omit<StructuredError, 'details'> & {
-    readonly details?: StructuredError['details']
-  }
-): StructuredError => ({
-  ...error,
-  details: error.details ?? {}
-})
-
-const defaultMessagesBySource: Readonly<Record<ErrorSource, string>> = {
-  config: 'Configuration failed.',
-  repository: 'Repository operation failed.',
-  provider: 'Provider operation failed.',
-  admission: 'Admission failed.',
-  report: 'Report operation failed.',
-  internal: 'Unexpected internal error.'
-}
-
 const exitCodeByCategory: Readonly<Record<StructuredErrorCategory, number>> = {
   config: 2,
   repository: 3,
   provider: 4,
+  // Spec 23: a runaway-guard refusal exits 4, deliberately not 2.
+  'input-limit': 4,
   // A failed quality/drift gate is a meaningful completion signal, not a crash.
   'quality-gate': 1,
   admission: 5,
@@ -120,10 +152,43 @@ const recoverableByCategory: Readonly<Record<StructuredErrorCategory, boolean>> 
   config: true,
   repository: true,
   provider: true,
+  'input-limit': true,
   'quality-gate': true,
   admission: false,
   report: false,
   internal: false
+}
+
+// `exitCode` and `recoverable` are DERIVED from the category, never passed in.
+//
+// They used to be parameters, and every one of ~26 call sites re-typed the pairing
+// this module already encoded in the two tables above. Nothing checked the two
+// against each other, and they had already drifted: the explicitly-requested-config
+// -missing error declared `category: 'config'` with `recoverable: false`, while
+// every other config error — and the table — says config errors are recoverable.
+// The author appears to have meant "this run stops", which is a different statement
+// from the one `recoverable` makes.
+//
+// A wrong exit code is invisible in tests and visible in CI, so the pairing is now
+// impossible to get wrong: pick the category, get its contract.
+export const createStructuredError = (
+  error: Omit<StructuredError, 'details' | 'exitCode' | 'recoverable'> & {
+    readonly details?: StructuredError['details']
+  }
+): StructuredError => ({
+  ...error,
+  exitCode: exitCodeByCategory[error.category],
+  recoverable: recoverableByCategory[error.category],
+  details: error.details ?? {}
+})
+
+const defaultMessagesBySource: Readonly<Record<ErrorSource, string>> = {
+  config: 'Configuration failed.',
+  repository: 'Repository operation failed.',
+  provider: 'Provider operation failed.',
+  admission: 'Admission failed.',
+  report: 'Report operation failed.',
+  internal: 'Unexpected internal error.'
 }
 
 const isErrorWithMessage = (value: unknown): value is { readonly message: string } =>
@@ -161,7 +226,12 @@ const rawMessageFrom = (error: unknown, source: ErrorSource): string => {
   return defaultMessagesBySource[source]
 }
 
-const classifyErrorKind = (message: string): 'error' | 'timeout' | 'cancelled' => {
+// How a raw error's message reads, which decides whether the code gets a
+// `_timeout`/`_cancelled` suffix. Named so `codeFor` below consumes exactly what
+// `classifyErrorKind` produces instead of restating the union.
+type ErrorKind = 'error' | 'timeout' | 'cancelled'
+
+const classifyErrorKind = (message: string): ErrorKind => {
   const lowerCaseMessage = message.toLowerCase()
 
   if (
@@ -251,7 +321,7 @@ const providerErrorSubcode = (
 
 const codeFor = (
   input: {
-    readonly kind: 'error' | 'timeout' | 'cancelled'
+    readonly kind: ErrorKind
     readonly source: ErrorSource
     readonly status: number | undefined
     readonly lowerCaseMessage: string
@@ -320,11 +390,7 @@ export const normalizeError = (
   error: unknown,
   options: NormalizeErrorOptions = {}
 ): StructuredError => {
-  const redactorOptions: RedactorOptions =
-    options.exactSecrets === undefined
-      ? {}
-      : { exactSecrets: options.exactSecrets }
-  const redactor = createRedactor(redactorOptions)
+  const redactor = createRedactor()
   const redact = redactor.redact
 
   if (isStructuredError(error)) {

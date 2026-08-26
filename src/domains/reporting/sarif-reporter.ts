@@ -1,9 +1,13 @@
+import { isActionableFinding } from '../../shared/contracts/index.js'
 import type {
   AdmittedFinding,
   FindingFingerprint,
   ReviewReport
 } from '../../shared/contracts/index.js'
-import type { StructuredError } from '../../shared/errors/error-normalizer.js'
+import {
+  validateSarifDocument,
+  type SarifTarget
+} from './sarif-validation.js'
 import {
   safeRedactedText,
   sortAdmittedFindings,
@@ -13,7 +17,30 @@ import {
 export type SarifRenderOptions = {
   readonly category: string
   readonly maxResults: number
-  readonly target: 'generic' | 'github'
+  readonly target: SarifTarget
+}
+
+// The tool's own home page, used as `tool.driver.informationUri`. Kept as a
+// constant rather than read from `package.json` at runtime (the published
+// package ships `dist/` without a resolvable path back to the manifest); a unit
+// test asserts it still equals the manifest's `homepage` so the two cannot
+// drift.
+export const SARIF_INFORMATION_URI =
+  'https://github.com/sebastianwessel/codereviewer#readme'
+
+type SarifPhysicalLocation = {
+  readonly physicalLocation: {
+    readonly artifactLocation: {
+      readonly uri: string
+    }
+    readonly region: {
+      readonly startLine: number
+      readonly endLine?: number
+    }
+  }
+  readonly message?: {
+    readonly text: string
+  }
 }
 
 type SarifResult = {
@@ -28,20 +55,52 @@ type SarifResult = {
         readonly artifactLocation: {
           readonly uri: string
         }
+        // `endLine` is present whenever the finding carries one, so a
+        // multi-line defect highlights its whole span instead of collapsing to
+        // its first line (SARIF defaults `endLine` to `startLine`).
         readonly region: {
           readonly startLine: number
+          readonly endLine?: number
         }
       }
     }
   ]
+  // Supporting locations for the same defect — the caller-supplied ones, in the
+  // order given. SARIF viewers render these as secondary highlights next to the
+  // primary location.
+  readonly relatedLocations?: readonly SarifPhysicalLocation[]
+  // Ordered source-to-sink paths. SARIF nests them three deep — a result has
+  // `codeFlows`, each has `threadFlows`, each has `locations` — and a single
+  // thread flow per path is the shape every viewer expects for a taint trace.
+  readonly codeFlows?: readonly {
+    readonly message: { readonly text: string }
+    readonly threadFlows: readonly [
+      { readonly locations: readonly { readonly location: SarifPhysicalLocation }[] }
+    ]
+  }[]
   readonly partialFingerprints: Readonly<Record<string, string>>
   readonly properties: {
     readonly category: string
     readonly baselineStatus: string
+    // The finding's own security classification, exactly as the contract
+    // carries it. The rule-level projection below is lossy when several
+    // findings share a rule id; this is not.
+    readonly cwe?: readonly string[]
+    readonly securitySeverity?: number
     readonly fixProposal?: {
       readonly summary: string
       readonly evidenceIds: readonly string[]
       readonly safety: 'manual-review'
+      // Apply-ready edits, redacted and with artifact-URI paths. Present when the
+      // finding's fix proposal carries edits (including a fix-lane enrichment,
+      // spec 12).
+      readonly edits?: readonly {
+        readonly path: string
+        readonly startLine: number
+        readonly endLine: number
+        readonly replacement: string
+        readonly description?: string
+      }[]
     }
   }
 }
@@ -95,6 +154,28 @@ const toArtifactUri = (repositoryRelativePath: string): string =>
     .map((segment) => encodeURIComponent(segment))
     .join('/')
 
+// One `RelatedLocation` as SARIF sees it. The path goes through the same
+// `toArtifactUri` as the primary location, and the message through the same
+// redactor as every other rendered string — a supporting location is not a
+// lesser-trust slot that gets to skip either.
+const renderRelatedLocation = (related: {
+  readonly location: AdmittedFinding['location']
+  readonly message: string
+}): SarifPhysicalLocation => ({
+  physicalLocation: {
+    artifactLocation: {
+      uri: toArtifactUri(related.location.path)
+    },
+    region: {
+      startLine: related.location.startLine,
+      ...(related.location.endLine === undefined
+        ? {}
+        : { endLine: related.location.endLine })
+    }
+  },
+  message: { text: safeRedactedText(related.message) }
+})
+
 const renderResult = (finding: AdmittedFinding): SarifResult => {
   const fixProposal =
     finding.fixProposal === undefined
@@ -133,15 +214,42 @@ const renderResult = (finding: AdmittedFinding): SarifResult => {
             uri: toArtifactUri(finding.location.path)
           },
           region: {
-            startLine: finding.location.startLine
+            startLine: finding.location.startLine,
+            ...(finding.location.endLine === undefined
+              ? {}
+              : { endLine: finding.location.endLine })
           }
         }
       }
     ],
+    ...(finding.relatedLocations === undefined ||
+    finding.relatedLocations.length === 0
+      ? {}
+      : {
+          relatedLocations: finding.relatedLocations.map(renderRelatedLocation)
+        }),
+    ...(finding.dataFlow === undefined || finding.dataFlow.length === 0
+      ? {}
+      : {
+          codeFlows: finding.dataFlow.map((path) => ({
+            message: { text: safeRedactedText(path.label) },
+            threadFlows: [
+              {
+                locations: path.steps.map((step) => ({
+                  location: renderRelatedLocation(step)
+                }))
+              }
+            ] as const
+          }))
+        }),
     partialFingerprints: fingerprintsFor(finding.fingerprints),
     properties: {
       category: finding.category,
       baselineStatus: finding.baselineStatus,
+      ...(finding.cwe === undefined ? {} : { cwe: [...finding.cwe] }),
+      ...(finding.securitySeverity === undefined
+        ? {}
+        : { securitySeverity: finding.securitySeverity }),
       ...fixProposal
     }
   }
@@ -153,18 +261,58 @@ type SarifRule = {
   readonly shortDescription: {
     readonly text: string
   }
+  readonly helpUri?: string
+  readonly properties?: {
+    readonly tags: readonly string[]
+    readonly 'security-severity'?: string
+  }
 }
 
-type SarifProviderIssue = {
-  readonly code: string
-  readonly stage?: string
-  readonly recovered?: boolean
-  readonly message?: string
+// CWE ids travel in `tags` as `external/cwe/cwe-<id>`, the convention CodeQL and
+// GitHub's own SARIF annotators use. The id is lower-cased and otherwise passed
+// through: the contract already constrains it to `CWE-<digits>`, and zero-padding
+// it (a CodeQL habit, not a documented requirement) would invent a spelling the
+// finding never claimed.
+const cweTagFor = (cwe: string): string => `external/cwe/${cwe.toLowerCase()}`
+
+// Per-rule security metadata, accumulated across the findings that reference the
+// rule. `helpUri` is a property of the rule, so the first one wins; CWEs are
+// unioned; `security-severity` takes the maximum, because GitHub shows ONE
+// severity per rule and understating a security score is the direction that
+// costs. Exact per-finding values remain on each result's own properties.
+type SarifRuleAccumulator = {
+  readonly id: string
+  readonly shortDescriptionText: string
+  helpUri: string | undefined
+  readonly cweTags: Set<string>
+  securitySeverity: number | undefined
+}
+
+// GitHub code scanning reads `properties['security-severity']` as a STRING
+// holding a 0.0-10.0 score and bands it: above 9.0 is critical, 7.0 to 8.9 is
+// high, 4.0 to 6.9 is medium, and 0.1 to 3.9 is low. It is honoured only for
+// rules whose `tags` include `security`, so the tag is emitted alongside it. No
+// score is synthesised from `finding.severity`: a CVSS-like number nobody
+// measured would be a fabrication, and a rule with no score simply falls back to
+// the result `level` GitHub already receives.
+const rulePropertiesFor = (
+  accumulator: SarifRuleAccumulator
+): SarifRule['properties'] => {
+  if (accumulator.cweTags.size === 0 && accumulator.securitySeverity === undefined) {
+    return undefined
+  }
+
+  return {
+    tags: ['security', ...[...accumulator.cweTags].sort()],
+    ...(accumulator.securitySeverity === undefined
+      ? {}
+      : { 'security-severity': `${accumulator.securitySeverity}` })
+  }
 }
 
 const renderProviderIssue = (
   issue: ReviewReport['providerIssues'][number]
-): SarifProviderIssue => ({
+): ReviewReport['providerIssues'][number] => ({
   code: safeRedactedText(issue.code),
   ...(issue.stage === undefined
     ? {}
@@ -181,148 +329,201 @@ const renderProviderIssue = (
 const buildRules = (
   findings: readonly AdmittedFinding[]
 ): readonly SarifRule[] => {
-  const rulesById = new Map<string, SarifRule>()
+  const rulesById = new Map<string, SarifRuleAccumulator>()
 
   for (const finding of findings) {
     const id = ruleIdFor(finding)
+    const existing = rulesById.get(id)
+    const accumulator = existing ?? {
+      id,
+      shortDescriptionText: safeRedactedText(`${finding.category} finding`),
+      helpUri: undefined,
+      cweTags: new Set<string>(),
+      securitySeverity: undefined
+    }
 
-    if (!rulesById.has(id)) {
-      rulesById.set(id, {
-        id,
-        name: id,
-        shortDescription: {
-          text: safeRedactedText(`${finding.category} finding`)
-        }
-      })
+    if (accumulator.helpUri === undefined && finding.helpUri !== undefined) {
+      accumulator.helpUri = safeRedactedText(finding.helpUri)
+    }
+
+    for (const cwe of finding.cwe ?? []) {
+      accumulator.cweTags.add(cweTagFor(cwe))
+    }
+
+    if (
+      finding.securitySeverity !== undefined &&
+      (accumulator.securitySeverity === undefined ||
+        finding.securitySeverity > accumulator.securitySeverity)
+    ) {
+      accumulator.securitySeverity = finding.securitySeverity
+    }
+
+    if (existing === undefined) {
+      rulesById.set(id, accumulator)
     }
   }
 
-  return [...rulesById.values()].sort((left, right) =>
-    left.id.localeCompare(right.id)
-  )
+  return [...rulesById.values()]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((accumulator) => {
+      const properties = rulePropertiesFor(accumulator)
+
+      return {
+        id: accumulator.id,
+        name: accumulator.id,
+        shortDescription: { text: accumulator.shortDescriptionText },
+        ...(accumulator.helpUri === undefined
+          ? {}
+          : { helpUri: accumulator.helpUri }),
+        ...(properties === undefined ? {} : { properties })
+      }
+    })
 }
 
-const sarifError = (message: string): StructuredError => ({
-  code: 'sarif_invalid',
-  message,
-  category: 'report',
-  recoverable: false,
-  exitCode: 5,
-  details: {}
+// The notification id the withheld-results disclosure reports under. Defined in
+// `tool.driver.notifications` as well as referenced from the notification, so the
+// reference resolves instead of dangling.
+const RESULTS_WITHHELD_NOTIFICATION_ID = 'codereviewer/sarif-results-withheld'
+
+// The notification id the no-model-search disclosure reports under. Exported
+// because a consumer wiring this into code scanning has to be able to match it,
+// and because the test asserts the id rather than the prose.
+export const NO_MODEL_SEARCH_NOTIFICATION_ID = 'codereviewer/no-model-search'
+
+type SarifNotificationDescriptor = {
+  readonly id: string
+  readonly shortDescription: {
+    readonly text: string
+  }
+}
+
+type SarifRunNotification = {
+  readonly descriptor: { readonly id: string }
+  readonly level: 'warning'
+  readonly message: { readonly text: string }
+}
+
+type SarifInvocation = {
+  readonly executionSuccessful: boolean
+  readonly toolExecutionNotifications: readonly SarifRunNotification[]
+}
+
+// One thing this run has to say about ITSELF rather than about the code: a
+// descriptor for the driver to define, and the notification that references it.
+// They travel as a pair so a reference can never be emitted without the
+// definition it resolves against.
+type SarifRunDisclosure = {
+  readonly descriptor: SarifNotificationDescriptor
+  readonly notification: SarifRunNotification
+}
+
+const runDisclosure = (input: {
+  readonly id: string
+  readonly shortDescription: string
+  readonly text: string
+}): SarifRunDisclosure => ({
+  descriptor: {
+    id: input.id,
+    shortDescription: { text: input.shortDescription }
+  },
+  notification: {
+    descriptor: { id: input.id },
+    level: 'warning',
+    message: { text: input.text }
+  }
 })
 
-const isValidArtifactUri = (uri: unknown): uri is string =>
-  typeof uri === 'string' &&
-  uri.length > 0 &&
-  !uri.startsWith('/') &&
-  !/^[A-Za-z]:/u.test(uri) &&
-  !uri.includes('\\') &&
-  !/(^|\/)\.\.(\/|$)/u.test(uri)
+// A capped result list is not read as "there is more". Code scanning resolves any
+// alert whose result is ABSENT from a later run under the same
+// `automationDetails.id`, so a silent `maxResults` cut does not read as "not
+// shown" — it reads as "fixed", and the withheld findings disappear off the
+// security dashboard with no trace anywhere in this file. SARIF's own channel for
+// a tool reporting something about its own run is
+// `runs[].invocations[].toolExecutionNotifications`, so the cut announces itself
+// there, naming what it dropped, the key that dropped it, and where the whole set
+// still lives. Emitted only when the cap actually binds: a notification on every
+// run would train consumers to ignore it.
+const resultsWithheldDisclosure = (input: {
+  readonly withheld: number
+  readonly eligible: number
+  readonly maxResults: number
+}): SarifRunDisclosure =>
+  runDisclosure({
+    id: RESULTS_WITHHELD_NOTIFICATION_ID,
+    shortDescription:
+      'Some findings were withheld from this SARIF run by the configured result cap.',
+    text: `${input.withheld} of ${input.eligible} findings are withheld from this SARIF run because reporting.sarif.maxResults is ${input.maxResults}. A consumer that treats a result missing from a run as resolved will report those findings as fixed; they are not. Raise reporting.sarif.maxResults to emit them, and read report.json or report.md for the complete set.`
+  })
 
-const maxGithubRules = 1000
+// An empty SARIF run is the strongest clean bill of health this project can
+// produce: code scanning shows no alert, and a document listing zero results says
+// nothing about whether anything was ever searched for. When the model-backed
+// review did not run, that has to be stated in the file itself — the consumer of
+// this artifact is a dashboard, and it will never see `report.md`'s disclosure.
+const noModelSearchDisclosure = (): SarifRunDisclosure =>
+  runDisclosure({
+    id: NO_MODEL_SEARCH_NOTIFICATION_ID,
+    shortDescription:
+      'This run performed no model search, so its results come from deterministic signals alone.',
+    text: 'This run performed no model search: the model-backed review was switched off, or no provider was configured. Any results below come from deterministic signals alone, and their absence means nothing was searched for rather than that nothing is wrong. Do not read this run as a clean analysis of the change.'
+  })
 
-// Validate the rendered SARIF document against the structural invariants in
-// `specs/03-contracts/finding-evidence-report.md` before it is written. This is
-// a deterministic, dependency-free safety net that catches contract regressions
-// rather than relying on consumers to reject malformed output.
-type SarifResultLike = {
-  readonly ruleId?: unknown
-  readonly message?: { readonly text?: unknown }
-  readonly locations?: ReadonlyArray<{
-    readonly physicalLocation?: {
-      readonly artifactLocation?: { readonly uri?: unknown }
-      readonly region?: { readonly startLine?: unknown }
+// The whole disclosure block, or nothing when the run has nothing to disclose.
+// Assembled in one place because the notification list and the invocation list
+// are two halves of one statement: emitting a notification whose descriptor is
+// not defined leaves a dangling reference, and defining one nothing references is
+// noise.
+const runDisclosures = (
+  disclosures: readonly SarifRunDisclosure[]
+):
+  | {
+      readonly notifications: readonly SarifNotificationDescriptor[]
+      readonly invocations: readonly [SarifInvocation]
     }
-  }>
-  readonly partialFingerprints?: Readonly<Record<string, unknown>>
-}
-
-type SarifDocumentLike = {
-  readonly version?: unknown
-  readonly runs?: ReadonlyArray<{
-    readonly tool?: {
-      readonly driver?: {
-        readonly name?: unknown
-        readonly rules?: ReadonlyArray<{ readonly id?: unknown }>
+  | undefined =>
+  disclosures.length === 0
+    ? undefined
+    : {
+        notifications: disclosures.map((entry) => entry.descriptor),
+        invocations: [
+          {
+            // The run itself succeeded; what it reports is something about that
+            // run. Reporting `false` here would make a code scanning upload read
+            // as a failed analysis, which is a different claim.
+            executionSuccessful: true,
+            toolExecutionNotifications: disclosures.map(
+              (entry) => entry.notification
+            )
+          }
+        ]
       }
-    }
-    readonly results?: readonly SarifResultLike[]
-  }>
-}
-
-export const validateSarifDocument = (
-  sarif: SarifDocumentLike,
-  target: SarifRenderOptions['target']
-): void => {
-  if (sarif.version !== '2.1.0') {
-    throw sarifError('SARIF version must be 2.1.0.')
-  }
-
-  const run = sarif.runs?.[0]
-
-  if (run === undefined) {
-    throw sarifError('SARIF document must contain at least one run.')
-  }
-
-  const driverName = run.tool?.driver?.name
-
-  if (typeof driverName !== 'string' || driverName.length === 0) {
-    throw sarifError('SARIF driver name must be a non-empty string.')
-  }
-
-  const definedRuleIds = new Set(
-    (run.tool?.driver?.rules ?? []).map((rule) => rule.id)
-  )
-
-  for (const result of run.results ?? []) {
-    if (typeof result.ruleId !== 'string' || result.ruleId.length === 0) {
-      throw sarifError('Every SARIF result must have a non-empty ruleId.')
-    }
-
-    if (typeof result.message?.text !== 'string') {
-      throw sarifError('Every SARIF result must have message text.')
-    }
-
-    const location = result.locations?.[0]?.physicalLocation
-
-    if (!isValidArtifactUri(location?.artifactLocation?.uri)) {
-      throw sarifError('SARIF result location URI must be repository-relative.')
-    }
-
-    const startLine = location?.region?.startLine
-
-    if (typeof startLine !== 'number' || !Number.isInteger(startLine) || startLine < 1) {
-      throw sarifError('SARIF result region startLine must be an integer >= 1.')
-    }
-
-    if (target === 'github') {
-      if (Object.keys(result.partialFingerprints ?? {}).length === 0) {
-        throw sarifError('GitHub SARIF results must have partial fingerprints.')
-      }
-
-      if (!definedRuleIds.has(result.ruleId)) {
-        throw sarifError(
-          `GitHub SARIF result references undefined rule "${result.ruleId}".`
-        )
-      }
-    }
-  }
-
-  if (target === 'github' && definedRuleIds.size > maxGithubRules) {
-    throw sarifError('GitHub SARIF runs must not define more than 1000 rules.')
-  }
-}
 
 export const renderSarifReport = (
   input: unknown,
   options: SarifRenderOptions
 ): string => {
   const report: ReviewReport = validateReviewReport(input)
-  const includedFindings = sortAdmittedFindings(
-    report.admittedFindings.filter(
-      (finding) => finding.reporterEligibility !== 'artifact-only'
-    )
-  ).slice(0, options.maxResults)
+  const eligibleFindings = sortAdmittedFindings(
+    report.admittedFindings.filter(isActionableFinding)
+  )
+  const includedFindings = eligibleFindings.slice(0, options.maxResults)
+  const withheld = eligibleFindings.length - includedFindings.length
+  // The run-level statement comes first: it frames every result under it, where
+  // the cap only explains which results are missing.
+  const disclosure = runDisclosures([
+    ...(report.run.modelSearch === 'not-performed'
+      ? [noModelSearchDisclosure()]
+      : []),
+    ...(withheld === 0
+      ? []
+      : [
+          resultsWithheldDisclosure({
+            withheld,
+            eligible: eligibleFindings.length,
+            maxResults: options.maxResults
+          })
+        ])
+  ])
   const results = includedFindings.map(renderResult)
   const rules = buildRules(includedFindings)
   const properties =
@@ -342,13 +543,19 @@ export const renderSarifReport = (
         tool: {
           driver: {
             name: 'codereviewer',
-            informationUri: 'https://example.invalid/codereviewer',
-            rules
+            informationUri: SARIF_INFORMATION_URI,
+            rules,
+            ...(disclosure === undefined
+              ? {}
+              : { notifications: disclosure.notifications })
           }
         },
         automationDetails: {
           id: options.category
         },
+        ...(disclosure === undefined
+          ? {}
+          : { invocations: disclosure.invocations }),
         ...properties,
         results
       }

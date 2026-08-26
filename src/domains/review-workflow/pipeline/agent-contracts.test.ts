@@ -1,0 +1,410 @@
+import { describe, expect, test } from 'vitest'
+import {
+  ModelHolisticFindingSchema,
+  ModelHolisticReviewResultSchema,
+  ModelSemanticMergeResultSchema,
+  semanticMergeGroups
+} from './agent-contracts.js'
+// From the module that OWNS the table. This test asserts every alias resolves
+// THROUGH the schema above, so it deliberately reaches across both modules —
+// that is the assertion, not an accident to be smoothed over by having the
+// contracts module re-export a table it does not define.
+import { modelCategoryAliases } from './model-output-normalization.js'
+
+describe('ModelHolisticReviewResultSchema', () => {
+  // A response truncated by the output-token budget arrives as an empty body and
+  // becomes {}. Accepting that as "no findings" made an exhausted review look
+  // exactly like a clean file, in the review and in the eval scoring it.
+  test('rejects an empty object rather than reading it as no findings', () => {
+    expect(ModelHolisticReviewResultSchema.safeParse({}).success).toBe(false)
+  })
+
+  test('accepts an explicitly empty finding list', () => {
+    expect(
+      ModelHolisticReviewResultSchema.parse({ findings: [] }).findings
+    ).toEqual([])
+  })
+})
+
+// These findings are minimal: only the fields the category resolver reads
+// (category/type and the free-text fields) are ever set, since every other
+// field on ModelHolisticFindingSchema is independently optional.
+describe('ModelHolisticFindingSchema category normalization', () => {
+  test('every declared alias resolves through the structured category field to its mapped category', () => {
+    for (const [alias, expectedCategory] of Object.entries(modelCategoryAliases)) {
+      const { category } = ModelHolisticFindingSchema.parse({ category: alias })
+
+      expect(category, `alias "${alias}" should resolve to "${expectedCategory}"`).toBe(
+        expectedCategory
+      )
+    }
+  })
+
+  test('resolves an alias regardless of the casing, spacing, or punctuation the model sent', () => {
+    expect(ModelHolisticFindingSchema.parse({ category: 'Race Condition' }).category).toBe(
+      'bug'
+    )
+    expect(ModelHolisticFindingSchema.parse({ type: 'RACE_CONDITION!!' }).category).toBe(
+      'bug'
+    )
+  })
+
+  test('falls back to a keyword scan over free text when there is no structured category', () => {
+    expect(
+      ModelHolisticFindingSchema.parse({
+        title: 'Customer invoice total is wrong',
+        description: 'Customer was overcharged due to a rounding error in checkout.'
+      }).category
+    ).toBe('bug')
+  })
+
+  test('a structured category takes priority over free text that would resolve differently', () => {
+    // The description below would resolve to `performance` on a text scan (it
+    // mentions caching), but the model's own `category` field is authoritative
+    // once it resolves to something, so that must win.
+    expect(
+      ModelHolisticFindingSchema.parse({
+        category: 'security',
+        title: 'Slow endpoint',
+        description: 'This endpoint leaks a JWT in its response body and caches too eagerly.'
+      }).category
+    ).toBe('security')
+  })
+
+  test('an unrecognized category with no matching free text resolves to no category', () => {
+    expect(
+      ModelHolisticFindingSchema.parse({ category: 'zzz-not-a-real-category' }).category
+    ).toBeUndefined()
+    expect(ModelHolisticFindingSchema.parse({}).category).toBeUndefined()
+  })
+
+  // The defect this normalization replaces: "race condition" filed under
+  // `security`, "concurrency" filed under `bug`, and free text merely
+  // mentioning a race or a lock filed under `performance` - three different
+  // categories for the same underlying kind of defect, depending on which
+  // field/word the model happened to use. All three must now agree.
+  test('a race condition, "concurrency", and free text mentioning a race or a lock all agree on bug', () => {
+    expect(ModelHolisticFindingSchema.parse({ category: 'race condition' }).category).toBe(
+      'bug'
+    )
+    expect(ModelHolisticFindingSchema.parse({ category: 'concurrency' }).category).toBe(
+      'bug'
+    )
+    expect(
+      ModelHolisticFindingSchema.parse({
+        title: 'Possible race between two goroutines',
+        description: 'One thread may still hold the lock when the other reads stale state.'
+      }).category
+    ).toBe('bug')
+  })
+})
+
+describe('ModelHolisticFindingSchema fix fields', () => {
+  // Discovery's fixSummary was pure dead weight: the prompt asked for it, this
+  // schema accepted it, but the candidate mapping in holistic-task-review.ts never
+  // read it (a fix proposal requires at least one evidence id, and discovery
+  // candidates start with none). It must not survive parsing.
+  test('drops a model-supplied fixSummary instead of carrying it through', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fixSummary: 'Add a null check before dereferencing.'
+    })
+
+    expect(parsed).not.toHaveProperty('fixSummary')
+  })
+
+  // fixEdits was dead weight one step further gone than fixSummary: the discovery
+  // prompt never even asked for it, and the candidate mapping never read it. Only
+  // the REFUTER produces fix edits that reach a fix proposal - discovery must not
+  // grow a second, unvalidated path to the same field.
+  test('drops model-supplied fixEdits instead of carrying them through', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fixEdits: [
+        {
+          path: 'src/pricing.ts',
+          startLine: 12,
+          endLine: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed).not.toHaveProperty('fixEdits')
+  })
+
+  // Snake_case aliases were mapped in the preprocess step; that mapping is gone
+  // too, so the alias must not sneak the field back in either.
+  test('drops the fix_edits alias as well', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fix_edits: [
+        {
+          path: 'src/pricing.ts',
+          start_line: 12,
+          end_line: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed).not.toHaveProperty('fixEdits')
+    expect(parsed).not.toHaveProperty('fix_edits')
+  })
+
+  // The fields a holistic candidate is actually built from must keep parsing
+  // normally when a model volunteers fix edits alongside them.
+  test('still parses the candidate fields when fixEdits is present', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      severity: 'high',
+      title: 'Unchecked rate lookup',
+      description: 'A missing rate dereferences undefined.',
+      path: 'src/pricing.ts',
+      startLine: 12,
+      fixEdits: [
+        {
+          path: 'src/pricing.ts',
+          startLine: 12,
+          endLine: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed.severity).toBe('high')
+    expect(parsed.path).toBe('src/pricing.ts')
+    expect(parsed.startLine).toBe(12)
+    expect(parsed).not.toHaveProperty('fixEdits')
+  })
+})
+
+describe('ModelHolisticFindingSchema citations', () => {
+  const base = {
+    category: 'bug',
+    severity: 'high',
+    title: 'Dereferences without a guard',
+    description: 'A value may be undefined on this path.',
+    path: 'src/a.ts',
+    startLine: 12
+  }
+
+  test('accepts a well-formed citation', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12, quote: 'value.field' }]
+    })
+
+    expect(parsed.citations).toEqual([{ startLine: 12, quote: 'value.field' }])
+  })
+
+  test('accepts the snake_case start_line alias, and the citation/singular alias', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citation: [{ start_line: '12', quote: 'value.field' }]
+    })
+
+    expect(parsed.citations).toEqual([{ startLine: 12, quote: 'value.field' }])
+  })
+
+  test('truncates an over-long quote instead of dropping the citation', () => {
+    const longQuote = 'x'.repeat(400)
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12, quote: longQuote }]
+    })
+
+    expect(parsed.citations?.[0]?.quote).toHaveLength(300)
+  })
+
+  // Loose, tolerant, and degrades to absent rather than killing the finding:
+  // the candidate fields still parse fine even when `citations` cannot.
+  test('a malformed citations field degrades to absent, not a parse failure', () => {
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      citations: 'not an array'
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.citations).toBeUndefined()
+    expect(parsed.success && parsed.data.severity).toBe('high')
+  })
+
+  test('a citation missing its required quote degrades the whole field to absent', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12 }]
+    })
+
+    expect(parsed.citations).toBeUndefined()
+  })
+
+  test('more than the cap degrades the whole field to absent rather than truncating the list', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: Array.from({ length: 6 }, (_unused, index) => ({
+        startLine: index + 1,
+        quote: `line ${index + 1}`
+      }))
+    })
+
+    expect(parsed.citations).toBeUndefined()
+  })
+
+  test('an absent citations field parses as absent, not an empty array', () => {
+    const parsed = ModelHolisticFindingSchema.parse(base)
+
+    expect(parsed.citations).toBeUndefined()
+  })
+})
+
+describe('semanticMergeGroups', () => {
+  const known = ['cand_1111111111111111', 'cand_2222222222222222', 'cand_3333333333333333']
+
+  test('reads an absent or empty group list as no grouping', () => {
+    // The conservative answer is the safe one here: no grouping costs at most a
+    // redundant comment, while a wrong merge deletes a real defect.
+    expect(
+      semanticMergeGroups(ModelSemanticMergeResultSchema.parse({}), known)
+    ).toEqual([])
+    expect(
+      semanticMergeGroups(
+        ModelSemanticMergeResultSchema.parse({ groups: [] }),
+        known
+      )
+    ).toEqual([])
+  })
+
+  test('normalizes the shapes a model actually returns', () => {
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            // A bare array of ids, and candidate objects instead of ids.
+            [known[0], known[1]],
+            [{ id: known[2] }, { candidateId: 'cand_4444444444444444' }]
+          ]
+        },
+        [...known, 'cand_4444444444444444']
+      )
+    ).toEqual([
+      [known[0], known[1]],
+      [known[2], 'cand_4444444444444444']
+    ])
+
+    expect(
+      semanticMergeGroups(
+        { groups: [{ ids: [known[0], known[1]] }] },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
+    expect(
+      semanticMergeGroups(
+        { groups: [{ candidate_ids: [known[0], known[1]] }] },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
+  })
+
+  test('drops invented ids, repeats, and anything left with fewer than two members', () => {
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            null,
+            'not a group',
+            { candidateIds: [] },
+            { candidateIds: [known[0]] },
+            { candidateIds: [known[0], 'cand_invented'] },
+            { candidateIds: [known[1], known[1], known[2]] }
+          ]
+        },
+        known
+      )
+    ).toEqual([[known[1], known[2]]])
+  })
+
+  test('honours only the first group that claims a candidate', () => {
+    // Overlapping groups make the reduction ambiguous, and an ambiguous merge
+    // must resolve towards leaving candidates alone.
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            { candidateIds: [known[0], known[1]] },
+            { candidateIds: [known[1], known[2]] }
+          ]
+        },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
+  })
+})
+
+describe('over-long model text truncates instead of dropping the finding', () => {
+  const base = {
+    category: 'bug',
+    severity: 'high',
+    path: 'src/a.ts',
+    startLine: 1,
+    title: 'A defect'
+  }
+
+  test('a verbose description is kept and shortened, not discarded', () => {
+    // It used to be discarded. A description one character over the bound failed
+    // validation and the WHOLE finding was thrown away — by code that sliced
+    // descriptions to 1200 downstream anyway. A real defect was lost for being
+    // wordy, which is the one thing a reviewer is entitled to be.
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      description: 'd'.repeat(20_000)
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.description).toHaveLength(3000)
+  })
+
+  test('the shortened description is MARKED, not silently cut', () => {
+    // An unmarked cut is the failure `shared/text/truncate.ts` exists to prevent: a
+    // description cut at 3 000 characters reads as a complete explanation that
+    // happens to end, and the reader — a human triaging the finding — has nothing to
+    // tell them the conclusion is missing. The mark is spent out of the field's own
+    // budget, so the value still satisfies the contract's `.max(3000)`.
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      description: `${'d'.repeat(20_000)} and therefore it fails.`
+    })
+
+    expect(parsed.description?.endsWith('…')).toBe(true)
+    expect(parsed.description).not.toContain('and therefore it fails.')
+    expect(parsed.description?.length).toBeLessThanOrEqual(3000)
+  })
+
+  test('a cut CITATION QUOTE stays unmarked, deliberately', () => {
+    // The one exception, and the mark is what would break it. A citation is verified
+    // by looking for its quote inside the cited source line
+    // (`discovery/citation-evidence.ts`), and an unverified citation mints no
+    // evidence at all. The cut quote is still a PREFIX of the line and still
+    // verifies; the same quote with `…` glued on matches nothing, so marking here
+    // would silently delete the evidence of every finding whose cited line is long.
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      description: 'A concrete failure.',
+      citations: [{ startLine: 12, quote: 'x'.repeat(400) }]
+    })
+
+    expect(parsed.citations?.[0]?.quote).toBe('x'.repeat(300))
+    expect(parsed.citations?.[0]?.quote).not.toContain('…')
+  })
+
+  test('a verbose title is kept and shortened', () => {
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      title: 'T'.repeat(900),
+      description: 'A concrete failure.'
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.title).toHaveLength(500)
+  })
+})

@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../../../shared/contracts/index.js'
-import { prepareReviewRunnerRepositoryInput } from './repository-input.js'
+import {
+  collectReviewRunnerRepositoryIntake,
+  readReviewRunnerSourceInput
+} from './repository-input.js'
 
 const createTempDir = async (): Promise<string> => {
   const directory = join(tmpdir(), `codereviewer-runner-input-${crypto.randomUUID()}`)
@@ -32,12 +35,17 @@ describe('review runner repository input', () => {
         ]
       }
 
-      const result = await prepareReviewRunnerRepositoryInput({
+      const intakeState = await collectReviewRunnerRepositoryIntake({
         repositoryRoot,
         config: CodeReviewerConfigSchema.parse({}),
         explicitFiles: ['src/app.ts'],
         reviewDiffMaps: [diffMapOverride]
       })
+      const sourceState = await readReviewRunnerSourceInput({
+        repositoryRoot,
+        intake: intakeState.intake
+      })
+      const result = { ...intakeState, ...sourceState }
 
       expect(result.intake.changedFiles.map((file) => file.path)).toEqual([
         'src/app.ts'
@@ -56,9 +64,63 @@ describe('review runner repository input', () => {
       ])
       expect(result.intakeMetrics).toEqual({
         changedFileCount: 1,
-        skippedFileCount: 0
+        skippedFileCount: 0,
+        redactedDiffSpanCount: 0
       })
       expect(result.sourceReadMetrics).toEqual({ fileCount: 1 })
+    } finally {
+      await rm(repositoryRoot, { recursive: true, force: true })
+    }
+  })
+})
+
+// Every changed FILE's content is redacted before it reaches a packet. The diff
+// was not — so a credential committed inside a changed hunk went to the provider
+// verbatim in the "What this change modified" section, while the identical string
+// in the surrounding file body came out `[REDACTED]`. Two paths carrying the same
+// bytes to the same model, one of them redacting.
+describe('the reviewed diff is redacted before it can reach a model', () => {
+  test('a secret inside a diff hunk does not survive intake', async () => {
+    const repositoryRoot = await createTempDir()
+    const config = CodeReviewerConfigSchema.parse({})
+    const leakedDiff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,1 +1,1 @@',
+      '-const token = process.env.TOKEN',
+      '+const token = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB"'
+    ].join('\n')
+
+    try {
+      // The named file has to exist: intake refuses an explicit-file run in
+      // which nothing was reviewable, rather than reporting a passing review
+      // over zero files.
+      await mkdir(join(repositoryRoot, 'src'), { recursive: true })
+      await writeFile(
+        join(repositoryRoot, 'src', 'app.ts'),
+        'const token = process.env.TOKEN\n'
+      )
+
+      const state = await collectReviewRunnerRepositoryIntake({
+        repositoryRoot,
+        config,
+        explicitFiles: ['src/app.ts'],
+        reviewRawDiff: leakedDiff
+      })
+
+      expect(state.effectiveRawDiff).not.toContain(
+        'ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'
+      )
+      expect(state.effectiveRawDiff).toContain('[REDACTED]')
+      // The rest of the hunk must survive: redaction removes the secret, not the
+      // change the reviewer is there to read.
+      expect(state.effectiveRawDiff).toContain('diff --git a/src/app.ts')
+      // Counted, because this substitution changed the diff the model reviews.
+      // A redaction here is not the same event as one in a log: the reviewer
+      // reasons about a hunk that does not match the file on disk, and until the
+      // run reports the count nothing anywhere says the two differ.
+      expect(state.intakeMetrics.redactedDiffSpanCount).toBe(1)
     } finally {
       await rm(repositoryRoot, { recursive: true, force: true })
     }

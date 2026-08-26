@@ -1,7 +1,7 @@
 # 00: Architecture Overview
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-31
 
 ## Architecture Summary
 
@@ -16,15 +16,25 @@ CLI
   -> repository-intake
   -> deterministic-signals
   -> review-planning
+  -> context-ingestion (optional external change-intent brief)
   -> provider-resolution
   -> review-workflow
-  -> holistic-discovery
+  -> holistic-discovery (partitioned per task, with mediated cross-file
+       read/list/grep tools through context-retrieval)
+  -> semantic-finding-merge
   -> refutation
   -> admission
   -> baseline matching
   -> reporting
   -> quality gate
 ```
+
+`impact check` and `intent check` are advisory lanes with their own reports. Each
+is runnable as its own command, and each also runs inside `review` when enabled —
+on by default since 2026-08-11 — through `src/cli/advisory-lanes.ts`, which is a
+CLI-level composition: `review-workflow` still neither imports them nor can be
+failed by them, and a lane that throws becomes a warning on the review report
+rather than an exit code.
 
 ## Boundary Decisions
 
@@ -37,6 +47,9 @@ CLI
 | SARIF | Export format only; internal domain model remains canonical. |
 | Evaluation | Product capability with fixtures and metrics, not only test helper code. |
 | Deterministic support signals | Local tooling layer that emits normalized anchors, context hints, contradictions, and evidence; a narrow trusted-rule allowlist may seed actionable deterministic candidates directly. |
+| Verification flow | A separate, optional agentic flow (`12-verification-flow.md`) that verifies specific claims with bounded, mediated read/list/grep tools; distinct from the general review, whose guarantees it does not change. |
+| Packet size | The provider is the only authority. Assembly never splits on a byte budget; a task is halved only after the provider's normalised `context_length_exceeded` refusal (`26-reactive-task-splitting.md`). The local 8,000,000-byte ceiling is a runaway guard that refuses rather than truncates. |
+| Cross-file retrieval | On by default (`16-agentic-cross-file-discovery.md`). Discovery may open files outside the changed set through the mediated tools; retrieved content is untrusted repository data and its candidates pass the same refutation and admission as any other. |
 
 ## Clean Rebuild Decision
 

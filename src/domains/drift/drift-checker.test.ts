@@ -45,6 +45,13 @@ describe('drift checker', () => {
 
       expect(result.passed).toBe(true)
       expect(result.findings).toEqual([])
+      // A pass is only meaningful if the comparison happened. Without this the
+      // assertions above are equally satisfied by a check that read nothing.
+      expect(result.generatedArtifactStatus).toBe('compared')
+      // The same guard for the other half of the check: an empty findings list
+      // means "clean" only once the result says files were actually read.
+      expect(result.scanCoverageStatus).toBe('scanned')
+      expect(result.scannedFileCount).toBeGreaterThan(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -174,6 +181,249 @@ describe('drift checker', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  test('does not read a review-prefixed identifier as the obsolete artifact root', async () => {
+    const root = await createRoot()
+
+    try {
+      await writeFile(
+        join(root, 'README.md'),
+        'Configure `reporting.reviewComments.platform` to pick the renderer.\n'
+      )
+
+      const result = await runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+      expect(
+        result.findings.filter(
+          (finding) => finding.category === 'security-drift'
+        )
+      ).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // THE GATE'S OWN BLIND SPOT.
+  //
+  // `generated-artifact-drift` is one of only two categories that fail a build by
+  // default, and it was the one check that passed silently on absence: both reads
+  // were swallowed into `undefined` and any `undefined` returned zero findings. A
+  // deleted, renamed or unreadable schema copy therefore produced `passed: true`.
+  // Each case below asserts BOTH the finding and the status, because a status
+  // without a finding would be a green build and a finding without a status would
+  // leave "nothing was compared" indistinguishable from "the copies agree".
+  describe('generated artifact comparison', () => {
+    const generatedSchema = ['schema', 'codereviewer-config.schema.json'] as const
+    const specsSchema = ['specs', '03-contracts', 'config.schema.json'] as const
+
+    const generatedArtifactFindings = (
+      result: Awaited<ReturnType<typeof runDriftCheck>>
+    ) =>
+      result.findings.filter(
+        (finding) => finding.category === 'generated-artifact-drift'
+      )
+
+    const checkRoot = async (
+      root: string
+    ): Promise<Awaited<ReturnType<typeof runDriftCheck>>> =>
+      runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+    test.each([
+      ['the generated copy', specsSchema, generatedSchema],
+      ['the specs copy', generatedSchema, specsSchema]
+    ])(
+      'fails the build when only %s is present',
+      async (_label, presentCopy, missingCopy) => {
+        const root = await createRoot()
+
+        try {
+          await mkdir(join(root, ...presentCopy.slice(0, -1)), {
+            recursive: true
+          })
+          await writeFile(join(root, ...presentCopy), '{"a":1}\n')
+
+          const result = await checkRoot(root)
+          const findings = generatedArtifactFindings(result)
+
+          expect(result.generatedArtifactStatus).toBe('incomplete')
+          expect(findings).toHaveLength(1)
+          expect(findings[0]?.gate).toBe('error')
+          expect(findings[0]?.path).toBe(missingCopy.join('/'))
+          expect(result.passed).toBe(false)
+        } finally {
+          await rm(root, { recursive: true, force: true })
+        }
+      }
+    )
+
+    // The consumer-repository shape. Neither copy exists and that is legitimate,
+    // so it must not fail — but it must not be reported as a comparison either.
+    test('reports that nothing was compared when neither copy exists', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Consumer repository\n')
+
+        const result = await checkRoot(root)
+
+        expect(result.generatedArtifactStatus).toBe('absent')
+        expect(generatedArtifactFindings(result)).toEqual([])
+        expect(result.passed).toBe(true)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // A read that fails for any reason OTHER than the file not being there. A
+    // directory in the file's place is the portable way to produce one; the point
+    // is the error is not ENOENT, so "absent" would be the wrong conclusion.
+    test('fails the build when a copy exists but cannot be read', async () => {
+      const root = await createRoot()
+
+      try {
+        await mkdir(join(root, 'specs', '03-contracts'), { recursive: true })
+        await writeFile(join(root, ...specsSchema), '{"a":1}\n')
+        // A directory where the generated copy should be.
+        await mkdir(join(root, ...generatedSchema), { recursive: true })
+
+        const result = await checkRoot(root)
+        const findings = generatedArtifactFindings(result)
+
+        expect(result.generatedArtifactStatus).toBe('unreadable')
+        expect(findings).toHaveLength(1)
+        expect(findings[0]?.message).toBe(
+          'Generated config schema copy could not be read.'
+        )
+        expect(findings[0]?.gate).toBe('error')
+        expect(result.passed).toBe(false)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    test.each([
+      ['generated artifacts are excluded', { drift: { includeGenerated: false } }],
+      ['drift checking is off', { drift: { enabled: false } }]
+    ])('reports that nothing was checked when %s', async (_label, overrides) => {
+      const root = await createRoot()
+
+      try {
+        await mkdir(join(root, 'schema'), { recursive: true })
+        await mkdir(join(root, 'specs', '03-contracts'), { recursive: true })
+        await writeFile(join(root, ...generatedSchema), '{"a":1}\n')
+        await writeFile(join(root, ...specsSchema), '{"a":2}\n')
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse(overrides)
+        })
+
+        expect(result.generatedArtifactStatus).toBe('not-checked')
+        expect(generatedArtifactFindings(result)).toEqual([])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+  })
+
+  // The documentation half of the check, and the mirror of the generated-artifact
+  // group above. `passed: true, warningCount: 0, errorCount: 0` used to be the
+  // ONLY thing a caller saw whether the scan had read the whole repository or
+  // nothing at all, so `drift check` run outside a repository with these roots was
+  // permanently green with nothing saying so.
+  describe('scan coverage', () => {
+    test('reports that nothing was scanned when no scan root exists', async () => {
+      const root = await createRoot()
+
+      try {
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        // The regression. A clean pass over zero files must be distinguishable
+        // from a clean pass over the repository: these three fields are what
+        // makes the empty findings list below mean something.
+        expect(result.scanCoverageStatus).toBe('absent')
+        expect(result.scannedFileCount).toBe(0)
+        expect(result.absentScanRoots).toEqual(['README.md', 'docs', 'specs'])
+        expect(result.findings).toEqual([])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    test('reports which roots were missing when only some exist', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Only a readme\n')
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        expect(result.scanCoverageStatus).toBe('partial')
+        expect(result.scannedFileCount).toBe(1)
+        expect(result.absentScanRoots).toEqual(['docs', 'specs'])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // A root that IS there but holds nothing scannable collects zero files too.
+    // Inferring absence from an empty file list would report it as missing, which
+    // is a different — and wrong — statement about the repository.
+    test('does not report an existing but empty root as absent', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Readme\n')
+        await mkdir(join(root, 'docs'), { recursive: true })
+        await mkdir(join(root, 'specs'), { recursive: true })
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({})
+        })
+
+        expect(result.scanCoverageStatus).toBe('scanned')
+        expect(result.absentScanRoots).toEqual([])
+        expect(result.scannedFileCount).toBe(1)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // Switched off is not the same as scanned-and-clean either, and it is the one
+    // case where the roots are deliberately not consulted at all.
+    test('reports that nothing was scanned when drift checking is off', async () => {
+      const root = await createRoot()
+
+      try {
+        await writeFile(join(root, 'README.md'), '# Readme\n')
+
+        const result = await runDriftCheck({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({ drift: { enabled: false } })
+        })
+
+        expect(result.scanCoverageStatus).toBe('not-checked')
+        expect(result.scannedFileCount).toBe(0)
+        expect(result.absentScanRoots).toEqual([])
+        expect(result.passed).toBe(true)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
   })
 
   test('still flags a genuine stale spec root reference', async () => {

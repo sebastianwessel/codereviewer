@@ -1,7 +1,7 @@
 # 00: Conventions
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-31
 
 ## Source-Of-Truth Rules
 
@@ -34,10 +34,15 @@ Date: 2026-06-20
 ## Testing Conventions
 
 - Tests are hermetic by default.
-- External providers are opt-in only and excluded from default CI.
+- Tests that call a real provider are named `*.live.test.ts`, are excluded from
+  `npm test` by `vitest.config.ts`/`vitest.live.config.ts`, run only through
+  `npm run test:live`, and each skips itself unless the provider environment is
+  present. No other test may make a network call.
 - Contract tests validate fixtures against schemas.
 - Snapshot tests must prove reports and logs exclude raw source, prompts,
   provider responses, and secrets.
+- Coverage thresholds are 80% for lines, branches, functions, and statements
+  over `src/**/*.ts`, excluding `*.test.ts` and `src/cli/main.ts`.
 - Every implementation ticket includes failing proof before business logic when
   practical, then passing proof.
 

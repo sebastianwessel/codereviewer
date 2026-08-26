@@ -17,9 +17,7 @@ export type ReviewRunStartState = {
   readonly configHash: string
 }
 
-const stableJson = (value: unknown): string => JSON.stringify(value)
-
-export const createReviewRunId = (): string => `run-${randomUUID()}`
+const createReviewRunId = (): string => `run-${randomUUID()}`
 
 export const createReviewRunStartState = (
   options: CreateReviewRunStartStateOptions
@@ -30,6 +28,6 @@ export const createReviewRunStartState = (
     now,
     startedAt: now(),
     runId: options.runId ?? createReviewRunId(),
-    configHash: sha256(stableJson(options.config))
+    configHash: sha256(JSON.stringify(options.config))
   }
 }

@@ -1,6 +1,6 @@
 export const modelPricingSnapshot = {
   "_source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-  "_fetched": "2026-06-24",
+  "_fetched": "2026-07-24",
   "models": {
     "chatgpt-4o-latest": {
       "provider": "openai",
@@ -229,18 +229,6 @@ export const modelPricingSnapshot = {
       "inputPerMillion": 0.15,
       "outputPerMillion": 0.6
     },
-    "gpt-4o-mini-realtime-preview": {
-      "provider": "openai",
-      "inputPerMillion": 0.6,
-      "outputPerMillion": 2.4,
-      "cachedInputPerMillion": 0.3
-    },
-    "gpt-4o-mini-realtime-preview-2024-12-17": {
-      "provider": "openai",
-      "inputPerMillion": 0.6,
-      "outputPerMillion": 2.4,
-      "cachedInputPerMillion": 0.3
-    },
     "gpt-4o-mini-search-preview": {
       "provider": "openai",
       "inputPerMillion": 0.15,
@@ -252,24 +240,6 @@ export const modelPricingSnapshot = {
       "inputPerMillion": 0.15,
       "outputPerMillion": 0.6,
       "cachedInputPerMillion": 0.075
-    },
-    "gpt-4o-realtime-preview": {
-      "provider": "openai",
-      "inputPerMillion": 5,
-      "outputPerMillion": 20,
-      "cachedInputPerMillion": 2.5
-    },
-    "gpt-4o-realtime-preview-2024-12-17": {
-      "provider": "openai",
-      "inputPerMillion": 5,
-      "outputPerMillion": 20,
-      "cachedInputPerMillion": 2.5
-    },
-    "gpt-4o-realtime-preview-2025-06-03": {
-      "provider": "openai",
-      "inputPerMillion": 5,
-      "outputPerMillion": 20,
-      "cachedInputPerMillion": 2.5
     },
     "gpt-4o-search-preview": {
       "provider": "openai",
@@ -433,6 +403,30 @@ export const modelPricingSnapshot = {
       "outputPerMillion": 30,
       "cachedInputPerMillion": 0.5
     },
+    "gpt-5.6": {
+      "provider": "openai",
+      "inputPerMillion": 5,
+      "outputPerMillion": 30,
+      "cachedInputPerMillion": 0.5
+    },
+    "gpt-5.6-luna": {
+      "provider": "openai",
+      "inputPerMillion": 1,
+      "outputPerMillion": 6,
+      "cachedInputPerMillion": 0.1
+    },
+    "gpt-5.6-sol": {
+      "provider": "openai",
+      "inputPerMillion": 5,
+      "outputPerMillion": 30,
+      "cachedInputPerMillion": 0.5
+    },
+    "gpt-5.6-terra": {
+      "provider": "openai",
+      "inputPerMillion": 2.5,
+      "outputPerMillion": 15,
+      "cachedInputPerMillion": 0.25
+    },
     "gpt-audio": {
       "provider": "openai",
       "inputPerMillion": 2.5,
@@ -462,47 +456,6 @@ export const modelPricingSnapshot = {
       "provider": "openai",
       "inputPerMillion": 0.6,
       "outputPerMillion": 2.4
-    },
-    "gpt-realtime": {
-      "provider": "openai",
-      "inputPerMillion": 4,
-      "outputPerMillion": 16,
-      "cachedInputPerMillion": 0.4
-    },
-    "gpt-realtime-1.5": {
-      "provider": "openai",
-      "inputPerMillion": 4,
-      "outputPerMillion": 16,
-      "cachedInputPerMillion": 0.4
-    },
-    "gpt-realtime-2": {
-      "provider": "openai",
-      "inputPerMillion": 4,
-      "outputPerMillion": 16,
-      "cachedInputPerMillion": 0.4
-    },
-    "gpt-realtime-2025-08-28": {
-      "provider": "openai",
-      "inputPerMillion": 4,
-      "outputPerMillion": 16,
-      "cachedInputPerMillion": 0.4
-    },
-    "gpt-realtime-mini": {
-      "provider": "openai",
-      "inputPerMillion": 0.6,
-      "outputPerMillion": 2.4
-    },
-    "gpt-realtime-mini-2025-10-06": {
-      "provider": "openai",
-      "inputPerMillion": 0.6,
-      "outputPerMillion": 2.4,
-      "cachedInputPerMillion": 0.06
-    },
-    "gpt-realtime-mini-2025-12-15": {
-      "provider": "openai",
-      "inputPerMillion": 0.6,
-      "outputPerMillion": 2.4,
-      "cachedInputPerMillion": 0.06
     },
     "o1": {
       "provider": "openai",

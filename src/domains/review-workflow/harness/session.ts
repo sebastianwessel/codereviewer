@@ -27,14 +27,11 @@ export type ReviewHarness = {
   shutdown: () => Promise<unknown>
 }
 
-export type ModelBackedReviewHarness = ReviewHarness
-
-export const runReviewWorkflowSession = async (
+export const runModelBackedReviewWorkflow = async (
   options: {
-    readonly harness: ReviewHarness | ModelBackedReviewHarness
+    readonly harness: ReviewHarness
     readonly sessionId: string
     readonly input: ReviewWorkflowInputDraft
-    readonly operation: string
     readonly signal?: AbortSignal
   }
 ): Promise<ReviewWorkflowOutput> => {
@@ -54,28 +51,17 @@ export const runReviewWorkflowSession = async (
       await session.close()
     }
   } catch (error) {
+    // A task-execution failure already carries the task events and partial results
+    // the caller reports; normalizing it would erase them.
     if (isReviewTaskExecutionError(error)) {
       throw error
     }
 
     throw normalizeError(error, {
       source: 'provider',
-      operation: options.operation
+      operation: 'run_model_backed_review_workflow'
     })
   }
 }
-
-export const runModelBackedReviewWorkflow = (
-  options: {
-    readonly harness: ModelBackedReviewHarness
-    readonly sessionId: string
-    readonly input: ReviewWorkflowInputDraft
-    readonly signal?: AbortSignal
-  }
-): Promise<ReviewWorkflowOutput> =>
-  runReviewWorkflowSession({
-    ...options,
-    operation: 'run_model_backed_review_workflow'
-  })
 
 export { ReviewTaskExecutionError, isReviewTaskExecutionError }

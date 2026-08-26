@@ -1,21 +1,22 @@
 import { describe, expect, test } from 'vitest'
 import { extractPolyglotSignals } from './polyglot-signal-extractor.js'
 
+const languageSamplePaths = {
+  python: 'src/app.py',
+  go: 'cmd/app.go',
+  rust: 'src/lib.rs',
+  java: 'src/App.java',
+  ruby: 'lib/app.rb'
+} as const
+
 const factNames = (
-  language: 'python' | 'go' | 'rust' | 'java',
+  language: keyof typeof languageSamplePaths,
   content: string,
   kind?: 'import' | 'declaration' | 'public-symbol' | 'module'
 ): readonly string[] =>
   extractPolyglotSignals(language, [
     {
-      path:
-        language === 'python'
-          ? 'src/app.py'
-          : language === 'go'
-            ? 'cmd/app.go'
-            : language === 'rust'
-              ? 'src/lib.rs'
-              : 'src/App.java',
+      path: languageSamplePaths[language],
       content
     }
   ]).facts
@@ -123,6 +124,150 @@ describe('polyglot deterministic support signal extractor', () => {
     ).toEqual(expect.arrayContaining(['Outer', 'Inner']))
   })
 
+  // A Ruby definition is only a symbol other code can depend on when the file's
+  // own structure puts it there. Inside a block or another method body it is a
+  // STATEMENT: it does not exist until that body runs, and it attaches to whatever
+  // `self` holds at that moment, so nothing outside can reference it by name.
+  //
+  // Reported as a `public-symbol` it was actively harmful rather than merely
+  // useless. `def self.req` inside a test block seeded `req` as a changed public
+  // symbol, and the blast radius came back as 22 unrelated `req` locals from all
+  // over the codebase — a confident, entirely fictional dependent list, because a
+  // throwaway block-local name is exactly the kind that is reused everywhere.
+  //
+  // A namespace body is not a runtime scope: `class`, `module` and `class << self`
+  // are how a file states what it provides, so definitions inside them stay.
+  test('drops Ruby definitions created by running a block or a method body', () => {
+    const content = [
+      'class Service',
+      '  class << self',
+      '    def singleton_helper',
+      '      1',
+      '    end',
+      '  end',
+      '',
+      '  def public_thing',
+      '    def rebound_at_runtime',
+      '      2',
+      '    end',
+      '  end',
+      'end',
+      '',
+      'Thing.configure do |c|',
+      '  def self.req(headers)',
+      '    headers',
+      '  end',
+      '',
+      '  class Ephemeral',
+      '  end',
+      'end',
+      '',
+      '[1].each { def brace_scoped; end }'
+    ].join('\n')
+
+    expect(factNames('ruby', content, 'declaration')).toEqual([
+      'Service',
+      'singleton_helper',
+      'public_thing'
+    ])
+    expect(factNames('ruby', content, 'public-symbol')).toEqual([
+      'Service',
+      'singleton_helper',
+      'public_thing'
+    ])
+  })
+
+  // A Rust file is not test code because it carries tests. The dominant unit-test
+  // form puts them in an inline `#[cfg(test)] mod tests` inside the very file they
+  // exercise, so path and content both describe production AND test at once and
+  // only the declaration's position separates them.
+  //
+  // Getting this wrong at file granularity was expensive in both directions. Four
+  // production files under `axum-extra/src/response/` were classified as tests
+  // wholesale and dropped from the signal facts, production declarations
+  // included. The file next to them was missed the other way: its tests are
+  // `#[tokio::test]`, which no `#[test]` substring rule sees, so ten async test
+  // functions were compared against production methods as their peers.
+  //
+  // `#[cfg(test)]` on the module is what fixes both at once: it covers whatever
+  // attribute the declarations beneath it carry, so no attribute-macro spelling
+  // has to be enumerated.
+  test('drops Rust declarations the crate compiles only for its test build', () => {
+    const content = [
+      'pub fn production() -> u32 {',
+      '    1',
+      '}',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    use super::*;',
+      '',
+      '    #[test]',
+      '    fn plain_test() {}',
+      '',
+      '    #[tokio::test]',
+      '    async fn async_test() {}',
+      '',
+      '    // Carries no test attribute of its own, and is still test-side.',
+      '    fn helper() -> u32 {',
+      '        2',
+      '    }',
+      '',
+      '    struct Fixture;',
+      '',
+      '    mod deeper {',
+      '        fn nested_helper() {}',
+      '    }',
+      '}',
+      '',
+      '// A test function written outside a `cfg(test)` module is named by the',
+      '// built-in attribute on the function itself.',
+      '#[test]',
+      'fn loose_test() {}',
+      '',
+      '#[cfg(not(test))]',
+      'pub fn production_only() {}'
+    ].join('\n')
+
+    expect(factNames('rust', content, 'declaration')).toEqual([
+      'production',
+      'production_only'
+    ])
+    expect(factNames('rust', content, 'public-symbol')).toEqual([
+      'production',
+      'production_only'
+    ])
+  })
+
+  // The suppression is about the production SURFACE — what the file declares — not
+  // about everything written inside a test module. A `use` there is still an edge
+  // this file has, and retrieval follows those edges to put a definition in front
+  // of a reviewer who is reading the test.
+  test('keeps Rust imports and the module itself inside a test build scope', () => {
+    const content = [
+      '#[cfg(test)]',
+      'mod tests {',
+      '    use crate::store::Store;',
+      '}'
+    ].join('\n')
+
+    expect(factNames('rust', content, 'import')).toEqual(['Store'])
+    expect(factNames('rust', content, 'module')).toEqual(['tests'])
+  })
+
+  // The guard above is about DEFINITIONS, not about position. A `require` runs
+  // wherever it sits, and the file it pulls in is a real edge from this file even
+  // when the call is nested inside a block.
+  test('keeps Ruby requires nested inside a block', () => {
+    expect(
+      factNames(
+        'ruby',
+        ['Thing.configure do', '  require "rack/utils"', 'end'].join('\n'),
+        'import'
+      )
+    ).toEqual(['utils'])
+  })
+
   test('emits diagnostics and no facts for syntax error nodes', () => {
     for (const [language, content] of [
       ['python', 'class :\n    pass'],
@@ -180,5 +325,65 @@ describe('polyglot deterministic support signal extractor', () => {
     ])
 
     expect(result.evidence).toEqual([])
+  })
+
+  // Every fact carries the extent of the construct it describes, read from the
+  // grammar. A consumer asking which changed lines a symbol owns has no sound
+  // default for an absent end, so the field is required rather than optional and
+  // this case is stated once per supported language: a nested declaration's range
+  // must be CONTAINED by its enclosing one, which is what lets a change to a
+  // member reach the type that holds it.
+  test.each([
+    [
+      'python',
+      ['class Outer:', '    def inner(self):', '        return 1'],
+      { outer: 'Outer', inner: 'inner', end: 3 }
+    ],
+    [
+      'ruby',
+      ['class Outer', '  def inner', '    1', '  end', 'end'],
+      { outer: 'Outer', inner: 'inner', end: 5 }
+    ],
+    [
+      'java',
+      [
+        'public class Outer {',
+        '  public class Inner {',
+        '  }',
+        '}'
+      ],
+      { outer: 'Outer', inner: 'Inner', end: 4 }
+    ]
+  ] as const)(
+    '%s facts carry a span that nests with the declarations',
+    (language, lines, expected) => {
+      const facts = extractPolyglotSignals(language, [
+        { path: languageSamplePaths[language], content: lines.join('\n') }
+      ]).facts
+      const spanOf = (name: string) => {
+        const fact = facts.find((candidate) => candidate.name === name)
+
+        return fact === undefined
+          ? undefined
+          : ([fact.line, fact.endLine] as const)
+      }
+      const outer = spanOf(expected.outer)
+      const inner = spanOf(expected.inner)
+
+      expect(outer).toEqual([1, expected.end])
+      expect(inner?.[0]).toBeGreaterThan(outer?.[0] ?? 0)
+      expect(inner?.[1]).toBeLessThanOrEqual(outer?.[1] ?? 0)
+    }
+  )
+
+  test('a fact may not end before it starts', () => {
+    expect(
+      extractPolyglotSignals('go', [
+        {
+          path: 'cmd/app.go',
+          content: ['package main', '', 'func Run() {', '}'].join('\n')
+        }
+      ]).facts.every((fact) => fact.endLine >= fact.line)
+    ).toBe(true)
   })
 })

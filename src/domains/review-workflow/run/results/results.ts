@@ -4,7 +4,9 @@ import {
   type CodeReviewerConfig,
   type CoverageSummary,
   type EvidenceRecord,
-  type ReviewReport
+  type QualityGateResult,
+  type ReviewReport,
+  type TestAdequacySignal
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import type { CandidateFinding } from '../../../admission/index.js'
@@ -13,7 +15,7 @@ import type {
   SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
 import type { RunCostSummary } from '../../../costs/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import {
   createReviewSharedContext,
   type ReviewSharedContextSnapshot
@@ -32,6 +34,11 @@ type ReviewRunSummaryInput = {
   readonly completedAt: Date
   readonly configHash: string
   readonly warnings: readonly string[]
+  // Whether a model actually searched this change. The KEY is required even
+  // though the value may be undefined: a caller that cannot say has to say so
+  // deliberately, because the field that gets forgotten is the one whose absence
+  // used to be filled in from configuration.
+  readonly modelSearch: ReviewReport['run']['modelSearch']
   readonly runCost?: RunCostSummary
 }
 
@@ -50,12 +57,21 @@ export const createReviewRunSummary = (
     ? {}
     : { mergeBaseRef: input.mergeBaseRef }),
   configHash: input.configHash,
-  ...(input.config.provider === undefined
+  // Provenance, not configuration. `config.provider` names the model that WOULD
+  // have been used; stamping it on a run that issued no model call turned it into
+  // a claim that one had produced the findings, and `report.md` printed the
+  // measured reliability of a model search directly underneath it. A run with no
+  // search names no model — the configured one is still recoverable from
+  // `configHash` and the config artifact, where it is a setting rather than a
+  // record of what happened.
+  ...(input.config.provider === undefined ||
+  input.modelSearch === 'not-performed'
     ? {}
     : {
         provider: input.config.provider.id,
         model: input.config.provider.model
       }),
+  ...(input.modelSearch === undefined ? {} : { modelSearch: input.modelSearch }),
   durationMs: Math.max(
     0,
     input.completedAt.getTime() - input.startedAt.getTime()
@@ -79,6 +95,9 @@ export const createCoverageSummary = (
   input: {
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly contextLedger: readonly ContextLedgerEntry[]
+    // Required, not optional: a caller that forgets it would restore the exact
+    // hole this field exists to close, silently and with a passing certificate.
+    readonly skippedFileCount: number
   }
 ): CoverageSummary => {
   const files = input.sourceFiles.map((file) => {
@@ -119,6 +138,7 @@ export const createCoverageSummary = (
 
   return {
     status: incompleteReasons.length === 0 ? 'complete' : 'incomplete',
+    excludedFileCount: input.skippedFileCount,
     reviewableFileCount: files.length,
     coveredFileCount: files.filter((file) => file.status === 'complete').length,
     reviewableBytes,
@@ -182,9 +202,19 @@ export const createReviewReport = (input: {
   readonly rejectedFindings: ReviewReport['rejectedFindings']
   readonly evidence: readonly EvidenceRecord[]
   readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
-  readonly qualityGate: ReviewReport['qualityGate']
+  // Required even though the report field is optional: this builds a COMPLETED
+  // report, and a completed run has always evaluated its gate.
+  readonly qualityGate: QualityGateResult
+  // Spec 29. Required even though the report field is optional, for the reason
+  // `skippedFileCount` above is: this builds a COMPLETED report, the signal is
+  // deterministic and free, and a caller allowed to omit it would turn "this run
+  // did not compute it" into something a completed run could silently say.
+  readonly testAdequacy: TestAdequacySignal
   readonly refutationResults: ReviewReport['refutationResults']
   readonly providerIssues: ReviewReport['providerIssues']
+  // Spec 27. Carried onto the report so a run's yield can be read against the
+  // number of looks that produced it, without a debug log having been enabled.
+  readonly discovery?: ReviewReport['discovery']
   readonly resolvedBaselineEntries?: readonly NonNullable<
     ReviewReport['resolvedBaselineEntries']
   >[number][]
@@ -198,8 +228,10 @@ export const createReviewReport = (input: {
     evidence: input.evidence,
     skippedFiles: input.skippedFiles,
     qualityGate: input.qualityGate,
+    testAdequacy: input.testAdequacy,
     refutationResults: input.refutationResults,
     providerIssues: input.providerIssues,
+    ...(input.discovery === undefined ? {} : { discovery: input.discovery }),
     ...(input.resolvedBaselineEntries === undefined
       ? {}
       : { resolvedBaselineEntries: input.resolvedBaselineEntries }),
@@ -231,15 +263,21 @@ export const prepareReviewRunnerSuccessResult = (
     readonly completedAt: Date
     readonly configHash: string
     readonly warnings: readonly string[]
+    // Required, and stated by the caller rather than derived here: only the
+    // runner knows whether the provider workflow actually ran.
+    readonly modelSearch: NonNullable<ReviewReport['run']['modelSearch']>
     readonly runCost?: RunCostSummary | undefined
     readonly analysis: DeterministicSignalExtraction
     readonly coverage: CoverageSummary
+    readonly testAdequacy: TestAdequacySignal
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
     readonly admission: ReviewRunnerAdmissionState
-    readonly resolvedBaselineEntries: readonly NonNullable<
-      ReviewReport['resolvedBaselineEntries']
-    >[number][]
+    // Undefined when the run did not compute it — no baseline to compare
+    // against — which the report must state as absence, never as a zero.
+    readonly resolvedBaselineEntries:
+      | readonly NonNullable<ReviewReport['resolvedBaselineEntries']>[number][]
+      | undefined
     readonly observability?: NoContentEventRecorder | undefined
     readonly logger?: Logger | undefined
   }
@@ -259,9 +297,11 @@ export const prepareReviewRunnerSuccessResult = (
       completedAt: input.completedAt,
       configHash: input.configHash,
       warnings: input.warnings,
+      modelSearch: input.modelSearch,
       ...(input.runCost === undefined ? {} : { runCost: input.runCost })
     }),
     coverage: input.coverage,
+    testAdequacy: input.testAdequacy,
     admittedFindings: input.admission.admittedFindings,
     rejectedFindings: input.admission.rejectedFindings,
     evidence: input.admission.evidence,
@@ -269,9 +309,12 @@ export const prepareReviewRunnerSuccessResult = (
     qualityGate: input.admission.qualityGate,
     refutationResults: input.admission.refutationResults,
     providerIssues: input.admission.providerIssues,
-    ...(input.config.baseline.includeResolvedInReport
-      ? { resolvedBaselineEntries: input.resolvedBaselineEntries }
-      : {})
+    ...(input.admission.discovery === undefined
+      ? {}
+      : { discovery: input.admission.discovery }),
+    ...(input.resolvedBaselineEntries === undefined
+      ? {}
+      : { resolvedBaselineEntries: input.resolvedBaselineEntries })
   })
   const sharedContext = createSharedContextSnapshot({
     analysis: input.analysis,
@@ -300,7 +343,7 @@ export const prepareReviewRunnerSuccessResult = (
     rejected_finding_count: result.reportMetrics.rejectedFindingCount,
     evidence_count: result.reportMetrics.evidenceCount,
     coverage_status: input.coverage.status,
-    quality_gate_passed: input.admission.qualityGate?.passed ?? true
+    quality_gate_passed: input.admission.qualityGate.passed
   })
 
   return result

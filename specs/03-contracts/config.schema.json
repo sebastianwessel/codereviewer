@@ -3,16 +3,7 @@
   "type": "object",
   "properties": {
     "review": {
-      "default": {
-        "mode": "local",
-        "depth": "balanced",
-        "baseRef": "main",
-        "headRef": "HEAD",
-        "maxConcurrentTasks": 4,
-        "maxFiles": 500,
-        "maxFileBytes": 500000,
-        "inlineSeverityThreshold": "high"
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "mode": {
@@ -82,22 +73,51 @@
           "type": "number",
           "minimum": 0
         },
-        "runTimeoutMs": {
-          "type": "integer",
-          "minimum": 10000,
-          "maximum": 7200000
+        "crossFileRetrieval": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            },
+            "maxToolCallsPerTask": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "maxBytesPerRead": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 4000000
+            }
+          },
+          "additionalProperties": false
+        },
+        "signalFacts": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "citations": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
-      "required": [
-        "mode",
-        "depth",
-        "baseRef",
-        "headRef",
-        "maxConcurrentTasks",
-        "maxFiles",
-        "maxFileBytes",
-        "inlineSeverityThreshold"
-      ],
       "additionalProperties": false
     },
     "provider": {
@@ -167,28 +187,37 @@
       },
       "required": [
         "id",
-        "model",
-        "temperature",
-        "timeoutMs",
-        "maxRetries",
-        "retryBackoffMs",
-        "retryMaxDelayMs"
+        "model"
       ],
       "additionalProperties": false
     },
     "instructions": {
-      "default": {
-        "files": [],
-        "inline": ""
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "files": {
           "default": [],
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
           }
         },
         "inline": {
@@ -196,24 +225,10 @@
           "type": "string"
         }
       },
-      "required": [
-        "files",
-        "inline"
-      ],
       "additionalProperties": false
     },
     "skills": {
-      "default": {
-        "enabled": false,
-        "directories": [
-          ".codereviewer/skills"
-        ],
-        "allowTools": [
-          "read",
-          "list",
-          "grep"
-        ]
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -247,40 +262,10 @@
           }
         }
       },
-      "required": [
-        "enabled",
-        "directories",
-        "allowTools"
-      ],
       "additionalProperties": false
     },
     "paths": {
-      "default": {
-        "include": [
-          "**/*"
-        ],
-        "exclude": [
-          ".git/**",
-          "node_modules/**",
-          "dist/**",
-          "coverage/**",
-          ".codereviewer/**",
-          "**/package-lock.json",
-          "**/yarn.lock",
-          "**/pnpm-lock.yaml",
-          "**/npm-shrinkwrap.json",
-          "**/composer.lock",
-          "**/Gemfile.lock",
-          "**/poetry.lock",
-          "**/Cargo.lock",
-          "**/go.sum",
-          "**/*.min.js",
-          "**/*.min.css",
-          "**/*.map",
-          "**/*.snap"
-        ],
-        "artifactDir": ".codereviewer/runs"
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "include": {
@@ -324,20 +309,10 @@
           "minLength": 1
         }
       },
-      "required": [
-        "include",
-        "exclude",
-        "artifactDir"
-      ],
       "additionalProperties": false
     },
     "baseline": {
-      "default": {
-        "enabled": true,
-        "path": ".codereviewer/baseline.json",
-        "failOnNewOnly": true,
-        "includeResolvedInReport": true
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -358,20 +333,10 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "enabled",
-        "path",
-        "failOnNewOnly",
-        "includeResolvedInReport"
-      ],
       "additionalProperties": false
     },
     "qualityGate": {
-      "default": {
-        "maxCritical": 0,
-        "maxHigh": 0,
-        "failOnProviderError": true
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "maxCritical": {
@@ -399,22 +364,14 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "maxCritical",
-        "maxHigh",
-        "failOnProviderError"
-      ],
       "additionalProperties": false
     },
     "aiReview": {
-      "default": {
-        "requireRefutation": true,
-        "deterministicSignalMode": "support",
-        "actionableSeverityThreshold": "medium"
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
+          "default": true,
           "type": "boolean"
         },
         "requireRefutation": {
@@ -440,19 +397,18 @@
             "low",
             "info"
           ]
+        },
+        "maxFilesPerDiscoveryCall": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       },
-      "required": [
-        "requireRefutation",
-        "deterministicSignalMode",
-        "actionableSeverityThreshold"
-      ],
       "additionalProperties": false
     },
     "promotionPolicy": {
-      "default": {
-        "modelWeakOrRefuted": "artifact-only"
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "modelWeakOrRefuted": {
@@ -464,18 +420,295 @@
           ]
         }
       },
-      "required": [
-        "modelWeakOrRefuted"
-      ],
+      "additionalProperties": false
+    },
+    "contextSources": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "providers": {
+          "default": [
+            {
+              "type": "inbox"
+            },
+            {
+              "type": "changed-files"
+            }
+          ],
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "inbox"
+                  },
+                  "dir": {
+                    "default": ".codereviewer/context",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxFiles": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200
+                  },
+                  "maxFileBytes": {
+                    "default": 64000,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "changed-files"
+                  },
+                  "include": {
+                    "default": [
+                      "**/*.md"
+                    ],
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "maxFiles": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200
+                  },
+                  "maxFileBytes": {
+                    "default": 64000,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "summary": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "model",
+                "digest"
+              ]
+            },
+            "maxBytes": {
+              "default": 4000,
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 20000
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "providers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "claims-file"
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "prior-findings"
+                  },
+                  "report": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "report"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "maxToolCallsPerClaim": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "maxBytesPerRead": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 4000000
+        },
+        "maxMatches": {
+          "default": 20,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "changeImpact": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxChangedSymbols": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxReferencesPerSymbol": {
+          "default": 25,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxReferenceCandidatesPerSymbol": {
+          "default": 500,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "maxSearchDepth": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "adjudication": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxCalls": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "intentFulfilment": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxObligations": {
+          "default": 100,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxIntentBytes": {
+          "default": 100000,
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 200000
+        },
+        "maxChangeLines": {
+          "default": 5000,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        }
+      },
+      "additionalProperties": false
+    },
+    "fix": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "minSeverity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        }
+      },
       "additionalProperties": false
     },
     "security": {
-      "default": {
-        "allowShell": false,
-        "allowNetwork": false,
-        "allowFilesystemWrite": false,
-        "captureContentTelemetry": false
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "allowShell": {
@@ -497,30 +730,83 @@
           "default": false,
           "type": "boolean",
           "const": false
+        },
+        "dedicatedPass": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "signals": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "artifacts": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "format": {
+                    "default": "sarif",
+                    "type": "string",
+                    "const": "sarif"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "maxArtifactBytes": {
+              "default": 4000000,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50000000
+            },
+            "maxAlerts": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false
+        },
+        "redaction": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "secretEnvVars": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
-      "required": [
-        "allowShell",
-        "allowNetwork",
-        "allowFilesystemWrite",
-        "captureContentTelemetry"
-      ],
       "additionalProperties": false
     },
     "reporting": {
-      "default": {
-        "formats": [
-          "json",
-          "markdown",
-          "sarif"
-        ],
-        "sarif": {
-          "target": "generic",
-          "category": "codereviewer",
-          "maxResults": 5000,
-          "redact": true
-        }
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "formats": {
@@ -535,18 +821,12 @@
             "enum": [
               "json",
               "markdown",
-              "sarif",
-              "github-review-comments"
+              "sarif"
             ]
           }
         },
         "sarif": {
-          "default": {
-            "target": "generic",
-            "category": "codereviewer",
-            "maxResults": 5000,
-            "redact": true
-          },
+          "default": {},
           "type": "object",
           "properties": {
             "target": {
@@ -567,54 +847,136 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 25000
-            },
-            "redact": {
-              "default": true,
-              "type": "boolean"
             }
           },
-          "required": [
-            "target",
-            "category",
-            "maxResults",
-            "redact"
-          ],
+          "additionalProperties": false
+        },
+        "reviewComments": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            },
+            "platform": {
+              "default": "auto",
+              "type": "string",
+              "enum": [
+                "github",
+                "gitlab",
+                "bitbucket",
+                "generic",
+                "auto"
+              ]
+            }
+          },
           "additionalProperties": false
         }
       },
-      "required": [
-        "formats",
-        "sarif"
-      ],
       "additionalProperties": false
     },
     "evaluation": {
-      "default": {
-        "enabled": false
-      },
+      "default": {},
       "type": "object",
       "properties": {
-        "enabled": {
-          "default": false,
-          "type": "boolean"
+        "minJudgeAgreement": {
+          "default": 0.9,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "judgeModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "regressionGate": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "profile": {
+              "default": "stable",
+              "type": "string",
+              "enum": [
+                "stable",
+                "strict"
+              ]
+            },
+            "overrides": {
+              "default": {},
+              "type": "object",
+              "properties": {
+                "minParseValidity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minRecall": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minPrecision": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minSeverityWeightedF1": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "maxFalsePositiveCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "maxCommentsPerKloc": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxCommentsPerDiffHunk": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxIncompleteCoverageRate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "maxContextMutationRate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "maxCostUsd": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxDurationMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "minProductRecall": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "failOnProviderError": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
-      "required": [
-        "enabled"
-      ],
       "additionalProperties": false
     },
     "drift": {
-      "default": {
-        "enabled": true,
-        "failOn": [
-          "generated-artifact-drift",
-          "security-drift"
-        ],
-        "includeDocs": true,
-        "includeSpecs": true,
-        "includeGenerated": true
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -652,32 +1014,14 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "enabled",
-        "failOn",
-        "includeDocs",
-        "includeSpecs",
-        "includeGenerated"
-      ],
       "additionalProperties": false
     },
     "observability": {
-      "default": {
-        "logging": {
-          "level": "silent"
-        },
-        "openTelemetry": {
-          "enabled": false,
-          "headers": {},
-          "serviceName": "codereviewer"
-        }
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "logging": {
-          "default": {
-            "level": "silent"
-          },
+          "default": {},
           "type": "object",
           "properties": {
             "level": {
@@ -694,17 +1038,10 @@
               ]
             }
           },
-          "required": [
-            "level"
-          ],
           "additionalProperties": false
         },
         "openTelemetry": {
-          "default": {
-            "enabled": false,
-            "headers": {},
-            "serviceName": "codereviewer"
-          },
+          "default": {},
           "type": "object",
           "properties": {
             "enabled": {
@@ -731,18 +1068,9 @@
               "minLength": 1
             }
           },
-          "required": [
-            "enabled",
-            "headers",
-            "serviceName"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "logging",
-        "openTelemetry"
-      ],
       "additionalProperties": false
     },
     "costs": {
@@ -763,24 +1091,19 @@
         }
       },
       "additionalProperties": false
+    },
+    "reviewConversation": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   },
-  "required": [
-    "review",
-    "instructions",
-    "skills",
-    "paths",
-    "baseline",
-    "qualityGate",
-    "aiReview",
-    "promotionPolicy",
-    "security",
-    "reporting",
-    "evaluation",
-    "drift",
-    "observability",
-    "costs"
-  ],
   "additionalProperties": false,
   "$id": "https://codereviewer.local/schemas/config.schema.json",
   "title": "CodeReviewerConfig"

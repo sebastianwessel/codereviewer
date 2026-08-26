@@ -1,0 +1,382 @@
+// The human-readable face of the intent-fulfilment MAPPING report.
+//
+// WHY THIS EXISTS. `intent check` printed JSON to stdout and nothing else, so its
+// output lived outside the workflow a reviewer uses — the same gap spec 22 recorded
+// for `impact check` and the same answer: an artifact beside `report.md` in the run
+// directory.
+//
+// WHY IT MATTERS MORE HERE THAN FOR IMPACT. This capability's dominant measured
+// error is not a wrong answer, it is a MISREAD one. On the 2026-08-01 realistic
+// corpus, 54 of the lane's 83 false positives were obligations the judgement had
+// reported correctly — nothing among the changed lines evidenced them — which a
+// reader took as a claim that the work was undone. The engine renamed its statuses
+// to `evidenced`/`not-evidenced` for exactly that reason. A rendering is where that
+// distinction is either preserved or thrown away, so every heading below says what
+// the SEARCH found and never what the author did or failed to do.
+//
+// WHAT IT MUST NOT BECOME. Spec 23: the output "MUST NOT certify completion", and
+// "no part of the output may be phrased so a reader could take it that way". So
+// there is no severity here, no pass/fail, no score, no "complete" and no
+// "incomplete" — and the evidenced section is deliberately NOT a congratulation. An
+// empty not-evidenced list renders as "this run found nothing it could not evidence",
+// never as "the change covers its intent".
+//
+// Pure: it takes a report and returns a string. No filesystem, no clock, no
+// configuration. The CLI decides where the string goes.
+
+import {
+  falseSatisfiedOneIn,
+  inlineCode,
+  intentSelfAgreementPercent,
+  measuredIntentReliability,
+  missedOutstandingOneIn,
+  numberWord,
+  pluralize,
+  renderMeasuredOn,
+  renderUsageLines,
+  safeText
+} from '../reporting/index.js'
+import type {
+  ChangeCitation,
+  IntentFulfilmentReport,
+  Obligation
+} from './intent-fulfilment-report.js'
+
+// Stated once, at the top, because it is the single sentence that decides whether
+// the document is read correctly. A reader who skims the headings and supplies the
+// missing word themselves supplies "undone", which is the error this capability was
+// re-vocabularised to prevent.
+const WHAT_THIS_IS =
+  'This report maps the STATED INTENT of a change onto the lines the change touched. It says what those lines do and do not SHOW. It is not a completeness check: an obligation with no evidence here may be finished elsewhere, deliberately deferred, or genuinely missing, and only a human reading it can tell which. Nothing here is a finding, nothing carries a severity, and this command cannot fail a pipeline.'
+
+// The measured error rates, printed where the reader is rather than left in an
+// evaluation report they will never open.
+//
+// Spec 23's governing risk is that OMISSION gets read as COVERAGE — a reader who
+// takes "evidenced" as "done" stops checking, which is the expensive direction.
+// Stating the two rates that bound that risk is the only honest way to let someone
+// calibrate how much weight to put on a row.
+//
+// NOT ONE NUMBER IS WRITTEN HERE. Both ratios, the corpus size and the run count
+// come from `measuredIntentReliability`, which holds the round's transcribed counts
+// and derives the ratios from them, exactly as the review report's rates work. A
+// paragraph that states a measured figure in prose is a figure nothing can update:
+// prose cannot be imported, and this repository has already watched one renderer
+// keep quoting a superseded rate after its re-baseline because of it.
+//
+// The two rates are the ones that bound the governing risk from both sides. The
+// false-satisfied rate is why a row here is not a certificate; the missed-outstanding
+// rate is why the list's silence is not a clearance.
+//
+// Deliberately qualitative in the prose and exact in the numbers. Rounding the rate
+// to "rarely" would let a reader supply their own optimistic figure, which is the
+// failure this paragraph exists to prevent.
+const MEASURED_RELIABILITY = `Measured reliability, so these rows can be weighed rather than trusted: about **1 in ${falseSatisfiedOneIn}** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in ${missedOutstandingOneIn}** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over ${measuredIntentReliability.corpusCaseCount} real changes, with ${numberWord(measuredIntentReliability.runCount)} runs of each against one pinned engine. They are why this report is read alongside the diff and never in place of it. Two runs of this stage over the SAME change agree on about **${intentSelfAgreementPercent}%** of verdicts, so a row here is not reproducible and that figure caps every rate above: this stage cannot be more accurate against a change than it is against itself.`
+
+// The sentence a reader most needs when the outstanding list is empty, and the one
+// most easily replaced by a congratulation. Spec 23 forbids certifying completion,
+// so an empty list is reported as a fact about the search.
+// It must stay true when some obligations were kept by changing nothing, which is
+// why it does not say "matched to lines": a prohibition this change does not go
+// against reaches this state with no line behind it at all, and a banner claiming
+// otherwise would be the certificate spec 23 forbids, printed in the one place a
+// reader is most inclined to accept one.
+const NOTHING_UNEVIDENCED =
+  'Every obligation read out of the stated intent was either matched to lines in this change, or asks for something not to be done which this change does not do. That is a statement about this search, not a certificate: obligations the extraction never proposed are not on this list, an obligation can be evidenced by lines that do less than it asks, and an obligation kept by changing nothing has no line behind it to check.'
+
+// `inlineCode` and `pluralize` are shared with the other two Markdown surfaces
+// from `../reporting/`: a cited line is source, and the code-span rule that keeps
+// it from breaking out of its span must be one rule, not three copies of one.
+
+// The side is rendered, never dropped. Spec 23's 2026-07-30 amendment makes it a
+// MUST: a removed line is numbered on the PRE-change side, so without the side a
+// reader cannot tell "this deleted line 42" from "this added line 42", and those are
+// two different lines.
+const renderEvidence = (citation: ChangeCitation): string =>
+  `  - ${inlineCode(`${citation.path}:${citation.line}`)} (${safeText(citation.side)}) ${inlineCode(citation.text)}`
+
+// Where in the stated intent this obligation was read from. Spec 23: "An obligation
+// the reviewer inferred rather than read is not an obligation." The citation is on
+// every entry, whatever its status, so a reader can always go back to the sentence
+// the tool thinks it is holding the change to — and disagree with it.
+const renderSource = (obligation: Obligation): string =>
+  `  - Read from ${inlineCode(`${obligation.source.origin}:${obligation.source.line}`)}: ${inlineCode(obligation.source.text)}`
+
+const renderObligation = (obligation: Obligation): readonly string[] => [
+  `- **${safeText(obligation.statement)}**`,
+  renderSource(obligation),
+  ...(obligation.status === 'evidenced'
+    ? obligation.evidence.map(renderEvidence)
+    : []),
+  ''
+]
+
+const renderObligationSection = (
+  input: {
+    readonly heading: string
+    readonly note: string
+    readonly obligations: readonly Obligation[]
+  }
+): readonly string[] =>
+  input.obligations.length === 0
+    ? []
+    : [
+        `## ${input.heading} (${input.obligations.length})`,
+        '',
+        input.note,
+        '',
+        ...input.obligations.flatMap(renderObligation)
+      ]
+
+// Changed files no obligation's evidence cites. Spec 23: "Extra scope is reported
+// neutrally. A change doing more than the ticket asked is a normal and often
+// desirable event, not a defect." So there is nowhere here to record a severity, a
+// verdict, or a question — and the note says the harmless reading out loud, because
+// a bare list under a heading reads as an accusation.
+const renderExtraScope = (
+  report: IntentFulfilmentReport
+): readonly string[] =>
+  report.extraScope.length === 0
+    ? []
+    : [
+        `## Changed files no obligation cites (${report.extraScope.length})`,
+        '',
+        'Work this change contains that the stated intent does not describe. That is normal and frequently deliberate — refactoring, tests, and incidental fixes all land here — and it is listed so the mapping is complete, not because it is a problem.',
+        '',
+        ...report.extraScope.map(
+          (entry) =>
+            `- ${inlineCode(entry.path)} (${pluralize(entry.changedLineCount, 'changed line', 'changed lines')})`
+        ),
+        ''
+      ]
+
+// The prose summary, written by a separate model call over an already-frozen
+// mapping. Rendered UNDER the mapping rather than above it: the mapping is the
+// output and the prose is a convenience over it, and a summary printed first would
+// be the thing a skimming reader takes away.
+const renderExplanation = (
+  report: IntentFulfilmentReport
+): readonly string[] =>
+  report.explanation === undefined
+    ? []
+    : [
+        '## Summary in prose',
+        '',
+        'Written by a separate model call that read the mapping above after it was decided and could not change it. Where the two disagree, the mapping is the record.',
+        '',
+        safeText(report.explanation),
+        ''
+      ]
+
+const renderScope = (report: IntentFulfilmentReport): readonly string[] => [
+  `- Status: ${safeText(report.status)}`,
+  `- Generated: ${safeText(report.generatedAt)}`,
+  // Always a line, for the reason the review report states it: the measured
+  // rates above and the cost below are both properties of one specific model.
+  `- Model: ${report.usage?.modelName === undefined ? 'not recorded' : inlineCode(`${report.usage.providerId ?? 'unknown provider'}/${report.usage.modelName}`)}`,
+  `- Base: ${inlineCode(report.scope.baseRef)}`,
+  `- Head: ${inlineCode(report.scope.headRef)}`,
+  ...(report.scope.mergeBaseRef === undefined
+    ? []
+    : [`- Merge base: ${inlineCode(report.scope.mergeBaseRef)}`]),
+  `- Changed files: ${report.scope.changedFileCount}`,
+  `- Changed lines the judgement could cite: ${report.scope.changedLineCount}`,
+  `- Stated intent read from: ${report.scope.intentOrigins.length === 0 ? 'nothing' : report.scope.intentOrigins.map((origin) => inlineCode(origin)).join(', ')}`,
+  ''
+]
+
+// The headline number, and the reason the capability is shaped the way it is:
+// `notEvidencedCount` is `not-evidenced` plus `undetermined`, and an `evidenced`
+// obligation is never on it. It is named here as what the SEARCH did not find, so
+// the count and its meaning cannot drift apart on the page a reader quotes from.
+const renderSummary = (report: IntentFulfilmentReport): readonly string[] => {
+  const { summary } = report
+
+  return [
+    '## Summary',
+    '',
+    `- Obligations read out of the stated intent: ${summary.obligationCount}`,
+    `- **Not evidenced by this change: ${summary.notEvidencedCount}** (${summary.notEvidencedStatusCount} with nothing found, ${summary.undeterminedCount} undecidable)`,
+    `- Evidenced by this change: ${summary.evidencedCount}`,
+    // Its own line, and deliberately not folded into either number above. An
+    // obligation asking that something not be done leaves no line to cite when it
+    // is honoured, so counting it as unevidenced reported a false alarm on every
+    // run — 39.8% of this lane's classified false positives. Counting it as
+    // evidenced would be the opposite error: nothing here was shown to be done.
+    `- Not contradicted by this change: ${summary.notContradictedCount}`,
+    `- Changed files no obligation cites: ${summary.extraScopeFileCount}`,
+    ...(summary.uncitedObligationCount === 0
+      ? []
+      : [
+          `- Proposed obligations discarded because their citation resolved to no line of the stated intent: ${summary.uncitedObligationCount}`
+        ]),
+    ...(summary.unverifiedEvidenceClaimCount === 0
+      ? []
+      : [
+          `- Claims of evidence citing lines this change did not touch, recorded as undecidable: ${summary.unverifiedEvidenceClaimCount}`
+        ]),
+    ''
+  ]
+}
+
+// Bounds a reader cannot discount unless they can see them. This capability's own
+// limits refuse the run rather than truncating it, so `obligationsTruncated` is
+// always false and is not rendered; the two below are the bounds that can still bind
+// silently.
+//
+// `intentTruncated` reports a cut made UPSTREAM of this capability, by the
+// `contextSources` provider that fetched the source, so the sentence names that cap
+// and not `intentFulfilment.maxIntentBytes` — which refuses the run and never
+// reaches a report. Naming the wrong knob is worse than naming none: it sends a
+// reader to raise a limit that was never the one that bound, they see the same
+// report again, and they conclude the disclosure was noise.
+const renderBounds = (report: IntentFulfilmentReport): readonly string[] => {
+  const bounds: string[] = []
+
+  if (report.scope.intentTruncated) {
+    bounds.push(
+      'The stated intent reached this command already cut: a `contextSources` provider trimmed at least one source to its `maxFileBytes` cap. Whatever those sources state after the cut was never read, so every list below — including the not-evidenced one — is a floor and not a total. Raise `maxFileBytes` on the provider that supplied them and re-run to hold the change to the whole of the intent.'
+    )
+  }
+
+  return bounds.length === 0
+    ? []
+    : ['## Bounds that bound', '', ...bounds.map((bound) => `- ${bound}`), '']
+}
+
+const renderUsage = (report: IntentFulfilmentReport): readonly string[] => {
+  const { usage } = report
+
+  if (usage === undefined) {
+    return []
+  }
+
+  return [
+    '## Cost',
+    '',
+    // Named before the money: a price without the model it was paid to is not
+    // comparable to anything.
+    `- Model: ${usage.modelName === undefined ? 'not recorded' : inlineCode(`${usage.providerId ?? 'unknown provider'}/${usage.modelName}`)}`,
+    // The figures themselves are the review report's, rendered by the same
+    // function: a lane that priced its own call still owes the reader the same
+    // account of it, and an undeterminable price must not read as a free run on
+    // one document and as no run at all on the other.
+    // This lane exists only to place model calls — obligation extraction, the
+    // per-obligation judgement, the explanation — so a run that reaches this
+    // section made them. An absent cost here really is a price that could not be
+    // determined, never a run that never spent.
+    ...renderUsageLines(usage, { modelCallsMade: true }),
+    ''
+  ]
+}
+
+const renderWarnings = (report: IntentFulfilmentReport): readonly string[] =>
+  report.warnings.length === 0
+    ? []
+    : [
+        '## Warnings',
+        '',
+        ...report.warnings.map((warning) => `- ${safeText(warning)}`),
+        ''
+      ]
+
+// The four outcomes that map nothing. Each is a statement a reader needs, and an
+// empty document would read as a missing report rather than as an answer — spec 23
+// requires absent or unusable intent to be reported PLAINLY.
+const NO_MAPPING_REASON: Readonly<Record<string, string>> = {
+  disabled:
+    'Intent-fulfilment review is disabled, so nothing was read and nothing was mapped. This is not a report that the change matches its intent.',
+  'no-intent':
+    'No stated intent was found for this change, so there was nothing to map it against. Most changes have thin descriptions and this is the ordinary case, not an error. Configure `contextSources` to point at the pull-request description, ticket or commit body you want the change held to.',
+  'unusable-intent':
+    'Stated intent was found, but no checkable obligation could be read out of it. That is a fact about the text, not about the change.',
+  'provider-unavailable':
+    'Stated intent was found, but no model was available to read it, so nothing was mapped. See the warnings above.'
+}
+
+/**
+ * The intent-fulfilment mapping as Markdown.
+ *
+ * Renders every status the schema admits, including the four that carry no
+ * obligations at all.
+ */
+export const renderIntentFulfilmentMarkdown = (
+  report: IntentFulfilmentReport
+): string => {
+  const lines: string[] = [
+    '# Intent Fulfilment Report',
+    '',
+    WHAT_THIS_IS,
+    '',
+    // The lane's own usage record carries the identity, because that is where
+    // the provider was resolved. A report written before the field existed says
+    // so rather than assuming the measured model.
+    `${MEASURED_RELIABILITY} ${renderMeasuredOn({
+      ...(report.usage?.providerId === undefined
+        ? {}
+        : { provider: report.usage.providerId }),
+      ...(report.usage?.modelName === undefined
+        ? {}
+        : { model: report.usage.modelName })
+    })}`,
+    '',
+    ...renderScope(report),
+    ...renderSummary(report),
+    ...renderBounds(report),
+    ...renderWarnings(report)
+  ]
+
+  const reason = NO_MAPPING_REASON[report.status]
+
+  if (reason !== undefined) {
+    lines.push('## Nothing was mapped', '', reason, '')
+
+    return `${lines.join('\n')}\n`
+  }
+
+  const byStatus = (status: Obligation['status']): readonly Obligation[] =>
+    report.obligations.filter((obligation) => obligation.status === status)
+
+  const notEvidenced = byStatus('not-evidenced')
+  const undetermined = byStatus('undetermined')
+
+  if (notEvidenced.length === 0 && undetermined.length === 0) {
+    lines.push('## Not evidenced by this change (0)', '', NOTHING_UNEVIDENCED, '')
+  }
+
+  lines.push(
+    // First, because it is the reason to open the document. The heading names the
+    // search, not the author: these are obligations the changed lines do not show,
+    // which is not the same as obligations nobody has met.
+    ...renderObligationSection({
+      heading: 'Not evidenced by this change',
+      note: 'Nothing among the changed lines does what these obligations ask. That is an ordinary and expected answer — a change need not do everything its stated intent describes, and an obligation an earlier change already satisfied leaves no evidence in this one. Each entry cites the line of the stated intent it was read from, so you can judge whether it belongs here at all.',
+      obligations: notEvidenced
+    }),
+    ...renderObligationSection({
+      heading: 'Could not be decided',
+      note: 'The lines the judgement was shown did not let it answer either way. This is a real answer rather than a failure, and these are counted with the not-evidenced obligations above: an obligation the run could not settle belongs on the list a human reads, not suppressed from it.',
+      obligations: undetermined
+    }),
+    ...renderObligationSection({
+      heading: 'Evidenced by this change',
+      note: 'Changed lines were found that do what these obligations ask, and every one of them is cited below by path, line and side. "Evidenced" means those lines were found — not that the obligation is fully or correctly met. The citations are there so you can check that yourself.',
+      obligations: byStatus('evidenced')
+    }),
+    // Last, and with no citations, because there are none to give: these obligations
+    // ask for something NOT to be done, and what honouring them looks like in a diff
+    // is an absence. The note says what the absence does and does not support,
+    // because a heading alone would be read as a clearance — and the one thing this
+    // section must never become is a certificate that the prohibition holds.
+    ...renderObligationSection({
+      heading: 'Not contradicted by this change',
+      note: 'These obligations ask that something NOT be done, and nothing among the changed lines does it. There is no line to cite: what keeping such an obligation looks like in a diff is the absence of a line. Read this as a search that found no violation among the lines this change touched — not as a check that the obligation holds in the rest of the repository, and not as a claim that this change put it in place. Where a changed line did establish it, the obligation is above, with the line quoted.',
+      obligations: byStatus('not-contradicted')
+    }),
+    ...renderExtraScope(report),
+    ...renderExplanation(report),
+    ...renderUsage(report)
+  )
+
+  return `${lines.join('\n')}\n`
+}

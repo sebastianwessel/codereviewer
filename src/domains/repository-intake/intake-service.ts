@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import {
   currentFileSystemFlavor,
@@ -8,36 +7,59 @@ import {
   resolvePathInsideRoot,
   type FileSystemFlavor
 } from '../../platform/path-service.js'
-import { type SkippedFile } from '../../shared/contracts/index.js'
+import type { SkippedFile } from '../../shared/contracts/index.js'
 import {
   createStructuredError,
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
+import { compileGlobMatchers } from '../../shared/glob/glob-matcher.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { parseGitDiffMaps, type DiffMap } from './git-diff.js'
+import {
+  isBinaryContent,
+  isExcluded,
+  isIncluded
+} from './file-classification.js'
+import { assertReadOnlyGitArgs, assertSafeGitRef } from './git-command-safety.js'
+import {
+  parseDeletedFileContents,
+  parseGitDiffMaps,
+  type DiffMap
+} from './git-diff.js'
+import { parseGitNameStatus, type GitChangedPath } from './git-name-status.js'
 
 const execFileAsync = promisify(execFile)
 const defaultMaxFileBytes = 500_000
 const defaultMaxFiles = 500
 const gitMaxBufferBytes = 20_000_000
 
-export type ChangedFileStatus = 'added' | 'modified' | 'renamed' | 'copied'
+type ChangedFileStatus = 'added' | 'modified' | 'renamed' | 'copied'
 
-export type ChangedFile = {
+type ChangedFile = {
   readonly path: string
   readonly status: ChangedFileStatus
   readonly sizeBytes: number
   readonly contentHash: string
 }
 
-export type RepositorySnapshot = {
+type RepositorySnapshot = {
   readonly repositoryRoot: string
   readonly changedFileCount: number
   readonly skippedFileCount: number
   // Commit the diff was actually taken against: the merge base of baseRef and
   // headRef. Absent for explicit-file runs, which bypass git entirely.
   readonly mergeBaseRef?: string
+}
+
+// A path the change removes outright, with the content it had at the merge base.
+// Surfaced only when `includeDeletedPaths` is requested; see `RepositoryIntake`.
+type DeletedFile = {
+  readonly path: string
+  readonly contentHash: string
+  readonly sizeBytes: number
+  // Pre-change content, reconstructed from the deletion hunk. Never read from the
+  // working tree, where the file no longer exists.
+  readonly content: string
 }
 
 export type RepositoryIntake = {
@@ -48,6 +70,9 @@ export type RepositoryIntake = {
   // Raw unified diff text for the changed files (empty when unavailable, e.g.
   // explicit-file runs). Used by holistic discovery to show what changed.
   readonly rawDiff: string
+  // Deleted paths with their pre-change content. Always empty unless
+  // `includeDeletedPaths` is set, so every existing consumer is unaffected.
+  readonly deletedFiles: readonly DeletedFile[]
 }
 
 export type GitCommandRunner = (
@@ -58,16 +83,16 @@ export type GitCommandRunner = (
   }
 ) => Promise<string>
 
-export type IntakeFileStat = {
+type IntakeFileStat = {
   readonly size: number
 }
 
-export type RepositoryIntakeFileSystem = {
+type RepositoryIntakeFileSystem = {
   readonly statFile: (path: string) => Promise<IntakeFileStat>
   readonly readFile: (path: string) => Promise<Buffer>
 }
 
-export type CollectRepositoryIntakeOptions = {
+type CollectRepositoryIntakeOptions = {
   readonly repositoryRoot: string
   readonly baseRef?: string
   readonly headRef?: string
@@ -80,11 +105,13 @@ export type CollectRepositoryIntakeOptions = {
   readonly runGit?: GitCommandRunner
   readonly fileSystem?: RepositoryIntakeFileSystem
   readonly signal?: AbortSignal
-}
-
-type GitChangedPath = {
-  readonly path: string
-  readonly status: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied'
+  // Opt-in: also restrict the unified diff to the DELETED paths and return them
+  // as `deletedFiles` with their pre-change content. Off by default, because a
+  // deleted file has nothing to review and adding it to the diff would change
+  // what every existing consumer sees. Change-impact review needs it: a deleted
+  // exported symbol is the maximal contract change, and without this the
+  // capability would be blind to its strongest case (spec 22).
+  readonly includeDeletedPaths?: boolean
 }
 
 const createGitRunnerOptions = (
@@ -98,7 +125,10 @@ const defaultFileSystem: RepositoryIntakeFileSystem = {
   readFile
 }
 
-const defaultGitRunner: GitCommandRunner = async (args, options) => {
+// Exported so a run context can WRAP it (memoizing identical commands across the
+// stages of one run) rather than reimplementing how this repository shells out to
+// git. The intake service still falls back to it when no runner is injected.
+export const defaultGitRunner: GitCommandRunner = async (args, options) => {
   assertReadOnlyGitArgs(args)
   const { stdout } = await execFileAsync('git', [...args], {
     cwd: options.cwd,
@@ -108,188 +138,6 @@ const defaultGitRunner: GitCommandRunner = async (args, options) => {
 
   return stdout
 }
-
-export const assertReadOnlyGitArgs = (args: readonly string[]): void => {
-  const [command, ...rest] = args
-
-  // `merge-base` resolves the divergence commit of two refs. It is a distinct
-  // subcommand from `merge`: it only prints a commit id and never touches the
-  // repository, index, or working tree.
-  if (command === 'merge-base') {
-    if (rest.length !== 2) {
-      throw new TypeError('Git merge-base command shape is not allowlisted.')
-    }
-
-    assertSafeGitRef(rest[0], 'baseRef')
-    assertSafeGitRef(rest[1], 'headRef')
-
-    return
-  }
-
-  if (command !== 'diff') {
-    throw new TypeError('Only read-only git diff and merge-base commands are allowed.')
-  }
-
-  const [mode, baseRef, headRef, separator] = rest
-
-  if (mode === '--name-status' && rest.length === 3) {
-    assertSafeGitRef(baseRef, 'baseRef')
-    assertSafeGitRef(headRef, 'headRef')
-    return
-  }
-
-  if (mode === '--unified=0' && separator === '--' && rest.length >= 4) {
-    assertSafeGitRef(baseRef, 'baseRef')
-    assertSafeGitRef(headRef, 'headRef')
-
-    for (const filePath of rest.slice(4)) {
-      normalizeRepositoryRelativePath(filePath)
-    }
-
-    return
-  }
-
-  throw new TypeError('Git diff command shape is not allowlisted.')
-}
-
-const assertSafeGitRef = (ref: string | undefined, fieldName: string): string => {
-  if (ref === undefined || ref.trim().length === 0 || ref.startsWith('-')) {
-    throw createStructuredError({
-      code: 'invalid_git_ref',
-      message: 'Git refs must be non-empty and must not start with "-".',
-      category: 'config',
-      recoverable: true,
-      exitCode: 2,
-      details: { field: fieldName }
-    })
-  }
-
-  return ref
-}
-
-const textSourceExtensions = new Set([
-  '.cjs',
-  '.cts',
-  '.go',
-  '.java',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.mts',
-  '.py',
-  '.rb',
-  '.rs',
-  '.ts',
-  '.tsx'
-])
-
-const hasTextSourceExtension = (portablePath: string): boolean =>
-  textSourceExtensions.has(path.posix.extname(portablePath).toLowerCase())
-
-const isUtf8Text = (content: Buffer): boolean =>
-  Buffer.from(content.toString('utf8'), 'utf8').equals(content)
-
-const isBinaryContent = (portablePath: string, content: Buffer): boolean => {
-  if (!content.includes(0)) {
-    return false
-  }
-
-  return !(hasTextSourceExtension(portablePath) && isUtf8Text(content))
-}
-
-const maxGlobPatternLength = 4096
-
-const globToRegExp = (pattern: string): RegExp => {
-  if (pattern.length > maxGlobPatternLength) {
-    throw new TypeError('Exclude pattern exceeds the maximum supported length.')
-  }
-
-  const normalizedPattern = pattern.replaceAll('\\', '/')
-  let source = '^'
-
-  for (let index = 0; index < normalizedPattern.length; index += 1) {
-    const char = normalizedPattern[index]
-    const nextChar = normalizedPattern[index + 1]
-
-    if (char === '*' && nextChar === '*') {
-      source += '.*'
-      index += 1
-    } else if (char === '*') {
-      source += '[^/]*'
-    } else if (char === '?') {
-      source += '[^/]'
-    } else {
-      source += char?.replace(/[|\\{}()[\]^$+?.]/g, '\\$&') ?? ''
-    }
-  }
-
-  source += '$'
-
-  return new RegExp(source)
-}
-
-const compileGlobMatchers = (
-  patterns: readonly string[]
-): readonly RegExp[] => patterns.map(globToRegExp)
-
-const isExcluded = (
-  portablePath: string,
-  matchers: readonly RegExp[]
-): boolean => matchers.some((matcher) => matcher.test(portablePath))
-
-// A file is in scope when it matches an `include` glob (an empty include set
-// means "include everything", matching the `['**/*']` default). Combined with
-// the exclude check, this lets `paths.include` actually narrow the review set.
-const isIncluded = (
-  portablePath: string,
-  matchers: readonly RegExp[]
-): boolean =>
-  matchers.length === 0 || matchers.some((matcher) => matcher.test(portablePath))
-
-const statusFromGitCode = (statusCode: string): GitChangedPath['status'] => {
-  const normalizedStatus = statusCode[0]
-
-  if (normalizedStatus === 'A') {
-    return 'added'
-  }
-
-  if (normalizedStatus === 'D') {
-    return 'deleted'
-  }
-
-  if (normalizedStatus === 'R') {
-    return 'renamed'
-  }
-
-  if (normalizedStatus === 'C') {
-    return 'copied'
-  }
-
-  return 'modified'
-}
-
-const changedStatusFromGitStatus = (
-  status: Exclude<GitChangedPath['status'], 'deleted'>
-): ChangedFileStatus => status
-
-const parseGitNameStatus = (output: string): readonly GitChangedPath[] =>
-  output
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const [statusCode, firstPath, secondPath] = line.split('\t')
-      const status = statusFromGitCode(statusCode ?? 'M')
-      const rawPath = status === 'renamed' || status === 'copied' ? secondPath : firstPath
-
-      if (rawPath === undefined) {
-        throw new TypeError('Git name-status output is missing a path.')
-      }
-
-      return {
-        path: rawPath,
-        status
-      }
-    })
 
 const resolveExistingRepositoryPath = (
   repositoryRoot: string,
@@ -314,27 +162,21 @@ const toSkippedFile = (
         message
       }
 
+// Reads one in-scope changed path and classifies it. Deletion, include/exclude
+// scoping, and the file-count limit are decided by the caller before this runs,
+// so only the outcomes that require touching the filesystem are decided here.
 const inspectChangedPath = async (
   options: {
     readonly repositoryRoot: string
-    readonly rawPath: string
-    readonly status: GitChangedPath['status']
-    readonly excludeMatchers: readonly RegExp[]
+    readonly portablePath: string
+    readonly status: Exclude<GitChangedPath['status'], 'deleted'>
     readonly maxFileBytes: number
     readonly pathFlavor: FileSystemFlavor
     readonly fileSystem: RepositoryIntakeFileSystem
     readonly enforceRealPathContainment: boolean
   }
 ): Promise<ChangedFile | SkippedFile> => {
-  const portablePath = normalizeInputPath(options.rawPath, options.pathFlavor)
-
-  if (options.status === 'deleted') {
-    return toSkippedFile(portablePath, 'deleted')
-  }
-
-  if (isExcluded(portablePath, options.excludeMatchers)) {
-    return toSkippedFile(portablePath, 'excluded')
-  }
+  const { portablePath } = options
 
   try {
     const existingPath = options.enforceRealPathContainment
@@ -360,7 +202,7 @@ const inspectChangedPath = async (
 
     return {
       path: portablePath,
-      status: changedStatusFromGitStatus(options.status),
+      status: options.status,
       sizeBytes: fileStat.size,
       contentHash: sha256(content)
     }
@@ -420,9 +262,8 @@ const inspectChangedPathsWithinLimit = async (
 
     const record = await inspectChangedPath({
       repositoryRoot: options.repositoryRoot,
-      rawPath: portablePath,
+      portablePath,
       status: changedPath.status,
-      excludeMatchers: options.excludeMatchers,
       maxFileBytes: options.maxFileBytes,
       pathFlavor: options.pathFlavor,
       fileSystem: options.fileSystem,
@@ -450,6 +291,93 @@ const isNoMergeBaseExitStatus = (error: unknown): boolean =>
   'code' in error &&
   (error as { readonly code: unknown }).code === 1
 
+// What git printed, so the two failures a first run actually hits can be told
+// apart. `execFile` puts the subprocess stderr on `stderr` and repeats it inside
+// `message` after a `Command failed: git merge-base <base> <head>` prefix — and
+// that prefix is what a reader used to get instead of an explanation.
+const gitFailureText = (error: unknown): string => {
+  if (typeof error !== 'object' || error === null) {
+    return ''
+  }
+
+  const candidate = error as {
+    readonly stderr?: unknown
+    readonly message?: unknown
+  }
+
+  return [candidate.stderr, candidate.message]
+    .filter((value): value is string => typeof value === 'string')
+    .join('\n')
+}
+
+// Why the merge base could not be resolved, in terms the caller can act on.
+//
+// Both of these are FIRST-CONTACT failures: `docs/02-getting-started` tells a
+// reader to run `--base-ref origin/main`, which does not resolve in a repository
+// with no remote, and the CLI reviews whatever directory it is started in, which
+// is not always a repository at all. Both used to surface as the raw
+// `Command failed: git merge-base …\nfatal: …` string — the command this engine
+// ran, not anything the reader typed, and no remedy.
+//
+// Returning `undefined` for anything unrecognized is deliberate: a timeout or an
+// abort is classified by the error normalizer from its own message, and
+// rewriting every git failure into a repository error here would take
+// `repository_timeout` / `repository_cancelled` away from it.
+const mergeBaseFailureCause = (
+  error: unknown,
+  refs: { readonly baseRef: string; readonly headRef: string }
+):
+  | {
+      readonly cause: string
+      readonly explanation: string
+    }
+  | undefined => {
+  const failureText = gitFailureText(error)
+  const lowerCaseFailureText = failureText.toLowerCase()
+
+  if (lowerCaseFailureText.includes('not a git repository')) {
+    return {
+      cause: 'not_a_git_repository',
+      explanation:
+        'the working directory is not inside a git repository. This CLI always reviews the repository at its current working directory, so run it from the root of the repository you want reviewed.'
+    }
+  }
+
+  // git's wording for an unresolvable ref differs by subcommand and version, so
+  // all four spellings are matched rather than the one `merge-base` happens to
+  // use today.
+  if (
+    lowerCaseFailureText.includes('not a valid object name') ||
+    lowerCaseFailureText.includes('unknown revision') ||
+    lowerCaseFailureText.includes('bad revision') ||
+    lowerCaseFailureText.includes('ambiguous argument')
+  ) {
+    // Which of the two refs git rejected, when git named one. It stops at the
+    // first bad ref, so naming both would send the reader to check a ref that is
+    // fine — and matching against the whole failure text does exactly that,
+    // because `execFile` repeats the command (`git merge-base <base> <head>`)
+    // there. Only git's own `fatal:` lines are searched.
+    const fatalText = failureText
+      .split(/\r?\n/u)
+      .filter((line) => line.trimStart().toLowerCase().startsWith('fatal:'))
+      .join('\n')
+    const unresolvedRefs = [refs.baseRef, refs.headRef].filter((ref) =>
+      fatalText.includes(ref)
+    )
+    const subject =
+      unresolvedRefs.length === 0
+        ? `neither "${refs.baseRef}" nor "${refs.headRef}" could be resolved`
+        : `${unresolvedRefs.map((ref) => `"${ref}"`).join(' and ')} does not resolve to a commit in this repository`
+
+    return {
+      cause: 'ref_not_found',
+      explanation: `${subject}. Check the spelling with \`git rev-parse <ref>\`; a remote-tracking ref such as \`origin/main\` also needs \`git fetch origin\` first, and a repository with no remote has none at all — use a local ref like \`main\`.`
+    }
+  }
+
+  return undefined
+}
+
 // The reviewed change set is what `headRef` added since it diverged from
 // `baseRef`. Diffing the two refs directly would also surface commits that
 // landed on `baseRef` after the divergence point, inflating every review on a
@@ -473,6 +401,17 @@ const resolveMergeBase = async (
       return ''
     }
 
+    const failure = mergeBaseFailureCause(error, { baseRef, headRef })
+
+    if (failure !== undefined) {
+      throw createStructuredError({
+        code: 'repository_error',
+        message: `The base and head refs could not be compared because ${failure.explanation}`,
+        category: 'repository',
+        details: { baseRef, headRef, cause: failure.cause }
+      })
+    }
+
     throw error
   })
 
@@ -484,8 +423,6 @@ const resolveMergeBase = async (
       message:
         'No merge base exists for the configured base and head refs. Fetch enough history for both refs (for example a full-depth checkout) and retry.',
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: { baseRef, headRef }
     })
   }
@@ -520,11 +457,17 @@ const collectDiffMaps = async (
   options: CollectRepositoryIntakeOptions,
   runGit: GitCommandRunner,
   changedFiles: readonly ChangedFile[],
+  deletedPaths: readonly string[],
   mergeBase: string | undefined
 ): Promise<{ readonly diffMaps: readonly DiffMap[]; readonly rawDiff: string }> => {
+  const diffPaths = [
+    ...changedFiles.map((file) => file.path),
+    ...deletedPaths
+  ]
+
   if (
     options.explicitFiles !== undefined ||
-    changedFiles.length === 0 ||
+    diffPaths.length === 0 ||
     mergeBase === undefined ||
     options.headRef === undefined
   ) {
@@ -532,20 +475,43 @@ const collectDiffMaps = async (
   }
 
   const diffOutput = await runGit(
-    [
-      'diff',
-      '--unified=0',
-      mergeBase,
-      options.headRef,
-      '--',
-      ...changedFiles.map((file) => file.path)
-    ],
+    ['diff', '--unified=0', mergeBase, options.headRef, '--', ...diffPaths],
     createGitRunnerOptions(options.repositoryRoot, options.signal)
   )
 
   // Retain the raw unified diff alongside the parsed ranges: holistic discovery
   // needs the actual before/after hunks (what changed), not just line ranges.
   return { diffMaps: parseGitDiffMaps(diffOutput), rawDiff: diffOutput }
+}
+
+// Pairs each deleted path with the content reconstructed from its deletion hunk.
+// A path whose hunk is missing from the diff (for example because the diff was
+// unavailable for this run) is dropped rather than reported with empty content,
+// so a consumer can never mistake "not retrieved" for "the file was empty".
+const collectDeletedFiles = (
+  deletedPaths: readonly string[],
+  rawDiff: string
+): readonly DeletedFile[] => {
+  if (deletedPaths.length === 0 || rawDiff.length === 0) {
+    return []
+  }
+
+  const contentsByPath = parseDeletedFileContents(rawDiff)
+
+  return deletedPaths.flatMap((deletedPath) => {
+    const content = contentsByPath.get(deletedPath)
+
+    return content === undefined
+      ? []
+      : [
+          {
+            path: deletedPath,
+            content,
+            sizeBytes: Buffer.byteLength(content),
+            contentHash: sha256(content)
+          }
+        ]
+  })
 }
 
 const partitionIntakeRecords = (
@@ -568,6 +534,42 @@ const partitionIntakeRecords = (
   return { changedFiles, skippedFiles }
 }
 
+// Why each explicitly named file was skipped, with the knob that decided it.
+// The five reasons need five different actions — fix the path, name a text file,
+// raise a byte ceiling, adjust the path filters, name fewer files — and the
+// skipped-file record alone carries only a one-word reason code.
+const explicitSkipExplanations: Readonly<Record<SkippedFile['reason'], string>> =
+  {
+    deleted: 'is deleted, so there is no content to review',
+    binary: 'is binary',
+    'too-large': 'is larger than review.maxFileBytes',
+    'too-many-files': 'was beyond review.maxFiles',
+    excluded: 'is matched by paths.exclude, or falls outside paths.include',
+    unsupported: 'is in a language this engine does not analyse',
+    error: 'could not be read (it does not exist, or is not readable)'
+  }
+
+// Bounded: a caller who named 200 files gets the first few and a count, not a
+// message that is itself unreadable.
+const maxListedSkippedExplicitFiles = 5
+
+const describeSkippedExplicitFiles = (
+  skippedFiles: readonly SkippedFile[]
+): string => {
+  const listed = skippedFiles
+    .slice(0, maxListedSkippedExplicitFiles)
+    .map(
+      (skipped) =>
+        `"${skipped.path}" ${explicitSkipExplanations[skipped.reason]}`
+    )
+    .join('; ')
+  const remaining = skippedFiles.length - maxListedSkippedExplicitFiles
+
+  return remaining > 0
+    ? `${listed}; and ${remaining} more.`
+    : `${listed}.`
+}
+
 export const collectRepositoryIntake = async (
   options: CollectRepositoryIntakeOptions
 ): Promise<RepositoryIntake> => {
@@ -582,8 +584,10 @@ export const collectRepositoryIntake = async (
   const includeMatchers = compileGlobMatchers(options.includePatterns ?? [])
   const excludeMatchers = compileGlobMatchers(options.excludePatterns ?? [])
 
+  const usesExplicitFiles =
+    options.explicitFiles !== undefined && options.explicitFiles.length > 0
   const usesGitDiff =
-    !(options.explicitFiles !== undefined && options.explicitFiles.length > 0) &&
+    !usesExplicitFiles &&
     options.baseRef !== undefined &&
     options.headRef !== undefined
 
@@ -597,6 +601,30 @@ export const collectRepositoryIntake = async (
       pathFlavor,
       mergeBase
     )
+
+    // A git-derived review that finds NOTHING to diff must not proceed. Every later
+    // stage treats an empty change set exactly as it treats a clean one: zero files
+    // read, zero findings, quality gate PASSED, exit 0 — a green review that
+    // examined nothing. The common causes are `--base-ref` and `--head-ref` the
+    // wrong way round, and a head branch already contained in the base; both are
+    // silent today.
+    //
+    // Checked here rather than at the merge base so it covers every cause of an
+    // empty diff, and costs no extra git call. Exclusion by config is NOT this
+    // case: those paths are filtered later, from a non-empty diff.
+    if (usesGitDiff && changedPaths.length === 0) {
+      throw createStructuredError({
+        code: 'no_reviewable_change',
+        message:
+          'The base and head refs differ by no files, so there is nothing to review. This usually means the two refs are the wrong way round, or the head is already contained in the base. Refused rather than reported as a passing review over zero files.',
+        category: 'repository',
+        details: {
+          baseRef: options.baseRef,
+          headRef: options.headRef,
+          ...(mergeBase === undefined ? {} : { mergeBase })
+        }
+      })
+    }
     const inspectedRecords = await inspectChangedPathsWithinLimit({
       repositoryRoot: options.repositoryRoot,
       changedPaths,
@@ -609,10 +637,41 @@ export const collectRepositoryIntake = async (
       enforceRealPathContainment
     })
     const { changedFiles, skippedFiles } = partitionIntakeRecords(inspectedRecords)
+
+    // The same refusal as above, for the OTHER way a run reaches every later
+    // stage with nothing to review. `--file`/`--files` bypasses the diff, so the
+    // empty-diff guard cannot see it: a named file that does not exist, is
+    // binary, is over `review.maxFileBytes`, or is matched by `paths.exclude` was
+    // recorded as skipped and the run went on to report zero findings, quality
+    // gate PASSED, exit 0. Every path here was NAMED by the caller, so none of
+    // them being reviewable is a mistake to report, never a clean result.
+    if (usesExplicitFiles && changedFiles.length === 0) {
+      throw createStructuredError({
+        code: 'no_reviewable_change',
+        message: `Every file named with --file/--files was skipped, so there is nothing to review: ${describeSkippedExplicitFiles(skippedFiles)} Refused rather than reported as a passing review over zero files.`,
+        category: 'repository',
+        details: {
+          explicitFileCount: options.explicitFiles?.length ?? 0,
+          skippedPaths: skippedFiles.map((skipped) => skipped.path)
+        }
+      })
+    }
+    // Deleted paths stay in `skippedFiles` regardless: they genuinely are skipped
+    // from review. `deletedFiles` is an additive second view for the consumers
+    // that need them, so opting in never removes information from an existing one.
+    const deletedPaths =
+      options.includeDeletedPaths === true
+        ? changedPaths
+            .filter((changedPath) => changedPath.status === 'deleted')
+            .map((changedPath) =>
+              normalizeInputPath(changedPath.path, pathFlavor)
+            )
+        : []
     const { diffMaps, rawDiff } = await collectDiffMaps(
       options,
       runGit,
       changedFiles,
+      deletedPaths,
       mergeBase
     )
 
@@ -626,7 +685,8 @@ export const collectRepositoryIntake = async (
       changedFiles,
       skippedFiles,
       diffMaps,
-      rawDiff
+      rawDiff,
+      deletedFiles: collectDeletedFiles(deletedPaths, rawDiff)
     }
   } catch (error) {
     throw normalizeError(error, {

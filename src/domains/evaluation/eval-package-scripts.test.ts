@@ -26,7 +26,11 @@ describe('evaluation package scripts', () => {
     expect(packageJson.scripts['eval:benchmark']).toContain(
       '--review-mode pr --review-depth thorough'
     )
-    expect(packageJson.scripts['eval:benchmark']).toContain('--semantic-judge')
+    // The semantic judge is no longer a mode flag: it is constructed whenever a
+    // provider is configured, so the scripts must not pass a judge flag.
+    expect(packageJson.scripts['eval:benchmark']).not.toContain(
+      '--semantic-judge'
+    )
     expect(packageJson.scripts['eval:benchmark']).not.toContain(
       '--intent-planning'
     )
@@ -49,13 +53,50 @@ describe('evaluation package scripts', () => {
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
       '--review-mode pr --review-depth thorough'
     )
+    expect(packageJson.scripts['eval:benchmark:debug']).not.toContain(
+      '--semantic-judge'
+    )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
-      '--semantic-judge --max-concurrent-tasks 1'
+      '--max-concurrent-tasks 1'
     )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain('--debug')
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
       '--log-file .codereviewer/eval/log.log'
     )
+
+    // The real-repository corpus is where the headline recall baseline comes
+    // from, and it had no committed script at all: the number existed only
+    // because someone typed the flags by hand, which is not reproducible.
+    expect(packageJson.scripts['eval:corpus']).toContain(
+      '.codereviewer/eval/corpus-slices/real-repo-cross-file'
+    )
+    expect(packageJson.scripts['eval:corpus']).toContain('--review-mode pr')
+    expect(packageJson.scripts['eval:corpus']).toContain('--review-depth thorough')
+    expect(packageJson.scripts['eval:corpus']).toContain('--max-concurrent-tasks 1')
+    // Hydration alone costs no provider spend, so it stays separately runnable.
+    expect(packageJson.scripts['eval:corpus:hydrate']).toContain(
+      'hydrate-real-repo-corpus'
+    )
+
+    // The change-impact corpus (spec 22) hydrates only. Its scorer exists — the
+    // separate `eval impact` command — but there is still deliberately no combined
+    // run script here: a script under a name one character from `eval:corpus`
+    // would be the shortest path to running the diff reviewer over this corpus, or
+    // this scorer over that one, and either answers a different question while
+    // looking like a result.
+    expect(packageJson.scripts['eval:impact-corpus:hydrate']).toContain(
+      'hydrate-change-impact-corpus'
+    )
+    expect(packageJson.scripts['eval:impact-corpus']).toBeUndefined()
+
+    // The intent-fulfilment corpus (spec 23) hydrates only, for the same reason
+    // and with one of its own: hydration is local git and free, while a run spends
+    // one model call per obligation. A combined script would make the expensive
+    // half look like part of preparing the corpus.
+    expect(packageJson.scripts['eval:intent-corpus:hydrate']).toContain(
+      'hydrate-intent-corpus'
+    )
+    expect(packageJson.scripts['eval:intent-corpus']).toBeUndefined()
 
     // removed scripts must not exist
     const removed = [

@@ -63,6 +63,13 @@
         "model": {
           "type": "string"
         },
+        "modelSearch": {
+          "type": "string",
+          "enum": [
+            "performed",
+            "not-performed"
+          ]
+        },
         "durationMs": {
           "type": "integer",
           "minimum": 0,
@@ -116,6 +123,11 @@
             "complete",
             "incomplete"
           ]
+        },
+        "excludedFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "reviewableFileCount": {
           "type": "integer",
@@ -202,6 +214,7 @@
       },
       "required": [
         "status",
+        "excludedFileCount",
         "reviewableFileCount",
         "coveredFileCount",
         "reviewableBytes",
@@ -310,10 +323,6 @@
           "proposedBy": {
             "type": "string",
             "minLength": 1
-          },
-          "suggestedFix": {
-            "type": "string",
-            "maxLength": 1200
           },
           "fixProposal": {
             "type": "object",
@@ -729,7 +738,7 @@
           },
           "message": {
             "type": "string",
-            "maxLength": 500
+            "maxLength": 1200
           },
           "evidenceIds": {
             "type": "array",
@@ -737,6 +746,16 @@
               "type": "string",
               "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
           }
         },
         "required": [
@@ -760,23 +779,12 @@
           "kind": {
             "type": "string",
             "enum": [
-              "diff",
               "file",
-              "symbol",
               "diagnostic",
-              "command",
               "model-rationale",
-              "config",
-              "policy",
-              "data-flow",
-              "related-location",
-              "rule",
-              "baseline",
-              "deterministic-signal",
+              "citation",
               "tool-read",
-              "tool-search",
-              "proof",
-              "refutation"
+              "tool-search"
             ]
           },
           "summary": {
@@ -857,6 +865,11 @@
               "type": "string",
               "pattern": "^CWE-[0-9]+$"
             }
+          },
+          "securitySeverity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
           },
           "relatedLocations": {
             "type": "array",
@@ -1129,7 +1142,7 @@
           "summary": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 1000
+            "maxLength": 1200
           },
           "evidenceIds": {
             "type": "array",
@@ -1239,6 +1252,298 @@
         "additionalProperties": false
       }
     },
+    "discovery": {
+      "type": "object",
+      "properties": {
+        "totals": {
+          "type": "object",
+          "properties": {
+            "callCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rawFindingCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rawFindingsPerCall": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "candidateCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "droppedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "suppressedByIdCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "suppressedByLocationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cappedByLimitCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "contextOverflowSplitCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "readBudgetReductionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergeCallCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergeGroupCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergedAwayCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "callCount",
+            "rawFindingCount",
+            "rawFindingsPerCall",
+            "candidateCount",
+            "droppedCount",
+            "suppressedByIdCount",
+            "suppressedByLocationCount",
+            "cappedByLimitCount",
+            "contextOverflowSplitCount",
+            "mergeCallCount",
+            "mergeGroupCount",
+            "mergedAwayCount"
+          ],
+          "additionalProperties": false
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "callCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rawFindingCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rawFindingsPerCall": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "candidateCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "droppedCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "suppressedByIdCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "suppressedByLocationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cappedByLimitCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "contextOverflowSplitCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "readBudgetReductionCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergeCallCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergeGroupCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergedAwayCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
+              },
+              "retrievalBudgetExhausted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "callCount",
+              "rawFindingCount",
+              "rawFindingsPerCall",
+              "candidateCount",
+              "droppedCount",
+              "suppressedByIdCount",
+              "suppressedByLocationCount",
+              "cappedByLimitCount",
+              "contextOverflowSplitCount",
+              "mergeCallCount",
+              "mergeGroupCount",
+              "mergedAwayCount",
+              "taskId"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "totals",
+        "tasks"
+      ],
+      "additionalProperties": false
+    },
+    "testAdequacy": {
+      "type": "object",
+      "properties": {
+        "consideredFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pairedFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unpairedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "changedTestFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unknown": {
+          "type": "object",
+          "properties": {
+            "unsupportedLanguageFileCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "notAnalysedFileCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "unsupportedLanguageFileCount",
+            "notAnalysedFileCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "consideredFileCount",
+        "pairedFileCount",
+        "unpairedPaths",
+        "changedTestFileCount",
+        "unknown"
+      ],
+      "additionalProperties": false
+    },
+    "corroborations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "findingId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "string",
+            "const": "corroborated"
+          },
+          "matchKinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fingerprint",
+                "fuzzy"
+              ]
+            }
+          },
+          "witnessClaimIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "findingId",
+          "confidence",
+          "matchKinds",
+          "witnessClaimIds"
+        ],
+        "additionalProperties": false
+      }
+    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -1249,8 +1554,7 @@
             "enum": [
               "json",
               "markdown",
-              "sarif",
-              "github-review-comments"
+              "sarif"
             ]
           },
           "path": {

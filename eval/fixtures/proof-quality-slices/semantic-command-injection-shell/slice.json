@@ -1,0 +1,35 @@
+{
+  "id": "semantic-command-injection-shell",
+  "title": "Shell command built from unsanitized arguments",
+  "description": "A project-owned semantic review case where an argument-list subprocess call is rewritten into a shell string built from caller input.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "python",
+  "changedFiles": [
+    "src/backup.py"
+  ],
+  "diff": "diff --git a/src/backup.py b/src/backup.py\n--- a/src/backup.py\n+++ b/src/backup.py\n@@ -3,7 +3,5 @@ import subprocess\n \n def create_archive(source_dir: str, archive_name: str) -> None:\n     \"\"\"Create a gzipped tar archive of source_dir named archive_name.\"\"\"\n-    subprocess.run(\n-        [\"tar\", \"-czf\", f\"{archive_name}.tar.gz\", source_dir],\n-        check=True,\n-    )\n+    command = f\"tar -czf {archive_name}.tar.gz {source_dir}\"\n+    subprocess.run(command, shell=True, check=True)\n",
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "high",
+      "path": "src/backup.py",
+      "lineRange": [
+        6,
+        7
+      ],
+      "semanticSummary": "create_archive interpolates source_dir and archive_name into a shell string run with shell=True, allowing command injection; pass an argument list without a shell instead",
+      "securityMechanism": "injection",
+      "contextDepth": "local"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "security",
+    "positive"
+  ]
+}

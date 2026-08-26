@@ -37,6 +37,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "Backup code validation is case-sensitive due to the use of indexOf(). This causes validation to fail if a user enters uppercase hex characters, as backup codes should be case-insensitive for a better user experience.",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "logic"
     },
@@ -44,6 +46,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "Because backupCodes are decrypted and mutated in memory before being written back, two concurrent login requests using the same backupCode could both pass this check and update, so a single backup code may effectively be accepted more than once if used concurrently, weakening the intended one-time-use semantics.",
+      "securityMechanism": "concurrency-resource",
+      "contextDepth": "cross-function",
       "matchMode": "semantic-only",
       "tier": "security"
     }

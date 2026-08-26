@@ -2,16 +2,13 @@ import {
   RejectedFindingSchema,
   type RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { normalizeError } from '../../../../shared/errors/error-normalizer.js'
 import {
   emptyAdmissionCandidateOutcome,
   type AdmissionCandidateOutcome
 } from './outcome.js'
-import {
-  providerIssueForError,
-  type ProviderIssueForError
-} from '../provider-issues.js'
+import { providerIssueForError } from '../provider-issues.js'
 
 export type RefutationProviderErrorStage =
   | 'refutation-packet'
@@ -28,7 +25,8 @@ export const rejectedFindingForRefutationError = (input: {
     status: 'needs-more-evidence',
     reason: 'provider-error',
     message: `Refutation check failed: ${normalized.code}`.slice(0, 500),
-    evidenceIds: input.candidate.evidenceIds
+    evidenceIds: input.candidate.evidenceIds,
+    severity: input.candidate.severity
   })
 }
 
@@ -37,23 +35,25 @@ export const refutationProviderErrorOutcome = (
     readonly candidate: CandidateFinding
     readonly error: unknown
     readonly stage: RefutationProviderErrorStage
-    readonly issueForError?: ProviderIssueForError
   }
 ): AdmissionCandidateOutcome => {
   const rejectedFinding = rejectedFindingForRefutationError({
     candidate: input.candidate,
     error: input.error
   })
-  const issueForError = input.issueForError ?? providerIssueForError
 
   return {
     ...emptyAdmissionCandidateOutcome(),
     rejectedFindings: [rejectedFinding],
     providerIssues: [
-      issueForError({
+      providerIssueForError({
         error: input.error,
         stage: input.stage,
-        recovered: true
+        // Not recovered: the candidate was never adjudicated. It is rejected as
+        // `needs-more-evidence`, which removes it from the gate's input — so
+        // calling this recovered let a refutation outage shrink the very set the
+        // gate is measuring, and pass.
+        recovered: false
       })
     ],
     admissionDecisions: [

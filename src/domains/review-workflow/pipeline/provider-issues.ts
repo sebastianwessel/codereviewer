@@ -6,13 +6,11 @@ import { normalizeError } from '../../../shared/errors/error-normalizer.js'
 
 export type ProviderIssue = ReviewReport['providerIssues'][number]
 
-export type ProviderIssueForError = (input: {
+export const providerIssueForError = (input: {
   readonly error: unknown
   readonly stage: string
   readonly recovered: boolean
-}) => ProviderIssue
-
-export const providerIssueForError: ProviderIssueForError = (input) => {
+}): ProviderIssue => {
   const normalized = normalizeError(input.error, {
     source: 'provider',
     operation: input.stage

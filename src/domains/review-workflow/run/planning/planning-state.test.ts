@@ -4,7 +4,6 @@ import {
   CodeReviewerConfigSchema,
   type EvidenceRecord
 } from '../../../../shared/contracts/index.js'
-import type { CandidateFinding } from '../../../admission/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
 import type { ReviewTask } from '../../../review-planning/index.js'
 import type {
@@ -47,13 +46,14 @@ const fact: SupportSignalFact = {
   path: 'src/app.ts',
   name: 'handler',
   line: 1,
+  endLine: 1,
   summary: 'Exports handler.',
   contentHash: 'hash-app'
 }
 
 const evidence: EvidenceRecord = {
   id: 'ev_export',
-  kind: 'symbol',
+  kind: 'file',
   summary: 'The handler export is visible to reviewers.',
   location: {
     path: 'src/app.ts',
@@ -100,7 +100,7 @@ describe('review runner planning state', () => {
       observability,
       logger,
       prepareDeterministicSignalStartAttributes: () => ({
-        structuralEngine: 'typescript-compiler+ast-grep',
+        structuralEngine: 'ast-grep',
         astGrepVersion: 'ast-grep@test',
         fileCount: 1
       }),
@@ -109,7 +109,7 @@ describe('review runner planning state', () => {
         evidence: [evidence],
         testMappings: [],
         startAttributes: {
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test',
           fileCount: 1
         },
@@ -118,7 +118,7 @@ describe('review runner planning state', () => {
           evidenceCount: 1,
           languageCount: 1,
           testMappingCount: 0,
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test'
         }
       }),
@@ -126,10 +126,8 @@ describe('review runner planning state', () => {
         planningInput = input
         return {
           reviewTasks: [task],
-          supportSignalCandidates: [] satisfies readonly CandidateFinding[],
           metrics: {
-            taskCount: 1,
-            supportSignalCandidateCount: 0
+            taskCount: 1
           }
         }
       }
@@ -138,8 +136,7 @@ describe('review runner planning state', () => {
     expect(result).toMatchObject({
       analysis,
       evidence: [evidence],
-      reviewTasks: [task],
-      supportSignalCandidates: []
+      reviewTasks: [task]
     })
     expect(planningInput).toEqual({
       depth: 'thorough',
@@ -159,7 +156,7 @@ describe('review runner planning state', () => {
       {
         step: 'deterministic_signals',
         attributes: {
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test',
           fileCount: 1
         }
@@ -185,7 +182,7 @@ describe('review runner planning state', () => {
           evidenceCount: 1,
           languageCount: 1,
           testMappingCount: 0,
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test'
         }
       },
@@ -210,8 +207,7 @@ describe('review runner planning state', () => {
       {
         message: 'Task planning completed.',
         fields: {
-          task_count: 1,
-          support_signal_candidate_count: 0
+          task_count: 1
         }
       }
     ])

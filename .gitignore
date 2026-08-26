@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+# Agent working directories. Not ignored before, and they hold hundreds of MB of
+# git worktrees — one `git add -A` away from being committed by accident.
+.claude/
 concept/
 plans/
 .codereviewer/

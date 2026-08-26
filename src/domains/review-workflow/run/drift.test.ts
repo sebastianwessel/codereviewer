@@ -9,6 +9,10 @@ const driftResult = {
   passed: false,
   warningCount: 1,
   errorCount: 1,
+  generatedArtifactStatus: 'compared',
+  scanCoverageStatus: 'scanned',
+  scannedFileCount: 2,
+  absentScanRoots: [],
   findings: [
     {
       id: 'warning-drift',

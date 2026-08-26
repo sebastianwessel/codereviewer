@@ -47,6 +47,7 @@ describe('review task planner', () => {
           name: 'util',
           moduleSpecifier: './util.js',
           line: 1,
+          endLine: 1,
           summary: 'Imports util.',
           contentHash
         }
@@ -85,6 +86,7 @@ describe('review task planner', () => {
           name: 'calendar',
           moduleSpecifier: 'app.services.calendar',
           line: 1,
+          endLine: 1,
           summary: 'Imports calendar.',
           contentHash
         },
@@ -96,6 +98,7 @@ describe('review task planner', () => {
           name: 'Repository',
           moduleSpecifier: 'com.foo.Repository',
           line: 3,
+          endLine: 3,
           summary: 'Imports Repository.',
           contentHash
         }
@@ -145,6 +148,7 @@ describe('review task planner', () => {
       name: `file-${index + 1}`,
       moduleSpecifier: `./file-${index + 1}.js`,
       line: 1,
+      endLine: 1,
       summary: 'Imports next file.',
       contentHash
     }))

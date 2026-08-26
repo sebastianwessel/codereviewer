@@ -19,6 +19,7 @@ const task = (
     readonly id: string
     readonly paths?: readonly string[]
     readonly content?: string
+    readonly instructions?: WorkflowReviewTask['instructions']
   }
 ): WorkflowReviewTask => ({
   id: input.id,
@@ -30,6 +31,7 @@ const task = (
   candidateIds: [],
   contextEntryIds: [contextId],
   priority: 0,
+  instructions: [...(input.instructions ?? [])],
   reviewContext: [
     {
       kind: 'file',
@@ -84,10 +86,70 @@ describe('review runner workflow input', () => {
     ])
   })
 
+  // A large file is split into several context documents. Pinning every one to
+  // line 1 pointed the evidence for a second-chunk finding at the top of the
+  // file, which is the same mislocation the chunk numbering itself used to have.
+  test('anchors chunk evidence at the chunk’s own origin', () => {
+    const chunked: WorkflowReviewTask = {
+      ...task({ id: 'task_chunked', content: 'later chunk body' }),
+      reviewContext: [
+        {
+          kind: 'file',
+          path: 'src/a.ts',
+          content: 'later chunk body',
+          ledgerEntryId: `ctx_${'c'.repeat(24)}`,
+          startLine: 201,
+          endLine: 400
+        }
+      ]
+    }
+
+    const [chunkEvidence] = contextEvidenceForTasks([chunked])
+
+    expect(chunkEvidence?.location?.startLine).toBe(201)
+  })
+
+  // The configured scope has to travel WITH the workflow input, because the
+  // workflow builds the cross-file discovery retriever itself (spec 16) and the
+  // eligibility gate it compiles is only as narrow as what it is handed. The run
+  // is the only place that holds the configuration, so a scope that stops here
+  // stops everywhere: `reviewedPaths` names the changed files and says nothing
+  // about which unchanged files the discovery tools may open.
+  test('carries the configured paths.include/exclude into the workflow input', () => {
+    const config = CodeReviewerConfigSchema.parse({
+      paths: { include: ['src/**/*'], exclude: ['secrets/**'] }
+    })
+
+    const workflowInput = createWorkflowInput({
+      runId: 'run-scope',
+      repositoryRoot: '/repo/project',
+      reviewedPaths: ['src/a.ts'],
+      reviewedLineRanges: [],
+      reviewedDiffRanges: [],
+      reviewedDiffText: '',
+      evidence: [],
+      candidates: [],
+      config,
+      configHash: sha256('config'),
+      providerId: 'openai',
+      modelName: 'review-model',
+      admittedAt: '2026-06-22T10:00:00.000Z',
+      baselineConfigured: false,
+      skills: [],
+      tasks: [task({ id: 'task_a' })],
+      aiReviewBudget: aiReviewBudgetFor(config)
+    })
+
+    expect(workflowInput.paths).toEqual({
+      include: ['src/**/*'],
+      exclude: ['secrets/**']
+    })
+  })
+
   test('creates provider workflow input with budgets, context evidence, and cloned baseline', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',
-      kind: 'deterministic-signal',
+      kind: 'diagnostic',
       summary: 'alpha signal',
       location: { path: 'src/a.ts', startLine: 1, side: 'file' },
       source: 'deterministic-support-signal',
@@ -123,7 +185,6 @@ describe('review runner workflow input', () => {
       admittedAt: '2026-06-22T10:00:00.000Z',
       baselineConfigured: true,
       baselineFingerprints,
-      instructions: [],
       skills: [],
       tasks: [
         task({ id: 'task_a' }),
@@ -132,14 +193,15 @@ describe('review runner workflow input', () => {
       aiReviewBudget: aiReviewBudgetFor(config)
     })
 
-    // contextMaxBytes=120 000, input cap=360 000 → min(120 000, 360 000)=120 000
+    // An EXPLICIT contextMaxBytes still binds: min(120 000, 8 000 000 guard)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
-    // contextMaxBytes=120 000, depthContextCap(balanced)=120 000
-    // → maxBytesPerRead = min(120 000, 120 000) = 120 000
+    // Spec 28: no cross-file cap is configured, so NOTHING cuts a read in advance —
+    // the runaway guard stands. The reviewer narrows a large file by line range
+    // instead of receiving a prefix we chose for it.
     expect(workflowInput.contextRetrievalBudget).toEqual(
       expect.objectContaining({
-        maxBytesPerRead: 120000
+        maxBytesPerRead: 4_000_000
       })
     )
     expect(workflowInput.evidence.map((record) => record.id)).toEqual([

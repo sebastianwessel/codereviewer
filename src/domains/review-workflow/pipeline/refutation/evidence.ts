@@ -8,7 +8,7 @@ import {
 } from '../../../admission/index.js'
 import { createRedactor } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
-import { type FindingRefutationResult } from '../agent-contracts.js'
+import type { FindingRefutationResult } from '../agent-contracts.js'
 
 export const refutationEvidenceIdFor = (
   candidate: CandidateFinding,
@@ -85,7 +85,6 @@ export const enrichProvedCandidate = (
             summary: redactor
               .redact(
                   input.refutation.fixSummary ??
-                  input.candidate.suggestedFix ??
                   input.candidate.fixProposal?.summary ??
                   'Apply the proved manual fix.'
               )

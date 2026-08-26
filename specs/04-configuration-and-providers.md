@@ -1,7 +1,10 @@
 # 04: Configuration And Providers
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-31
+Amended: 2026-08-07 — `paths.include` scopes files; a directory is traversable
+when an included file could live beneath it (see *Include Scopes Files, Not
+Traversal*)
 
 ## Configuration Files
 
@@ -50,6 +53,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | reasoning effort enum |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
+| `CODEREVIEWER_JUDGE_MODEL` | `evaluation.judgeModel` | string |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | signal mode enum |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
 | `CODEREVIEWER_CONFIG_PATH` | CLI/config loader default path override | repository-relative path |
@@ -73,9 +77,21 @@ for review commands.
 Implementation must define `CodeReviewerConfigSchema` in Zod and generate a JSON
 Schema artifact with `npm run generate:schemas`. The generated config schema
 path is `schema/codereviewer-config.schema.json` and must be committed because
-it is a public configuration contract. Unknown top-level keys are errors.
-Unknown nested keys are errors unless the schema explicitly marks a
-provider-specific object as passthrough.
+it is a public configuration contract; the same document is regenerated into
+`specs/03-contracts/config.schema.json`, and `npm run generate:schemas:check`
+fails when either copy drifts from the Zod source.
+
+Every object in `CodeReviewerConfigSchema` is a Zod `strictObject`. Unknown
+top-level keys are errors, unknown nested keys are errors, and no object is
+passthrough.
+
+`CodeReviewerConfigSchema.review` MUST use `.prefault({})` rather than a restated
+default literal. Zod's `.default(value)` returns that value verbatim without
+parsing it, so a restated literal becomes a second source of truth that silently
+wins over the field defaults — a change to `crossFileRetrieval` on the field
+itself had no effect at all until this was fixed. `.prefault({})` parses `{}`
+through the schema, making each field's own default the single source of truth.
+This is why the generated JSON Schema carries no `default` object on `review`.
 
 ### Top-Level Shape
 
@@ -86,30 +102,62 @@ provider-specific object as passthrough.
 | `instructions` | no | object | no instructions |
 | `skills` | no | object | no skills |
 | `paths` | no | object | default includes/excludes |
-| `security` | no | object | secure defaults |
+| `baseline` | no | object | baseline matching enabled at the default path |
+| `qualityGate` | no | object | no critical or high admitted findings |
+| `security` | no | object | secure defaults; dedicated security pass and analyzer-signal ingestion disabled |
 | `reporting` | no | object | JSON, Markdown, and SARIF local reports |
-| `evaluation` | no | object | eval disabled |
+| `evaluation` | no | object | `minJudgeAgreement` 0.9 and the `stable` regression-gate profile; case selection is driven by `eval run` CLI flags, not config |
 | `drift` | no | object | drift checks enabled as warnings |
 | `observability` | no | object | OpenTelemetry disabled |
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
+| `contextSources` | no | object | external change-intent context enabled with the inbox and changed-files providers |
+| `verification` | no | object | agentic claim verification disabled |
+| `changeImpact` | no | object | change-impact review enabled; its model adjudication disabled |
+| `intentFulfilment` | no | object | intent-fulfilment review enabled |
+| `fix` | no | object | agentic finding investigation and fix disabled |
 
 ## Review Config
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `mode` | `"local" | "ci" | "pr" | "full"` | `"local"` | `pr` does not publish in R1. |
-| `depth` | `"fast" | "balanced" | "thorough"` | `"balanced"` | Controls budgets only. |
+| `depth` | `"fast" | "balanced" | "thorough"` | `"balanced"` | Selects the task-planning shape and the context-retrieval caps, nothing else. `fast` plans one task per changed file; `balanced` and `thorough` plan dependency-cluster tasks. Depth does not set cost, timeout, or concurrency. |
 | `baseRef` | string | `"main"` | Must not start with `-`. |
 | `headRef` | string | `"HEAD"` | Must not start with `-`. |
 | `maxConcurrentTasks` | integer 1..32 | `4` | Caps active review tasks and provider model calls. |
 | `maxFiles` | integer 1..10000 | `500` | Intake hard cap. |
 | `maxFileBytes` | integer 1..5000000 | `500000` | Files above cap are skipped. |
-| `contextMaxBytes` | integer 10000..10000000 | preset-defined | Per-packet model-bound context budget; explicit values override provider safety defaults. Budget pressure creates more tasks, not skipped source. |
+| `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the 8,000,000-byte packet ceiling and the depth-derived cross-file per-read cap. Unset means nothing bounds the packet in advance and the provider decides (spec 26). Never skips or truncates source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
-| `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
-| `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
+| `maxCostUsd` | number >= 0 | *unset* | Checked once, after the review's work completes and before the success result is built: the run fails when the computed review cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. It is also the ceiling the advisory stages spend against — see *One Ceiling, Consumed As Headroom* below. |
+
+`review.crossFileRetrieval`, `review.signalFacts` and `review.citations` are nested
+review blocks and are inventoried in their own sections below.
+
+### `review.signalFacts`
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Show discovery the deterministic signal facts. |
+
+The facts are extracted, byte-accounted and shipped to refutation on every run; the
+discovery packet is one rendered document and nothing rendered them into it, so
+until this key existed only the adjudicating stage saw them. Off by default because
+enabling it adds a section to every discovery prompt, and the A/B measured it null
+(spec 05 §Discovery Citations records the same promotion discipline). With the key
+off, the packet is byte-for-byte what it was before the section existed.
+
+### `review.citations`
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `true` | Ask discovery to quote the line that shows the defect, and verify it deterministically. **Two separate decisions:** its accuracy pre-registration landed on KEEP, DISABLED (2026-08-10, recall 63.1% → 62.2%, 3 gained / 7 lost, p = 0.3438), and the default was then flipped ON as a product decision on readability (2026-08-11) — it did not pass the accuracy gate. Costs +5.6% input tokens; `false` returns that to zero. |
+
+Specified in full in spec 05 §Discovery Citations, including the MUST that an
+absent, malformed or unverifiable citation leaves the candidate exactly as it would
+have been — the lane cannot cost a finding, by construction.
 
 ## AI Review Config
 
@@ -119,21 +167,70 @@ or publishing.
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` when provider is configured | When false, no provider-backed review runs. |
+| `enabled` | boolean | `true` | A provider-backed review runs when `provider` is configured and this is `true`. `true` with no `provider` is REFUSED — see *A Run Asked For A Model Review Must Have One* below. Set it to `false` to run the deterministic path, with or without a provider configured. |
 | `requireRefutation` | boolean (always `true`) | `true` | Every model candidate must survive the refutation pass before admission. |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (materially improves recall). `disabled` keeps facts for free task clustering and admission contradiction checks but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
+| `maxFilesPerDiscoveryCall` | integer >= 1 | `2` | How many changed files ONE discovery call may review (spec 27). A task covering more is partitioned across several calls whose candidates are unioned; every partition receives the same shared context the undivided task would have. Partitioning engages only above this many changed files, so a small change is unaffected. When the dedicated security pass is on, it is partitioned on the same terms. |
+
+### A Run Asked For A Model Review Must Have One
+
+`aiReview.enabled: true` with no `provider` configured is a contradiction, and it
+is the SHIPPED DEFAULT: `enabled` defaults to `true` and `provider` has no
+default, so an unconfigured repository asks for a model review that cannot
+happen. Such a run must be refused with a structured `config` error
+(`model_review_provider_missing`, exit `2`) in the review runner's preflight —
+before intake, planning, or any artifact is written — and the message must name
+both remedies: configure a provider, or set `aiReview.enabled: false`.
+
+The refusal belongs to the pipeline, not to a command, so every entry point that
+runs a review is bound by it: the `review` command, the library's `runReview`,
+and `eval run`.
+
+`aiReview.enabled: false` is NOT this case and must keep completing at exit `0`.
+That operator switched the model review off; the run is deterministic-only on
+purpose and discloses it through `run.modelSearch: "not-performed"`. The
+difference between the two is the whole rule: a run that searched nothing on
+purpose is a choice, and a run that searched nothing because it had no model was
+an empty passing review indistinguishable from a clean change.
+
+`eval run` satisfies the rule by stating the same thing rather than being exempt
+from it: with no provider configured it resolves the effective review
+configuration to `aiReview.enabled: false`, warns on stderr, and records the
+value in the report's capability provenance — so an offline scoring run over
+cases that expect no finding stays possible, and cannot be mistaken for a run a
+model took part in. A case that DOES declare expected findings still fails with
+`eval_semantic_judge_missing`, because the judge needs the same provider.
 
 Holistic discovery and refutation packets reuse the provider task-input budget
-instead of introducing stage-specific public settings. Under tight budgets the
-workflow removes optional digest and ambient review context before recording a
-recovered provider issue.
+instead of introducing stage-specific public settings. Each stage is measured
+against what it sends: a discovery call sends `{taskId, paths, reviewText}`, and a
+refutation call sends its whole batch input.
 
-When a provider is configured and `contextMaxBytes` is not set explicitly, the
-per-packet model-bound context budget scales with depth so deeper reviews see
-more source per task: `fast` 60,000 bytes, `balanced` 120,000 bytes, `thorough`
-240,000 bytes (the provider task-input packet cap is 360,000 bytes). An explicit
-`contextMaxBytes` overrides these depth-scaled safety defaults.
+A discovery packet drops nothing — it is refused whole. It has nothing optional to
+drop: everything a discovery call transmits is the rendered review document. A
+refutation packet still drops the support signals, then the ambient review
+context, each accompanied by a `budgetNotice` naming what was withheld, because
+those fields really are in what it sends. The shared digest that both stages once
+carried is gone entirely (spec 05, *The Shared Digest Was A Constant*): it was
+always the same constant, so dropping it never removed a byte that mattered. Nothing else is dropped and nothing is ever
+truncated — a packet still over budget fails with `task_packet_budget_exceeded`
+(exit code `4`, recoverable). At the default 8,000,000-byte ceiling this path is
+not reached by any realistic change.
+
+When `contextMaxBytes` is not set explicitly, nothing bounds the review packet in
+advance: the change is sent whole and split only if the provider refuses it
+(spec 26). A serialized packet is still capped at 8,000,000 bytes as a runaway
+guard, which refuses rather than truncates.
+
+The depth-scaled values (`fast` 60,000, `balanced` 120,000, `thorough` 240,000
+bytes) survive only as the cross-file retrieval per-read cap applied when
+`crossFileRetrieval.maxBytesPerRead` is unset. An explicit `contextMaxBytes`
+lowers both the packet ceiling and that per-read cap.
+
+`maxFilesPerDiscoveryCall` is a partitioning rule, not a byte budget. It never
+splits a packet by size, so it does not reintroduce the proactive byte splitting
+spec 26 removed.
 
 ## Provider Config
 
@@ -178,25 +275,39 @@ Provider resolver rules:
   required for reasoning models with function tools. `provider.reasoningEffort`
   is forwarded as `reasoning.effort`; chat-completions would drop it.
 
-Local development tests use `openai-compatible` by default when provider-backed
-tests are explicitly enabled. `provider.baseUrl` must be configurable by config
-file and by `CODEREVIEWER_PROVIDER_BASE_URL`.
+Provider-backed tests are opt-in and excluded from `npm test`. They live in
+`*.live.test.ts`, run only through `npm run test:live`, and each skips itself
+unless both `CODEREVIEWER_PROVIDER_ID` and `CODEREVIEWER_PROVIDER_MODEL` are
+present in the environment; no provider is assumed as a default.
+`provider.baseUrl` must be configurable by config file and by
+`CODEREVIEWER_PROVIDER_BASE_URL`.
 
 ## Depth Budget Defaults
 
-| Depth | `maxCostUsd` | `runTimeoutMs` | `maxConcurrentTasks` |
-| --- | --- | --- | --- |
-| `fast` | `1` | `300000` | `4` |
-| `balanced` | `3` | `900000` | `4` |
-| `thorough` | `10` | `3600000` | `2` |
+`review.depth` does not set cost, timeout, or concurrency. `maxCostUsd` and
+`maxCostUsd` is unset unless configured, and `maxConcurrentTasks` defaults to
+`4` at every depth. The only per-depth defaults are the context-retrieval caps:
 
-R1 cost reporting is intentionally conservative. If provider usage metadata is
-unavailable, cost enforcement can use configured `costs.inputPerMillion` and
-`costs.outputPerMillion` values, or the bundled OpenAI model pricing snapshot,
-only when token counts are available. Explicit `costs` values override bundled
-pricing. If token counts or prices are unavailable, cost is omitted and
-`maxCostUsd` is not enforceable; the run summary must include warning code
-`cost-unavailable`.
+| Depth | `maxReads` | `maxSearches` | `maxMatches` | `maxDepth` |
+| --- | --- | --- | --- | --- |
+| `fast` | `200` | `100` | `50` | `4` |
+| `balanced` | `1200` | `600` | `150` | `8` |
+| `thorough` | `4800` | `2400` | `320` | `12` |
+
+Depth does NOT derive a cross-file `maxBytesPerRead`. This table previously
+carried a per-depth column of `60000`/`120000`/`240000`; **spec 28 (Approved,
+2026-07-31) supersedes it** and forbids sizing a per-read limit against a context
+window at all. What binds a read now is the runaway guard on the retrieval budget
+(`4000000` bytes, sized against memory rather than context), unless an operator
+explicitly configures `crossFileRetrieval.maxBytesPerRead`, which still binds and
+still discloses when it does.
+
+R1 cost reporting is intentionally conservative. Cost is computed only from token
+counts: prices come from configured `costs.*` values, or, for
+`provider.id = "openai"`, from the bundled model pricing snapshot. Explicit
+`costs` values override bundled pricing. When token counts or prices are
+unavailable, cost is omitted, `maxCostUsd` is not enforced, and the run summary
+must include warning code `cost-unavailable`.
 
 When a provider surfaces prompt-cache usage, the cached input tokens (a subset
 of the input tokens, already counted in the input aggregate) are re-priced at
@@ -205,8 +316,8 @@ known; otherwise they fall back to the full input price (no fabricated
 discount). The cached input token count is surfaced in the run summary as
 `cachedInputTokens`.
 
-Provider-backed tasks should record detailed token/cost metadata when the
-adapter exposes it:
+Provider-backed tasks record detailed token/cost metadata whenever the adapter
+exposes it:
 
 | Field | Type | Rule |
 | --- | --- | --- |
@@ -221,26 +332,78 @@ Run summaries aggregate available token/cost metadata per provider, model, task,
 and run. Full per-task cost enforcement remains a required follow-up when the
 selected provider adapters expose reliable usage data at the task boundary.
 
+### One Ceiling, Consumed As Headroom
+
+**Added 2026-08-14, and it is a correction rather than an addition.** Until
+2026-08-11 both advisory stages (specs 22 and 23) were off by default, so
+`maxCostUsd` bounding only the review's own cost was a complete description. The
+default flip made it an incomplete one: intent spends **one judgement call per
+obligation** against a `maxObligations` default of 100, after the review's check had
+already run, and nothing counted it. An operator who set a ceiling did not have one.
+
+The rule, as implemented in `src/cli/advisory-lanes.ts`:
+
+- **A stage that spends is bounded by the run's cost budget, and it stops instead of
+  failing.** The number in `maxCostUsd` is what an operator is willing to spend on
+  `codereviewer review`, not per stage. The stages therefore consume the HEADROOM the
+  review left, in the order they run, each measured against what the ones before it
+  actually spent. Per-stage caps are refused: they would let one invocation spend a
+  multiple of the configured number with every stage reporting itself in budget.
+- **Bounded, and still unable to fail the run.** This stops SPENDING, not judging. A
+  stage with no headroom does not start, the review keeps its own exit code and
+  quality gate, and the reader gets a warning naming the spend, the cap, and the
+  standalone command to run under its own budget. No budget outcome here reaches the
+  gate, so specs 22 and 23's rule that an advisory stage cannot fail a pipeline holds
+  by construction.
+- **Stopped before, not reported after.** The check sits ahead of the diff, so a
+  stage with no headroom issues no git subprocess and resolves no provider. An
+  overrun reported afterwards is a receipt, not a bound.
+- **Unknown spend is not zero spend.** A usage block with no price makes the total
+  undefined, which halts enforcement rather than waving the next stage through on a
+  total known to be too low — the same direction as the rule above that an
+  unavailable cost leaves `maxCostUsd` unenforced with `cost-unavailable`.
+
+**What it does NOT bound, stated because a half-described bound is worse than none.**
+A stage that STARTS with headroom runs to completion, so the run's true ceiling is
+the cap plus one stage's spend; cutting a stage off mid-flight would have to publish
+a partial report and no spec defines one. The fix and verification lanes (spec 12)
+also spend after the review's check: their spend is counted, and they are not
+themselves gated. That is a known gap with the same shape, not a decision that they
+should be unbounded.
+
 ## Context Budget Defaults
 
-| Depth | `contextMaxBytes` |
-| --- | --- |
-| `fast` | `100000` |
-| `balanced` | `200000` |
-| `thorough` | `500000` |
+`review.contextMaxBytes` is unset by default and MUST stay unset unless an
+operator deliberately wants a local ceiling: the provider decides whether a packet
+is too large (spec 26). When set it lowers the 8,000,000-byte packet ceiling, and
+it MUST refuse rather than truncate when it binds.
 
-When no explicit `review.contextMaxBytes` is configured and a provider is
-enabled, each provider-backed task uses the lower of the depth default and
-`60000` bytes. Local deterministic review keeps the depth default. This is a
-conservative byte-level safety guard until tokenizer-aware packing is
-implemented.
+`review.contextMaxBytes` does NOT lower the cross-file `maxBytesPerRead`. That
+coupling, and the depth-derived per-read values it scaled, were both removed by
+**spec 28 (Approved, 2026-07-31)**, which supersedes the earlier text here: a
+per-read limit MUST NOT be sized against a context window. When
+`crossFileRetrieval.maxBytesPerRead` is unset, the retrieval budget's own runaway
+guard applies instead, and the only thing that shrinks it is an actual provider
+`context_length_exceeded` (bounded halving with a loud failure at the floor, per
+spec 28).
 
-Provider-backed task input also has a final serialized packet guard. The guard
-must fail before provider invocation when a packet exceeds budget. It must not
+A byte-level packet budget was previously derived from depth. It was removed
+because bytes are a poor proxy for tokens and the values fired on 37% of this
+repository's last 60 commits, substituting several partial reviews for the
+whole-file review measured as better.
+
+Provider-backed task input has a final serialized packet guard fixed at
+8,000,000 bytes, lowered only by an explicit `review.contextMaxBytes`. The guard
+must fail before provider invocation when a packet exceeds it. It must not
 truncate source, instructions, skills, evidence, deterministic signal output, or
-metadata.
-The recovery is deterministic task splitting, increasing configured budget, or
-removing non-required scope before rerun.
+metadata. The guard is a runaway guard against serializing a pathological packet,
+not a context ration: it is deliberately sized far beyond any model context so it
+cannot refuse before the provider has been asked.
+
+The recovery is reactive splitting (spec 26): an oversized-context failure
+reported by the provider halves the task and retries each half, bounded on
+recursion depth. A unit that cannot be split further and is still refused fails
+loudly and is never truncated.
 
 Context caps are deterministic packetization controls and conservative
 provider-safety defaults. They are not review-scope caps. Source inside the
@@ -265,26 +428,97 @@ Rules:
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `files` | string[] | `[]` |
+| `files` | `{ path: string; scope?: string[] }[]` | `[]` |
 | `inline` | string | `""` |
 | `precedence` | fixed | CLI inline > config inline > files in listed order |
 
 Instruction file paths must be repository-relative and must not traverse above
-root. Run summaries record path and SHA-256 hash only.
+root. A configured file that does not exist fails the run; it is never
+silently skipped. Run summaries record path and SHA-256 hash only.
+
+Each file entry MAY declare `scope`: one or more glob patterns, matched with
+the same repository-relative glob matcher `paths.include`/`paths.exclude`
+use (`*`, `**`, `?` — no second matcher implementation). `scope` is REJECTED
+if present and empty; an operator who wants "everywhere" omits the key
+entirely rather than supplying an empty list, so a scope that resolves to
+nothing is always a deliberate, non-empty pattern set rather than an
+ambiguous default.
+
+A review task packet covers a cluster of one or more changed files. An
+instruction whose `scope` is set MUST be included in a packet if, and only
+if, at least one file in that packet's reviewed files matches at least one
+pattern in `scope` (an ANY-file match, not an ALL-files match). This is the
+fail-safe direction: guidance withheld from a packet is invisible to the
+reviewer and unrecoverable, while guidance included for one extra unrelated
+file in a mixed packet is merely additional, visible, discountable content.
+An instruction with no `scope` MUST be included in every packet, identical to
+behavior before scoping was introduced.
+
+An included instruction MUST reach both model calls built from that packet: the
+discovery call and the refutation call. Reaching only refutation is not partial
+delivery of the feature but a different feature — guidance that can kill a
+candidate after the fact and can never shape what discovery looks for. Discovery
+here means every discovery call the packet produces, including the dedicated
+security pass (`15-security-focused-review.md`); no pass is exempt, because an
+operator instruction describes the repository rather than one reviewing lens, and
+a pass whose candidates are adjudicated against an instruction must be shown it.
+
+Instructions are OPERATOR CONFIGURATION and are presented to the model as a
+higher trust class than repository content, pull-request or ticket text, or the
+change-intent brief. That trust is over CONTENT only. Instructions MUST NOT be
+able to expand the reviewer's authority: they cannot authorize publishing or any
+other action, widen review beyond the reviewed paths, or alter admission,
+severity thresholds, the quality gate, or baseline status. Those are deterministic
+code paths that never read instruction text, so the limit holds by construction;
+the prompt states it as well, so a document that claims otherwise is contradicted
+where the model reads it. The rendering MUST also state that operator instructions
+appear in exactly one place, so repository content that imitates the section
+acquires none of its standing.
+
+`inline` has no scope and is always included in every packet: it is a single
+operator-typed string, not a list of documents, so there is no set of
+per-entry scopes it could carry. Area-specific free text is expressed as a
+scoped entry under `files` instead.
 
 ## Skills
 
 | Key | Type | Default |
 | --- | --- | --- |
 | `enabled` | boolean | `false` |
-| `directories` | string[] | `[]` |
+| `directories` | string[] | `[".codereviewer/skills"]` |
 | `allowTools` | `read | list | grep`[] | `["read", "list", "grep"]` |
 
 Default skills directory is `.codereviewer/skills` when it exists and
-`skills.enabled` is true. Skill directories may contain nested skill folders;
-each skill folder must contain a harness-compatible `SKILL.md` with `name` and
-`description` frontmatter. The frontmatter `name` is the canonical mounted skill
-ID and must be unique.
+`skills.enabled` is true. Each `SKILL.md` must be harness-compatible, with `name`
+and `description` frontmatter. The frontmatter `name`, not the folder name, is the
+canonical mounted skill ID and must be unique across all configured directories.
+
+### Skill Directory Layout
+
+Each configured directory is walked recursively, and EVERY `SKILL.md` found under
+it is one skill. A skill's mounted directory is the directory that contains its
+`SKILL.md`.
+
+Three placements are therefore all legal, and this list is exhaustive so that no
+implementation has to infer the rule:
+
+- a `SKILL.md` in a folder under the configured directory (the conventional
+  layout);
+- a `SKILL.md` in a folder nested to any depth under such a folder;
+- a `SKILL.md` placed DIRECTLY in the configured directory, whose mounted
+  directory is then the configured directory itself — including the case where
+  the configured directory is the repository root (`directories: ["."]`).
+
+A skill's mounted directory may therefore contain another skill. That is
+accepted, not overlooked: the nested layout has the same property, the mounted ID
+comes from the frontmatter rather than from position, and every configured
+directory is operator-supplied content under the repository root, so a skill
+mount can never reach material the operator did not already point the reviewer at.
+
+This layout rule is stated exhaustively because its previous silence produced a
+crash: the indexer computed a relative path between the configured directory and
+the skill's own directory, which are the same path in the third case, and rejected
+the empty result with an error naming neither the file nor a cause.
 
 Skill directories must be explicitly listed or provided by
 `CODEREVIEWER_SKILLS_DIR`. Provider-backed reviewer agents mount enabled skills
@@ -305,6 +539,34 @@ hashes and repository-relative paths are recorded for provenance.
 
 All path config is validated through `path-service` and must support Linux and
 Windows separators.
+
+### Include Scopes Files, Not Traversal
+
+`paths.include` selects FILES. A DIRECTORY is eligible for traversal when an
+included file could live beneath it — when some path under that directory
+matches an `include` pattern — even though the directory itself matches no
+pattern. Under `include: ["src/**/*"]` the repository root `.` and `src` are
+therefore traversable; under `include: ["packages/*/src/**/*"]` so are
+`packages` and `packages/a`, which means the ancestor test must handle a
+wildcard anywhere in a pattern and cannot be a literal-prefix shortcut. A
+directory beneath which no included file can exist (`docs`, under either
+example) stays ineligible.
+
+The rule binds wherever the include layer is applied to a path being TRAVERSED
+rather than served: the mediated `list` and `grep` of the verification,
+change-impact, intent-fulfilment, and cross-file discovery lanes. Without it an
+include list naming a subtree matched no directory to start a traversal from, so
+a repository-wide `grep` and a `list` of the configured subtree were both
+refused while a `read` of a file inside that same subtree succeeded — the whole
+grep-then-read loop, defeated by the configuration this project's own guides
+recommend.
+
+This WIDENS traversal and does NOT widen what is served. Every file a traversal
+yields — every entry a `list` returns, every file a `grep` opens, every path a
+`read` addresses — is still gated individually as a file against the unchanged
+`include` rule, and the hard floor and `paths.exclude` are evaluated first and
+prune a directory outright. The requirements that make that argument hold are in
+*Mediated Read Eligibility* in `07-security-privacy-operations.md`.
 
 ## Baseline
 
@@ -357,6 +619,295 @@ Rules:
   Trusted allowlisted deterministic rules are separate from generic signal-only
   output and may seed actionable evidence-backed candidates directly.
 
+## Context Sources
+
+Controls external change-intent context ingestion
+(`11-external-context-ingestion.md`). **Enabled by default** since 2026-08-11,
+with a provider set that yields nothing — silently, and without a failure — on a
+repository that has neither an inbox directory nor changed markdown.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `contextSources.enabled` | boolean | `true` |
+| `contextSources.providers` | array of provider objects | `[{ "type": "inbox", "dir": ".codereviewer/context" }, { "type": "changed-files", "include": ["**/*.md"] }]`, each at the per-provider defaults below |
+| `contextSources.summary.mode` | `"model" \| "digest"` | *unset*; resolved at runtime to `"model"` when a provider is configured, else `"digest"` |
+| `contextSources.summary.maxBytes` | integer 256..20000 | `4000` |
+
+Each provider object is discriminated by `type`. The initial phase accepts the
+two no-network providers; the network providers (`platform`, `mcp`) are later
+phases (`11-external-context-ingestion.md`) and are added to this list when their
+implementations and the required security controls ship.
+
+| `type` | Keys and defaults | Purpose |
+| --- | --- | --- |
+| `inbox` | `dir` (`.codereviewer/context`), `maxFiles` 1..200 (`20`), `maxFileBytes` 1..1000000 (`64000`) | Read frontmatter-markdown context files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` (non-empty glob array, `["**/*.md"]`), `maxFiles` 1..200 (`20`), `maxFileBytes` 1..1000000 (`64000`) | Surface PR-changed repository files matching globs as intent context. No network. |
+
+Rules:
+
+- setting `enabled` to `false` yields a review identical to one with no external
+  context, byte for byte. The block defaults on, so this is now the opt-OUT;
+- **replacing `providers` replaces the default pair outright** — an array is not
+  merged into the default. A configuration naming only an `inbox` provider
+  therefore turns the `changed-files` one off, which is the intended behaviour
+  but is worth knowing before it surprises someone;
+- `inbox.dir` resolves under the repository root (default `.codereviewer/context`)
+  and is bounded by file-count and per-file byte caps;
+- `changed-files.include` selects PR-changed files by glob (for example
+  `specs/**`, `docs/**`, `**/*.md`), bounded by file-count and byte caps;
+- `summary.mode` defaults to `model` when a **model provider** (`provider`) is
+  configured and `digest` otherwise. It is decided by `provider`, never by
+  `contextSources.providers` — which now always has entries, so the two readings
+  are no longer interchangeable. `model` distills through a dedicated provider
+  call and falls back to `digest` if that call fails;
+- an unknown `type` or a missing required key fails `config validate` with exit
+  code 2.
+
+## Verification
+
+Controls the agentic verification flow (`12-verification-flow.md`). Disabled by
+default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `verification.enabled` | boolean | `false` |
+| `verification.providers` | array of claim-provider objects | `[]` |
+| `verification.maxToolCallsPerClaim` | integer 1..50 | `12` |
+| `verification.maxBytesPerRead` | integer >= 1 | `20000` |
+| `verification.maxMatches` | integer >= 1 | `20` |
+
+Claim-provider objects are discriminated by `type`:
+
+| `type` | Keys | Purpose |
+| --- | --- | --- |
+| `claims-file` | `path` | Read a neutral claims file a pipeline wrote before the run. No network. |
+| `prior-findings` | `report` | Derive claims from a previous run report or the baseline. |
+
+Rules:
+
+- the block is off unless `enabled` is `true`; a disabled block yields no
+  verification flow and an unchanged general review;
+- claim inputs are untrusted and cannot change admission, severity, gates, or
+  baseline;
+- an unknown `type` or a missing required key fails config validation (exit 2);
+- the later-phase `analyzer` (SARIF) and `comment` claim providers are added to
+  this list when their adapters ship.
+
+## Change Impact
+
+Controls change-impact review (`22-change-impact-review.md`). **Enabled by
+default** since 2026-08-11, and reached both by `codereviewer impact check` and
+by the in-process advisory lane `review` runs (`src/cli/advisory-lanes.ts`).
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `changeImpact.enabled` | boolean | `true` |
+| `changeImpact.maxChangedSymbols` | integer 1..500 | `50` |
+| `changeImpact.maxReferencesPerSymbol` | integer 1..500 | `25` |
+| `changeImpact.maxReferenceCandidatesPerSymbol` | integer 1..5000 | `500` |
+| `changeImpact.maxSearchDepth` | integer 0..32 | `12` |
+
+Rules:
+
+- with it disabled, `impact check` still exits `0` and writes an empty report
+  carrying the warning `Change-impact review is disabled. Set changeImpact.enabled
+  to true to run it.`;
+- the command makes no provider call, so these bounds are its whole cost model:
+  they bound repository traversal only;
+- the bounds are per-run and per-symbol rather than one global pool, so a change
+  touching many symbols cannot let the first symbol consume the entire reference
+  budget;
+- `maxReferenceCandidatesPerSymbol` bounds what the SEARCH collects and
+  `maxReferencesPerSymbol` bounds what the REPORT lists, selected from those
+  candidates. They are separate keys because they bound different things, and
+  they were one number until 2026-08-06 — which meant the reporting cap was spent
+  in traversal order on matches that were discarded immediately afterwards;
+- a symbol with more dependents than `maxReferencesPerSymbol` lists is reported
+  truncated rather than dropped, and a search stopped by
+  `maxReferenceCandidatesPerSymbol` is reported separately again, so the report
+  never silently understates how widely a symbol is used and never presents an
+  unfinished search as a shortened list;
+- there is deliberately no `blocking` key. The command reports references, not
+  findings, and always exits `0`; the key is added in the same change that admits
+  the first impact finding.
+
+## Intent Fulfilment
+
+Controls intent-fulfilment review (`23-intent-fulfilment-review.md`). **Enabled by
+default** since 2026-08-11, and reached both by `codereviewer intent check` and
+by the in-process advisory lane `review` runs (`src/cli/advisory-lanes.ts`).
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `intentFulfilment.enabled` | boolean | `true` |
+| `intentFulfilment.maxObligations` | integer 1..100 | `100` |
+| `intentFulfilment.maxIntentBytes` | integer 256..200000 | `100000` |
+| `intentFulfilment.maxChangeLines` | integer 1..5000 | `5000` |
+
+Rules:
+
+- with it disabled, `intent check` still exits `0` and writes an empty report
+  carrying the warning `Intent-fulfilment review is disabled. Set
+  intentFulfilment.enabled to true to run it.`;
+- every limit here is a runaway guard, not a ration. All three degrade the answer
+  silently when they bind, so a value set where real inputs reach it turns the
+  command into one that reports "nothing left to do" because it could not see;
+- `maxObligations` caps both reported obligations and judgement calls (one call
+  per obligation) and is therefore the spend bound;
+- `maxIntentBytes` caps the summed redacted change-intent text handed to the one
+  extraction call per run; the ingestion providers already bound themselves per
+  file, this bounds the sum across several of them;
+- `maxChangeLines` caps the changed lines each judgement call may cite, and is the
+  limit whose binding does the most damage;
+- there is deliberately no `blocking` key, and none is added later. Spec 23 makes
+  advisory-only a requirement, not a default, so a `blocking` key would be accepted
+  and then silently ignored.
+
+## Fix
+
+Controls the agentic finding investigation-and-fix job (`12-verification-flow.md`).
+Disabled by default. Reuses the same agent, tools, and bounds as `verification`.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `fix.enabled` | boolean | `false` |
+| `fix.minSeverity` | `Severity` | value of `aiReview.actionableSeverityThreshold` (default `medium`) |
+
+Rules:
+
+- `enabled` is the single switch for the whole single pass — judgment and fix
+  together; a disabled block yields no investigation and an unchanged general
+  review and gate;
+- the lane runs only on admitted findings at or above `minSeverity`; the default
+  tracks the pipeline's blocking severity so out of the box it runs on findings
+  that can block, not on nits;
+- outputs are advisory: a `false-positive` judgment or a fix never changes
+  admission, severity, or the gate;
+- per-claim bounds are shared with `verification`.
+
+## Review Conversation Config
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `reviewConversation.enabled` | boolean | `false` | Whether a reply on a review comment can nominate that finding for a second, independent look. |
+
+**This is the whole block, and that is the design** (spec 30). There is
+deliberately no prompt override, no threshold, and no `blocking` key: spec 30
+requirement 2 forbids giving the re-run any knowledge that a human objected, and
+requirement 6 forbids the lane blocking — so anything else to configure would be
+the defect rather than a feature. The config object is strict, so setting a key
+that is not `enabled` is a configuration error rather than a silent no-op.
+
+It is a TOP-LEVEL key, not nested under `review`, because the lane is a property of
+the platform integration rather than of the review itself.
+
+## Cross-File Retrieval
+
+Controls agentic cross-file discovery (`16-agentic-cross-file-discovery.md`).
+Enabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `review.crossFileRetrieval.enabled` | boolean | `true` |
+| `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1..500 | `100` |
+| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000..4000000 | *unset* |
+
+Rules:
+
+- with it disabled, holistic discovery issues no tool call and runs as a single-shot
+  review with no tools;
+- when enabled, discovery may call the mediated `repo_read`/`repo_list`/`repo_grep`
+  tools; `maxToolCallsPerTask` is a runaway-loop guard enforced in code, not a
+  context ration, and the context retriever's own eligibility, redaction, and
+  byte/match caps still apply;
+- `maxBytesPerRead` is unset by default (spec 28). Setting it is a deliberate
+  operator choice and it then binds every cross-file read, with the cut disclosed
+  in the read's own summary. Unset, the per-read cap is the depth-derived value in
+  *Depth Budget Defaults*, and the reviewer narrows a read itself by passing an
+  optional `startLine`/`endLine` line range to `repo_read` after locating what it
+  needs with `repo_grep`;
+- retrieved content is untrusted repository data: it cannot bypass scope, severity,
+  baseline, admission, or the gate, and its findings pass the same refutation and
+  admission as any other candidate.
+
+`enabled` defaults to `true` even though the recall gain is **not** statistically
+significant. Two independent runs put it ahead on every measured dimension —
+recall +5.7pp then +2.3pp, adjusted precision 100% both times, cost down both
+times, zero provider errors — but neither run reached significance, so no specific
+recall improvement is claimed. The earlier net-negative verdict is refuted: it was
+measuring reads silently truncated at the old 24,000-byte cap.
+
+## Removed Configuration Blocks
+
+These keys were removed with the capabilities they controlled and MUST NOT be
+reintroduced as compatibility shims. Because every config object is strict, a
+config that still sets one fails validation with exit code `2` and the user is told
+to remove it, rather than running a review that silently differs from what the file
+asks for.
+
+| Removed key | Removed | Withdrawn capability |
+| --- | --- | --- |
+| `review.contextScout` | 2026-07-27 | Context scout (spec 18) |
+| `review.discoveryPosture` | 2026-07-27 | Discovery posture (spec 20) |
+| `review.discoverySampleCount` | 2026-07-27 | Independent sampling (spec 21) |
+| `invariantConformance` | 2026-08-02 | Invariant-conformance review (spec 24) |
+| `review.refutationRetrieval` | 2026-08-06 | Cross-file retrieval inside refutation (spec 05) |
+
+A removed key is never reused for something else, so a reader who finds one in an
+old configuration file can always identify the capability it belonged to.
+
+The withdrawals are recorded in `_provenance.yaml`. The reasoning for the four
+`review.*` keys is in `05-review-workflow-and-runtime.md`; the reasoning for
+`invariantConformance` is in `24-invariant-conformance-review.md`, which is kept
+as a withdrawn spec so the measurement that removed it stays on record.
+
+## Security
+
+`security.dedicatedPass` controls the dedicated additive security review pass
+(`15-security-focused-review.md`, Mechanism 1). Disabled by default. Generic
+OWASP/CWE-derived detection only; never tuned to eval findings.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `security.dedicatedPass.enabled` | boolean | `false` |
+
+Rules:
+
+- with it disabled, no security pass runs and the general review is unchanged
+  (the same single discovery call per task);
+- the security pass's candidates pass the same untrusted refutation and admission as
+  any other candidate and are additive (they never displace a general candidate);
+  the pass never bypasses scope, severity, baseline, or the gate.
+
+`security.signals` controls the deterministic security-signal evidence layer
+(`15-security-focused-review.md`, Mechanism 2): ingestion of analyzer artifacts a
+project's own pipeline already produced. Disabled by default and **unmeasured**.
+This engine runs no analyzer and depends on no analyzer package.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `security.signals.enabled` | boolean | `false` |
+| `security.signals.artifacts` | array of `{ path, format: "sarif" }` | `[]` |
+| `security.signals.maxArtifactBytes` | integer 1–50000000 | `4000000` |
+| `security.signals.maxAlerts` | integer 1–500 | `40` |
+
+Rules:
+
+- with it disabled, no artifact is read and the review packet is byte-for-byte
+  what it was before the layer existed;
+- `enabled: true` with an empty `artifacts` list fails validation: a switch that is
+  on and reads nothing would report no security signals and look like a clean scan;
+- an artifact path is resolved through the repository path service; one outside the
+  repository — including via a symlink — is rejected;
+- an artifact that is missing, oversized, not JSON, or not SARIF 2.1.0 fails the run
+  with exit `2`; every category of result held back is reported as a run warning;
+- an ingested result is shown only with a changed-side cause (its own location, or a
+  step of the path it traces, on a changed line); results without one are not
+  reported;
+- an ingested result is EVIDENCE: it seeds no candidate and is never admitted. Any
+  finding derived from it passes the same discovery, refutation, scope, severity,
+  baseline, and admission path as any other.
+
 ## Reporting
 
 | Key | Type | Default |
@@ -365,13 +916,25 @@ Rules:
 | `sarif.target` | `"generic" | "github"` | `"generic"` |
 | `sarif.category` | string | `"codereviewer"` |
 | `sarif.maxResults` | integer 1..25000 | `5000` |
-| `sarif.redact` | boolean | `true` |
+| `reviewComments.enabled` | boolean | `true` (since 2026-08-11) |
+| `reviewComments.platform` | `"github" | "gitlab" | "bitbucket" | "generic" | "auto"` | `"auto"` |
 
 JSON is always generated even if omitted from `formats`, because it is the
-canonical machine-readable artifact. Markdown, SARIF, and GitHub review-comment
-artifact rendering can be disabled only when their format is absent from
-`formats`. The `github-review-comments` format writes local PR review-comment
-draft JSON only and performs no network publishing.
+canonical machine-readable artifact. Markdown and SARIF rendering can be disabled
+only when their format is absent from `formats`.
+
+Every rendered report format redacts secret-shaped text unconditionally; there is
+deliberately no `sarif.redact` key to turn that off, since a toggle a renderer
+never reads would be a switch that lies about doing something.
+
+`reviewComments` writes platform-neutral inline review-comment drafts, including
+one-click fix suggestions, as local artifacts only — it performs no network
+publishing (`13-review-comments-and-suggestions.md`). That "publishes nothing"
+property is what makes defaulting it on safe; the flip carries no accuracy claim,
+because the block is a renderer and not a lever. A suggestion is offered only
+when its edits still apply to the file's current bytes. `platform` selects the
+renderer; `auto` resolves it from CI environment, then the git remote host, then
+`generic`. An explicit value overrides detection.
 
 ## Observability Config
 
@@ -411,6 +974,38 @@ cached rate; models without one stay conservative (cached input falls back to
 the full input price). `cachedInputPerMillion` re-prices only the cached subset
 of input tokens.
 
+## Evaluation Config
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `minJudgeAgreement` | number 0..1 | `0.9` |
+| `judgeModel` | string or unset | unset (the judges use `provider.model`) |
+| `regressionGate.profile` | `"stable" \| "strict"` | `"stable"` |
+| `regressionGate.overrides` | per-threshold override object | `{}` |
+
+There is deliberately no `evaluation.enabled` key. Case selection is driven by
+`eval run` CLI flags, so an `enabled` flag would be accepted by config validation
+and then silently ignored. `regressionGate` is defined in
+`06-evaluation-and-quality-gates.md`, section *Eval Regression Gate*.
+
+`minJudgeAgreement` is the minimum semantic-judge agreement against the
+committed calibration set described in `06-evaluation-and-quality-gates.md`. The
+judge is the sole authority for every eval quality metric, so a run whose
+measured agreement falls below this value reports
+`scoring.judgeTrustworthy = false`. It marks the run's metrics as untrustworthy;
+it does not by itself fail the regression gate.
+
+`judgeModel` pins the model the eval's semantic-match judge and plausibility
+judge run on, independently of `provider.model`, which the reviewer under test
+keeps using. It overrides the model only — provider id, credentials, base URL,
+retry and timeout stay the run's own — and it moves nothing in the review
+workflow. Unset, the judges resolve from the reviewer's provider config
+unchanged, which is the historical behaviour. A model comparison must set it to
+one value across both arms; the rationale, and the requirement that a published
+comparison state the judge it was scored with, are in
+`06-evaluation-and-quality-gates.md`, section *The Judge Must Be Pinnable
+Independently Of The Reviewer*.
+
 ## Security Config
 
 | Key | Type | Default |
@@ -419,6 +1014,7 @@ of input tokens.
 | `allowNetwork` | boolean | `false` |
 | `allowFilesystemWrite` | boolean | `false` |
 | `captureContentTelemetry` | boolean | `false` |
+| `dedicatedPass.enabled` | boolean | `false` |
 
 `allowShell: true`, broad `allowNetwork: true`, broad
 `allowFilesystemWrite: true`, and `captureContentTelemetry: true` are rejected

@@ -19,9 +19,16 @@ describe('CodeReviewerConfigSchema', () => {
       failOnProviderError: true
     })
     expect(parsed.aiReview).toEqual({
+      // Naming a provider and a model is enough to get a review: the AI review is
+      // ON unless explicitly disabled. It used to be an optional tri-state where
+      // `undefined` and `true` were indistinguishable.
+      enabled: true,
       requireRefutation: true,
       deterministicSignalMode: 'support',
-      actionableSeverityThreshold: 'medium'
+      actionableSeverityThreshold: 'medium',
+      // Measured, not chosen: a 1 / 2 / 4 / unlimited sweep put 2 level with the
+      // strongest setting on both recall and precision at 27% less cost.
+      maxFilesPerDiscoveryCall: 2
     })
     expect(parsed.promotionPolicy).toEqual({
       modelWeakOrRefuted: 'artifact-only'
@@ -51,6 +58,528 @@ describe('CodeReviewerConfigSchema', () => {
       includeGenerated: true
     })
     expect(parsed.reporting.formats).toEqual(['json', 'markdown', 'sarif'])
+    // `maxBytesPerRead` ABSENT here for the same reason it is absent from
+    // cross-file retrieval below: a proactive per-read cut chosen in advance
+    // resolves a claim against a prefix of a file and calls it the file.
+    expect(parsed.verification).toEqual({
+      enabled: false,
+      providers: [],
+      maxToolCallsPerClaim: 12,
+      maxMatches: 20
+    })
+  })
+
+  // THE PRODUCT IS THE DEFAULT, as of 2026-08-11. A reviewer that reads what a
+  // change is FOR, finds defects in it, says what it might break, and answers
+  // whether the change did what it set out to do — with a note on each defect's own
+  // line — used to require a configuration file, and appeared only when a run went
+  // through `scripts/github/`. Four booleans were the entire gap.
+  //
+  // Asserted from `{}` rather than from a fixture because `{}` is the zero-config
+  // case a first-time user actually gets.
+  test('an empty config yields the whole default review experience', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    // What the change is FOR.
+    expect(parsed.contextSources.enabled).toBe(true)
+    // What it might break.
+    expect(parsed.changeImpact.enabled).toBe(true)
+    // Whether it did what it set out to do.
+    expect(parsed.intentFulfilment.enabled).toBe(true)
+    // A note on the line each defect is on.
+    expect(parsed.reporting.reviewComments.enabled).toBe(true)
+  })
+
+  // `contextSources.enabled: true` over an empty provider list would be a switch
+  // that is on and does nothing — the shape `security.signals` above records this
+  // file having shipped once. So the default carries the provider set the GitHub
+  // pipeline used to spell out, and each entry must arrive FULLY DEFAULTED: a
+  // `.default([...])` literal would be returned verbatim without parsing, leaving
+  // `dir`, `include` and both caps undefined while the type claimed otherwise.
+  test('the default provider set is present and fully parsed, not a verbatim literal', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    expect(parsed.contextSources.providers).toEqual([
+      {
+        type: 'inbox',
+        dir: '.codereviewer/context',
+        maxFiles: 20,
+        maxFileBytes: 64_000
+      },
+      {
+        type: 'changed-files',
+        include: ['**/*.md'],
+        maxFiles: 20,
+        maxFileBytes: 64_000
+      }
+    ])
+
+    // An explicit list replaces the default outright rather than merging with it,
+    // so an operator who names one provider gets one provider.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        contextSources: { providers: [{ type: 'inbox', dir: 'context' }] }
+      }).contextSources.providers
+    ).toEqual([
+      { type: 'inbox', dir: 'context', maxFiles: 20, maxFileBytes: 64_000 }
+    ])
+  })
+
+  // THE GUARD AGAINST A SILENT FLIP. Every capability below is off for a reason
+  // that was written down — a measurement that failed, a cost that was never
+  // justified, or a dependency that does not exist — and this project's standing
+  // rule is that a capability measured and rejected stays off however much the
+  // product would prefer it on. Four defaults were promoted on 2026-08-11 on
+  // product grounds; naming these here is what makes a fifth promotion a visible
+  // test change rather than a one-character edit nobody reviews.
+  test('an empty config leaves every measured-off capability off, by name', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    // Measured null (2026-08-10): recall 64.9% -> 61.7%, sign test 3/3, p = 1.0.
+    expect(parsed.review.signalFacts.enabled).toBe(false)
+    // Measured and rejected (2026-08-09): 0 of 7 against a pre-registered 40% bar.
+    expect(parsed.changeImpact.adjudication.enabled).toBe(false)
+    // Mixed and unproven at n=1, for +61% cost; the security lift it exists for
+    // was not shown.
+    expect(parsed.security.dedicatedPass.enabled).toBe(false)
+    // A different product (external claims), and `eval run` cannot score it.
+    expect(parsed.verification.enabled).toBe(false)
+    // Unmeasured, and one agent run per eligible finding.
+    expect(parsed.fix.enabled).toBe(false)
+    // Unmeasured, and needs a comment-event trigger and write permission that no
+    // default in the schema can grant.
+    expect(parsed.reviewConversation.enabled).toBe(false)
+    // Operator content that does not exist until somebody writes it.
+    expect(parsed.skills.enabled).toBe(false)
+    // Emits no spans; enabling it exports nothing.
+    expect(parsed.observability.openTelemetry.enabled).toBe(false)
+    // Off because it ships no artifact to read, and the schema rejects the block
+    // being enabled without one.
+    expect(parsed.security.signals.enabled).toBe(false)
+  })
+
+  test('cross-file retrieval defaults to ON, with no proactive per-read cap', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    // Enabled: two runs put it ahead on recall, false alarms, cost and reliability.
+    // maxBytesPerRead ABSENT: spec 28 removed the guessed 24,000-byte cut, which had
+    // truncated files mid-read and caused three measurements to blame the feature.
+    expect(defaults.review.crossFileRetrieval).toEqual({
+      enabled: true,
+      maxToolCallsPerTask: 100
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 6 } }
+    })
+    expect(enabled.review.crossFileRetrieval).toEqual({
+      enabled: true,
+      maxToolCallsPerTask: 6
+    })
+
+    // An explicit cap is a deliberate operator choice and still binds — and when it
+    // does, the cut is disclosed to the reviewer rather than silent.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxBytesPerRead: 8000 } }
+      }).review.crossFileRetrieval.maxBytesPerRead
+    ).toBe(8000)
+
+    // The cap is a runaway-loop guard, so a generous value is valid; only an
+    // absurd one (past the hard ceiling) is rejected.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 200 } }
+      }).review.crossFileRetrieval.maxToolCallsPerTask
+    ).toBe(200)
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 501 } }
+      })
+    ).toThrow()
+  })
+
+  // Refutation retrieval was removed on 2026-08-06, after the A/B recorded in spec
+  // 05 fired the removal clause of the rule pre-registered before the measurement:
+  // adjusted precision fell 96.1% → 92.9% with genuine false positives up in every
+  // seed position, no recall effect (5 gained, 7 lost, p = 0.7744), for +10% cost.
+  // Same rule as the removals below: no compatibility shim, so a config that still
+  // asks the refuter to retrieve fails loudly rather than running a review that
+  // quietly ignores what the file asks for.
+  test('a config still setting the removed refutation retrieval block fails validation', () => {
+    for (const removed of [
+      { refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 } },
+      { refutationRetrieval: { enabled: false } },
+      { refutationRetrieval: {} }
+    ]) {
+      expect(() => CodeReviewerConfigSchema.parse({ review: removed })).toThrow()
+    }
+  })
+
+  // The context scout was removed on 2026-07-27, along with its configuration.
+  // No compatibility shim is offered on purpose: a config that still enables it
+  // would otherwise run a review that silently does something different from
+  // what the file asks for. Failing loudly is the whole point, and it matches how
+  // the withdrawn discovery passes were handled.
+  test('a config still setting the removed context scout fails validation', () => {
+    for (const removed of [
+      { contextScout: { enabled: true, maxSymbols: 8, maxBytesPerSymbol: 4000 } },
+      { contextScout: { enabled: false } },
+      { contextScout: {} }
+    ]) {
+      expect(() => CodeReviewerConfigSchema.parse({ review: removed })).toThrow()
+    }
+  })
+
+  // The discovery posture was removed on 2026-07-27 after its A/B failed the rule
+  // fixed in advance. As with the context scout above, no compatibility shim is
+  // offered: a config that still selects a posture must fail loudly rather than
+  // run a review that quietly ignores what the file asks for.
+  test('a config still setting the removed discovery posture fails validation', () => {
+    for (const removed of ['precise', 'investigative', 'aggressive']) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({
+          review: { discoveryPosture: removed }
+        })
+      ).toThrow()
+    }
+  })
+
+  // Independent discovery sampling was removed on 2026-07-27 after k=3 failed its
+  // decision rule and falsified its own premise. Same rule as the removals above:
+  // no shim, so a config that still asks for k samples fails loudly instead of
+  // silently running one.
+  test('a config still setting the removed discovery sample count fails validation', () => {
+    for (const removed of [1, 3, 5]) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({
+          review: { discoverySampleCount: removed }
+        })
+      ).toThrow()
+    }
+  })
+
+  // Invariant-conformance review (spec 24) was withdrawn on 2026-08-02 after its
+  // step-1 measurement fired 7.0 reports per PR-sized range against a
+  // pre-registered kill criterion of ~0.5, with ZERO true positives across ~300
+  // hand-judged divergences from five codebases. The whole capability went, and
+  // `invariantConformance` went with it. Same rule as the removals above: no
+  // compatibility shim, because a config that still enables a stage that no
+  // longer exists must say so rather than run a pipeline that quietly does less
+  // than the file asks for.
+  test('a config still setting the removed invariant conformance block fails validation', () => {
+    for (const removed of [
+      { enabled: true, maxPeerFiles: 300 },
+      { enabled: false },
+      { adjudication: { enabled: true } },
+      {}
+    ]) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({ invariantConformance: removed })
+      ).toThrow()
+    }
+  })
+
+  test('security dedicated pass defaults to disabled', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.security.dedicatedPass.enabled).toBe(false)
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      security: { dedicatedPass: { enabled: true } }
+    })
+    expect(enabled.security.dedicatedPass.enabled).toBe(true)
+    // The permission literals keep their secure defaults regardless.
+    expect(enabled.security.captureContentTelemetry).toBe(false)
+  })
+
+  test('security rejects an unknown nested key', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { dedicatedPass: { on: true } }
+      })
+    ).toThrow()
+  })
+
+  // ON by default since 2026-08-11, on a readability judgement rather than a
+  // quality one: the A/B was null for recall and precision, and what changed is
+  // that a finding shows the source line it rests on. The opt-OUT is the part
+  // worth pinning — it is what returns the +5.6% input tokens to zero.
+  test('discovery citations default to enabled, and can be turned off', () => {
+    const byDefault = CodeReviewerConfigSchema.parse({})
+    expect(byDefault.review.citations.enabled).toBe(true)
+
+    const disabled = CodeReviewerConfigSchema.parse({
+      review: { citations: { enabled: false } }
+    })
+    expect(disabled.review.citations.enabled).toBe(false)
+  })
+
+  test('review.citations rejects an unknown nested key', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { citations: { on: true } }
+      })
+    ).toThrow()
+  })
+
+  test('verification is disabled by default and accepts configured claim providers', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.verification.enabled).toBe(false)
+    expect(disabled.verification.providers).toEqual([])
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      verification: {
+        enabled: true,
+        providers: [
+          { type: 'claims-file', path: '.codereviewer/claims.json' },
+          { type: 'prior-findings', report: '.codereviewer/baseline.json' }
+        ],
+        maxToolCallsPerClaim: 8
+      }
+    })
+    expect(enabled.verification.enabled).toBe(true)
+    expect(enabled.verification.providers).toEqual([
+      { type: 'claims-file', path: '.codereviewer/claims.json' },
+      { type: 'prior-findings', report: '.codereviewer/baseline.json' }
+    ])
+    expect(enabled.verification.maxToolCallsPerClaim).toBe(8)
+    // Unset unless an operator asks for it; an explicit cap still binds, and the
+    // cut it causes is disclosed to the investigator rather than silent.
+    expect(enabled.verification.maxBytesPerRead).toBeUndefined()
+    expect(
+      CodeReviewerConfigSchema.parse({
+        verification: { enabled: true, maxBytesPerRead: 8000 }
+      }).verification.maxBytesPerRead
+    ).toBe(8000)
+    expect(enabled.verification.maxMatches).toBe(20)
+  })
+
+  // ON since 2026-08-11, with its ADJUDICATION still off — which is the pairing
+  // worth pinning. The lane on and adjudication off is the only combination that
+  // makes no provider call at all, so this assertion is what says the promoted
+  // default is the free one.
+  test('change impact is enabled by default with bounded discovery limits and no spend', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.changeImpact).toEqual({
+      enabled: true,
+      maxChangedSymbols: 50,
+      maxReferencesPerSymbol: 25,
+      maxReferenceCandidatesPerSymbol: 500,
+      maxSearchDepth: 12,
+      adjudication: { enabled: false, maxCalls: 40 }
+    })
+
+    const tuned = CodeReviewerConfigSchema.parse({
+      changeImpact: {
+        maxChangedSymbols: 10,
+        maxReferencesPerSymbol: 5,
+        maxSearchDepth: 3
+      }
+    })
+    expect(tuned.changeImpact).toEqual({
+      enabled: true,
+      maxChangedSymbols: 10,
+      maxReferencesPerSymbol: 5,
+      maxReferenceCandidatesPerSymbol: 500,
+      maxSearchDepth: 3,
+      adjudication: { enabled: false, maxCalls: 40 }
+    })
+
+    // The opt-out is the half that matters to an operator who wants the defect
+    // finder alone, so it is asserted rather than assumed.
+    expect(
+      CodeReviewerConfigSchema.parse({ changeImpact: { enabled: false } })
+        .changeImpact.enabled
+    ).toBe(false)
+  })
+
+  // The two reference bounds answer different questions and must stay
+  // independently settable: one bounds what the SEARCH collects, the other how
+  // much of the page one symbol may occupy. They were a single number until
+  // 2026-08-06, and the reporting cap was consequently spent, in traversal order,
+  // on matches that were discarded immediately afterwards.
+  test('change impact bounds the search and the report separately', () => {
+    const tuned = CodeReviewerConfigSchema.parse({
+      changeImpact: {
+        maxReferencesPerSymbol: 10,
+        maxReferenceCandidatesPerSymbol: 1000
+      }
+    })
+
+    expect(tuned.changeImpact.maxReferencesPerSymbol).toBe(10)
+    expect(tuned.changeImpact.maxReferenceCandidatesPerSymbol).toBe(1000)
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferenceCandidatesPerSymbol: 0 }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferenceCandidatesPerSymbol: 5001 }
+      })
+    ).toThrow()
+  })
+
+  // ADJUDICATION IS SEPARATELY OFF, and that is the point of the second switch —
+  // now more so than before, because the lane hosting it is on by default. It was
+  // MEASURED AND REJECTED on 2026-08-09 (0 of 7 pairs against a pre-registered 40%
+  // bar), and it is also the only part of the lane that can reach a provider, so
+  // promoting the lane must not silently start billing an operator.
+  test('change impact adjudication stays off when the lane is on', () => {
+    const enabled = CodeReviewerConfigSchema.parse({
+      changeImpact: { enabled: true }
+    })
+
+    expect(enabled.changeImpact.enabled).toBe(true)
+    expect(enabled.changeImpact.adjudication.enabled).toBe(false)
+    expect(
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { enabled: true, maxCalls: 5 } }
+      }).changeImpact.adjudication
+    ).toEqual({ enabled: true, maxCalls: 5 })
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { maxCalls: 0 } }
+      })
+    ).toThrow()
+  })
+
+  // Spec 22 makes the lane non-blocking and states that it "MUST NOT be
+  // configurable to block". This is settled rather than pending: a breaking change
+  // is frequently intentional, so there is nothing to block on, and a `blocking`
+  // key would be accepted and then silently ignored — the failure the security
+  // `signals` key was removed for. The strict object turns setting it into a
+  // configuration error instead of a switch an operator believes gated the build.
+  test('change impact rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ changeImpact: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { blocking: true } }
+      })
+    ).toThrow()
+  })
+
+  test('change impact rejects out-of-range discovery bounds', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ changeImpact: { maxChangedSymbols: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferencesPerSymbol: 1000 }
+      })
+    ).toThrow()
+  })
+
+  // The defaults are RUNAWAY GUARDS, not rations. Two of the three were rations
+  // until 2026-08-01 and both were measured to bind on real input: 24 of 28 runs
+  // returned exactly maxObligations, and 43% of this repository's last 60 commits
+  // exceed the old maxChangeLines of 400. Every one of these limits degrades the
+  // answer SILENTLY when it binds, so a value real input reaches makes the
+  // capability report "nothing left" because it could not see.
+  test('intent fulfilment is enabled by default with runaway-guard limits', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.intentFulfilment).toEqual({
+      enabled: true,
+      maxObligations: 100,
+      maxIntentBytes: 100_000,
+      maxChangeLines: 5000
+    })
+
+    const tuned = CodeReviewerConfigSchema.parse({
+      intentFulfilment: {
+        maxObligations: 5,
+        maxIntentBytes: 1_000,
+        maxChangeLines: 50
+      }
+    })
+    expect(tuned.intentFulfilment).toEqual({
+      enabled: true,
+      maxObligations: 5,
+      maxIntentBytes: 1_000,
+      maxChangeLines: 50
+    })
+
+    // This is the one promoted default that SPENDS, so the opt-out an operator
+    // reaches for when they want the defect finder alone is pinned.
+    expect(
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { enabled: false } })
+        .intentFulfilment.enabled
+    ).toBe(false)
+  })
+
+  // Spec 23 says the command MUST NOT be able to fail a pipeline on fulfilment
+  // grounds and states explicitly that this "is not configurable", because the
+  // underlying judgement is not accurate enough to gate on. A `blocking` key would
+  // therefore be accepted and then silently ignored — the failure the security
+  // `signals` key was removed for. Unlike `changeImpact`, there is no later change
+  // that adds it.
+  test('intent fulfilment rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        intentFulfilment: { failOnUnaddressed: true }
+      })
+    ).toThrow()
+  })
+
+  test('intent fulfilment rejects out-of-range spend bounds', () => {
+    // A bound of zero would enable the capability and forbid every call it
+    // consists of.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { maxObligations: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { maxChangeLines: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        intentFulfilment: { maxIntentBytes: 500_000 }
+      })
+    ).toThrow()
+  })
+
+  // Spec 30: the lane ships disabled until the hold-rate-under-pushback
+  // measurement clears. It did NOT flip with `changeImpact` and
+  // `intentFulfilment` above on 2026-08-11 — beyond the missing measurement it
+  // needs a comment-event trigger and pull-request write permission, neither of
+  // which a default in the schema can grant.
+  test('review conversation is disabled by default and carries no other key', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.reviewConversation).toEqual({ enabled: false })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      reviewConversation: { enabled: true }
+    })
+    expect(enabled.reviewConversation).toEqual({ enabled: true })
+  })
+
+  // Spec 30 requirement 6: the lane "MUST be non-blocking and MUST NOT be
+  // configurable to block". A `blocking` key would be accepted and silently
+  // ignored — the failure `SecurityConfigSchema` already records once — so the
+  // schema rejects it outright.
+  test('review conversation rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ reviewConversation: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        reviewConversation: { maxReplies: 10 }
+      })
+    ).toThrow()
+  })
+
+  test('verification rejects an unknown claim provider type', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        verification: {
+          enabled: true,
+          providers: [{ type: 'analyzer', report: '.codereviewer/sarif.json' }]
+        }
+      })
+    ).toThrow()
   })
 
   test('accepts an openai-compatible provider only with baseUrl', () => {
@@ -142,6 +671,131 @@ describe('CodeReviewerConfigSchema', () => {
     expect(() =>
       CodeReviewerConfigSchema.parse({
         review: { baseRef: '-bad' }
+      })
+    ).toThrow()
+  })
+})
+
+describe('InstructionsConfigSchema path scoping', () => {
+  test('accepts an unscoped file entry and leaves scope unset', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: { files: [{ path: 'AGENTS.md' }] }
+    })
+
+    expect(parsed.instructions.files).toEqual([{ path: 'AGENTS.md' }])
+    expect(parsed.instructions.files[0]?.scope).toBeUndefined()
+  })
+
+  test('accepts a scoped file entry', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: {
+        files: [{ path: 'backend/AGENTS.md', scope: ['backend/**', 'services/**'] }]
+      }
+    })
+
+    expect(parsed.instructions.files).toEqual([
+      { path: 'backend/AGENTS.md', scope: ['backend/**', 'services/**'] }
+    ])
+  })
+
+  // An empty scope is rejected rather than accepted as "matches nothing": a
+  // present-but-empty array reads as a mistake, and turning it into a silent
+  // permanent exclusion would hide a configured instruction with nothing
+  // saying why. Delete `scope` to go back to unscoped.
+  test('rejects an empty scope array', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: [{ path: 'AGENTS.md', scope: [] }] }
+      })
+    ).toThrow()
+  })
+
+  // The pre-scoping shape (`files: string[]`) is a breaking change, on
+  // purpose (no compatibility layer): a bare string is no longer a valid
+  // entry.
+  test('rejects the pre-scoping bare-string file entry shape', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: ['AGENTS.md'] }
+      })
+    ).toThrow()
+  })
+
+  test('rejects unknown keys on a file entry', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: [{ path: 'AGENTS.md', globs: ['**'] }] }
+      })
+    ).toThrow()
+  })
+
+  test('inline stays a single unscoped string', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: { inline: 'Repo-wide guidance' }
+    })
+
+    expect(parsed.instructions.inline).toBe('Repo-wide guidance')
+  })
+})
+
+// Spec 15, Mechanism 2. The block ships WITH its behaviour, off by default, and
+// refuses the one shape that would be a switch that lies: on, with nothing to read.
+describe('security.signals', () => {
+  test('is off by default and configures no artifact', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    expect(parsed.security.signals.enabled).toBe(false)
+    expect(parsed.security.signals.artifacts).toEqual([])
+    expect(parsed.security.signals.maxArtifactBytes).toBe(4_000_000)
+    expect(parsed.security.signals.maxAlerts).toBe(40)
+  })
+
+  test('accepts an enabled block with a repository-relative artifact', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      security: {
+        signals: {
+          enabled: true,
+          artifacts: [{ path: 'reports/analyzer.sarif.json' }]
+        }
+      }
+    })
+
+    expect(parsed.security.signals.artifacts[0]).toEqual({
+      path: 'reports/analyzer.sarif.json',
+      format: 'sarif'
+    })
+  })
+
+  test('rejects enabling the block with no artifact to read', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { signals: { enabled: true } }
+      })
+    ).toThrow(/no artifacts are configured/u)
+  })
+
+  test('rejects an artifact path that traverses above the repository', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: {
+          signals: {
+            enabled: true,
+            artifacts: [{ path: '../outside/analyzer.sarif.json' }]
+          }
+        }
+      })
+    ).toThrow(/traverse above root/u)
+  })
+
+  test('rejects an unknown artifact format', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: {
+          signals: {
+            enabled: true,
+            artifacts: [{ path: 'reports/a.json', format: 'json' }]
+          }
+        }
       })
     ).toThrow()
   })

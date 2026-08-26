@@ -1,13 +1,14 @@
 # 02: Capability Inventory
 
 Status: Approved
-Date: 2026-06-22
+Date: 2026-07-22
 
 Each capability is implementation-ready only when its linked spec sections
 define contracts, errors, permissions, observability, acceptance, and tests.
 R1 is intentionally LLM-centric: deterministic code provides safety, context,
 and corroboration signals, while semantic issue discovery is owned by a holistic
-whole-file review and a per-candidate refutation pass.
+whole-file review, a semantic finding merge, and a refutation pass batched per
+task.
 
 ## Inventory
 
@@ -22,20 +23,42 @@ whole-file review and a per-candidate refutation pass.
 | CAP-SKILL-001 | Mounted reviewer skills | ACT-DEV | Yes | `04-configuration-and-providers.md`, `07-security-privacy-operations.md` |
 | CAP-AI-001 | Holistic discovery | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, on by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `28-targeted-reads.md`, `04-configuration-and-providers.md` |
+| CAP-AI-010 | Discovery partitioning (a task's changed files spread across several discovery calls, candidates unioned) | ACT-MODEL, ACT-REVIEWER | Yes | `27-discovery-partitioning.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-011 | Reactive task splitting (a task is halved only when the provider refuses the packet) | ACT-MODEL | Yes | `26-reactive-task-splitting.md`, `05-review-workflow-and-runtime.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
-| CAP-REP-004 | GitHub PR review-comment artifact | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `06-evaluation-and-quality-gates.md` |
+| CAP-REP-004 | Platform-neutral review-comment artifacts (GitHub/GitLab/Bitbucket/generic renderers; on by default since 2026-08-11, every offered suggestion apply-checked against current bytes) | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `13-review-comments-and-suggestions.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-BASE-001 | Baseline matching | ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
+| CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection; on by default since 2026-08-11 with a provider set that no-ops when its inputs are absent — a product decision, UNMEASURED for recall) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
+| CAP-CTX-003 | Platform PR/MR context adapters (GitHub/GitLab/Bitbucket) | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md` |
+| CAP-CTX-005 | Read-only MCP context provider (e.g. JIRA) with tool-name allowlist | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md`, `07-security-privacy-operations.md` |
+| CAP-VERIFY-001 | Agentic verification flow (bounded read/list/grep agent, claim verdicts, corroboration) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
+| CAP-VERIFY-002 | Claim providers (claims-file, prior-findings) | ACT-CI, ACT-DEV | Yes | `12-verification-flow.md` |
+| CAP-VERIFY-003 | Analyzer (SARIF) and comment claim providers | ACT-CI, ACT-DEV | No | Later phase — `12-verification-flow.md` |
+| CAP-VERIFY-004 | Finding investigation and fix lane (current-findings claims, boolean finding judgment, apply-checked fix enrichment) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `04-configuration-and-providers.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-003 | Semantic judge matching | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
+| CAP-EVAL-005 | Real-repository evaluation corpus | ACT-OPS | Yes | `17-real-repository-eval-corpus.md`, `06-evaluation-and-quality-gates.md` |
+| CAP-EVAL-004 | Per-mechanism security measurement (recall/precision by CWE mechanism + context-depth, held-out anti-contamination) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `15-security-focused-review.md` |
+| CAP-EVAL-006 | Benchmark posture (`eval run` overrides that force the intended PR-review path) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
+| CAP-SEC-001 | Security review lens (generic OWASP/CWE checklist discovery, refutation-gated) | ACT-MODEL, ACT-REVIEWER | Yes | `15-security-focused-review.md`, `05-review-workflow-and-runtime.md` |
+| CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-IMPACT-001 | Change-impact review (`impact check` and an in-process lane of `review`, deterministic reference traversal, on by default since 2026-08-11) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
+| CAP-INTENT-001 | Intent-fulfilment review (`intent check` and an in-process lane of `review`, obligation extraction and per-obligation judgement, advisory-only, on by default since 2026-08-11) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `23-intent-fulfilment-review.md` |
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
+| CAP-DISC-002 | Discovery citations — the reviewer quotes the line a finding rests on and a deterministic verifier checks it (`review.citations`; its accuracy pre-registration landed on KEEP, DISABLED 2026-08-10, and the default was flipped ON 2026-08-11 as a separate product decision on readability — it did not pass the accuracy gate) | ACT-DEV, ACT-MODEL | Yes | `05-review-workflow-and-runtime.md` |
+| CAP-DISC-003 | Deterministic signal facts shown to discovery (`review.signalFacts`, off by default, measured null 2026-08-10) | ACT-MODEL | Yes | `05-review-workflow-and-runtime.md` |
+| CAP-CONV-001 | Review conversation — a reply nominates its finding for one independent re-adjudication (`reviewConversation`, off by default, unmeasured; the key is consumed by the GitHub pipeline in `scripts/github/`, not by the engine, so `eval run` cannot exercise it) | ACT-REVIEWER | Yes | `30-review-conversation.md` |
+| CAP-TEST-001 | Test-adequacy signal — changed source files with no paired test | ACT-DEV, ACT-REVIEWER | Yes | `29-test-adequacy-signal.md` |
 | CAP-PR-001 | Network PR comment publishing | ACT-REVIEWER | No | Future spec required |
 | CAP-FIX-001 | Automatic fix application | ACT-DEV | No | Future spec required |
 | CAP-UI-001 | Browser UI | ACT-DEV | No | Future spec required |
@@ -132,25 +155,88 @@ whole-file review and a per-candidate refutation pass.
 
 - Trigger: provider-backed review after deterministic support signals and task
   packets are assembled.
-- Contracts: a single recall-first whole-file review per task reads the unified
-  diff plus the full line-numbered changed files and emits `CandidateFinding[]`
-  directly (capped per task), not findings. Each candidate names a concrete
-  defect, its triggering path, and impact.
-- Side effects: provider calls only when model-backed review is configured.
-- Final state: every candidate is passed to refutation; raw candidates do not
-  become actionable on their own.
+- Contracts: a recall-first whole-file review per discovery partition reads the
+  partition's unified-diff segments plus the full line-numbered changed files and
+  emits `CandidateFinding[]` directly (capped per CALL), not findings. Each
+  candidate names a concrete defect, its triggering path, and impact. A finding
+  is dropped when its path is outside the paths its own call was shown.
+- Side effects: provider calls only when model-backed review is configured; one
+  general call per partition, plus one security call per partition when the
+  dedicated security pass is enabled, plus any call a provider refusal split.
+- Final state: every candidate is passed to the semantic merge and then to
+  refutation; raw candidates do not become actionable on their own.
 - Verification: hermetic provider fixture tests for candidate creation, schema
-  invalid output, and per-task candidate caps.
+  invalid output, per-call candidate caps, and out-of-partition path rejection.
+
+### CAP-AI-010 Discovery Partitioning
+
+- Trigger: provider-backed discovery whenever a task carries more review targets
+  than `aiReview.maxFilesPerDiscoveryCall` (default `2`).
+- Contracts: `27-discovery-partitioning.md`. Partitioning is by file count, never
+  by bytes. Each partition is a sub-task with its own synthetic task id and its
+  own narrowed `paths`; every partition receives the shared context the undivided
+  task would have had; candidates are unioned across partitions.
+- Side effects: more discovery and refutation provider calls per task. The
+  child-agent call budget scales with the partition count, since under-reserving
+  makes the workflow refuse a call mid-run.
+- Final state: a task within the limit produces exactly one partition and the run
+  is unchanged. Above it, the same code is reviewed across more calls, and a
+  finding stays restricted to the files its own call read.
+- Verification: partition unit tests for the inert case, path narrowing, context
+  routing (including referenced definitions, which are not parent review
+  targets), and the scaled call budget.
+
+### CAP-AI-011 Reactive Task Splitting
+
+- Trigger: a discovery call failing with the harness's normalised
+  `context_length_exceeded` reason.
+- Contracts: `26-reactive-task-splitting.md`. Assembly never splits on a byte
+  budget. Detection is the normalised reason only — never provider message text,
+  status codes, or any provider-specific shape. The task is halved and each half
+  retried from its own rebuilt context, bounded by recursion depth 6.
+- Side effects: additional sequential provider calls; a reported split count kept
+  distinguishable from transient retry.
+- Final state: halves keep their absolute line origins so a finding reports the
+  file's real line. A unit that cannot be halved and is still refused fails with
+  `review_task_indivisible` rather than being truncated or dropped.
+- Verification: split, depth-bound, line-origin, and indivisible-failure unit
+  tests.
+
+### CAP-AI-005 Semantic Finding Merge
+
+- Trigger: after every discovery candidate for a task exists and before
+  admission, for each file that carries two or more candidates. A file with
+  fewer than two candidates issues no call.
+- Contracts: a model call receives the candidates for one file together with
+  that file and returns groups of candidates that describe the same underlying
+  defect. It is never asked which candidate to discard, it treats proximity as
+  no evidence, and it defaults to not grouping when uncertain. The
+  representative of a group is selected deterministically in code by highest
+  severity, then most specific location, then lowest candidate index.
+- Side effects: one provider call per merging file; a separate call from
+  refutation.
+- Final state: each group yields exactly one candidate that continues to
+  refutation and admission; non-representative members are recorded as
+  `duplicate` rejected findings rather than dropped. A failed merge call is a
+  recovered provider issue and leaves every candidate ungrouped.
+- Verification: scripted-runner unit tests for grouping, for two distinct
+  defects sharing a line, for the single-candidate no-call rule, and for
+  degradation on call failure.
 
 ### CAP-AI-004 Refutation
 
 - Trigger: every model-origin candidate finding within reviewed scope before
-  admission.
+  admission. Candidates are grouped by the task that raised them and adjudicated
+  one batch per task, so a partitioned task produces one batch per partition.
+  Support-signal and out-of-scope candidates are decided by deterministic rules
+  and never cost a call.
 - Contracts: model-assisted or hermetic-test refutation uses only the provided
-  candidate, reviewed diff ranges, evidence, review context, support-signal
-  candidates, instructions, skills metadata, shared digest, and provenance to
-  prove or disprove the candidate (reachability, guards, framework semantics,
-  declared contracts, outside-scope status, evidence sufficiency).
+  candidates, reviewed diff ranges, evidence, review context (excluding the
+  change-intent brief), support-signal candidates, instructions, skills metadata,
+  and provenance to prove or disprove each candidate
+  (reachability, guards, framework semantics, declared contracts, outside-scope
+  status, evidence sufficiency). Each candidate receives its own verdict, and
+  sharing a call must not make one candidate's verdict depend on another's.
 - Side effects: provider calls and mediated repository reads only when
   configured; no publication or write authority.
 - Final state: `proved`, `refuted`, `needs-more-evidence`, or `provider-error`
@@ -158,6 +244,62 @@ whole-file review and a per-candidate refutation pass.
   rejected; `needs-more-evidence` is dispositioned by `promotionPolicy`.
 - Verification: tests with intentionally false candidates, guard-protected code,
   out-of-scope references, and provider failures.
+
+### CAP-AI-006 Agentic Cross-File Discovery
+
+- Trigger: `review.crossFileRetrieval.enabled`. On by default since 2026-08-01.
+- Contracts: `16-agentic-cross-file-discovery.md` and `28-targeted-reads.md`.
+  Discovery may call the mediated `repo_read`/`repo_list`/`repo_grep` tools,
+  bounded by a per-task tool-call cap enforced in code (default `100`, a runaway
+  guard rather than a ration). `repo_read` accepts an optional `startLine`/
+  `endLine` range so the reviewer narrows a large file itself.
+  `maxBytesPerRead` is UNSET by default: a read is not proactively cut, and when
+  an operator sets it, or a runaway guard binds, the cut is DISCLOSED in the tool
+  output rather than applied silently. A silently truncated read was the
+  mechanism behind three measurements that recorded this capability as harmful.
+- Side effects: additional bounded provider steps and mediated repository reads;
+  no shell, network, or write authority. Tool calls are agent steps, so they cost
+  no child-agent call budget.
+- Final state: disabled, discovery is single-shot with no tools and the run is
+  unchanged. Enabled, retrieved content is untrusted and its findings pass the
+  same refutation and admission as any other candidate.
+- Verification: cross-file tool, per-task scoping, truncation-disclosure, and
+  discovery wiring tests.
+
+### CAP-AI-007 Context Scout — withdrawn
+
+Removed on 2026-07-27, together with `specs/18-context-scout.md` and the
+`review.contextScout` configuration block. The identifier is retired and not
+reused. The scout was a separate pre-review call that chose extra symbols to
+include in the discovery packet; it is removed on mechanism, not on a failed
+result, because its only measurement is void. The reasoning is recorded under
+*Withdrawal Of The Context Scout* in `05-review-workflow-and-runtime.md`.
+
+### CAP-AI-008 Discovery Posture — withdrawn
+
+Removed on 2026-07-27, together with `specs/20-discovery-posture.md` and the
+`review.discoveryPosture` configuration key. The identifier is retired and not
+reused. The posture was an instruction segment that lowered the evidentiary bar
+the discovery reviewer applied to itself; its A/B failed the decision rule fixed
+in advance, and the intervention moved candidate count in the wrong direction. The
+measurement, and the reason it is not a verdict on the idea it came from, are
+recorded under *Measured Outcome Of The Withdrawn Discovery Posture* in
+`05-review-workflow-and-runtime.md`.
+
+### CAP-AI-009 Independent Discovery Sampling — withdrawn
+
+Removed on 2026-07-27, together with `specs/21-independent-sampling.md` and the
+`review.discoverySampleCount` configuration key. The identifier is retired and not
+reused. Discovery drew `k` mutually blind samples over an identical packet and
+unioned their candidates; at `k = 3` recall did not rise significantly while
+adjusted precision fell 0.819 → 0.628 at +67% cost, and the measurement falsified
+the spec's own premise — the harvestable union ceiling is ~4pp, not the assumed
+~20pp. The measurement, the fact that it bounds identical-input resampling only,
+and what survives the removal are recorded under *Measured Outcome Of The Withdrawn
+Independent Sampling* in `05-review-workflow-and-runtime.md`. The harness-wide
+suppression of conversation history arrived under this capability but is
+independent of it and is rehomed under *Harness Runtime → Conversation History* in
+the same spec.
 
 ### CAP-ADM-001 Admission Gate
 
@@ -204,29 +346,41 @@ whole-file review and a per-candidate refutation pass.
 - Verification: SARIF schema validation, GitHub-target subset validation when
   configured, and redaction snapshot tests.
 
-### CAP-REP-004 GitHub PR Review-Comment Artifact
+### CAP-REP-004 Platform-Neutral Review-Comment Artifacts
 
-- Trigger: review completion when `reporting.formats` includes
-  `github-review-comments`.
-- Contract: renders a deterministic local JSON array of GitHub review-comment
-  drafts from actionable admitted findings only.
-- Preconditions: admitted finding has `reporterEligibility = inline`, a
-  resolvable new-side diff location, a `proved` refutation result, and severity
-  at or above the configured inline threshold.
-- Side effects: writes `github-review-comments.json` in the run artifact
-  directory only. It performs no network IO and does not publish comments.
-- Final state: each comment draft carries repository-relative path, line or
-  start-line range, side, redacted body, source finding ID, and optional manual
-  suggestion block when safe.
+- Trigger: review completion when `reporting.reviewComments.enabled` is `true`
+  (`13-review-comments-and-suggestions.md`).
+- Contract: renders a deterministic neutral `review-comments.json` and a
+  platform-rendered `review-comments.<platform>.json` from actionable admitted
+  findings only. The platform is resolved from config, then CI environment, then
+  the git remote host, then `generic`.
+- Preconditions: admitted finding has `reporterEligibility = inline` (which
+  admission grants only to a location that anchors to a changed new-side line —
+  a `side = "new"` range overlapping a hunk, or a `side = "file"` line inside
+  one), a `proved` refutation result, and severity at or above the configured
+  inline threshold.
+- Side effects: writes the artifacts in the run artifact directory only. It
+  reads environment variables and the git remote for detection, and the current
+  bytes of a file a suggestion would edit — for the apply-check and nothing
+  else. No network IO, and it does not publish comments.
+- Final state: each neutral draft carries repository-relative path, new-side
+  target range, redacted body, source finding ID, and a structured suggestion
+  when a single safe fix edit maps to the range **and still applies to the file
+  as it is now**; renderers add per-platform syntax. A set that no longer applies,
+  or that could not be checked, is withheld with the body saying which of the two
+  happened.
 - Verification: renderer tests for actionable, artifact-only, refuted,
-  ineligible, old-side, and unsafe multi-edit fix cases.
+  ineligible, old-side, and unsafe multi-edit fix cases, plus both directions of
+  the apply-check.
 
 ### CAP-BASE-001 Baseline Matching
 
 - Trigger: after admission, before reporting and quality gates.
 - Contracts: uses `FindingFingerprint` values and baseline config.
-- Side effects: reads configured baseline path when present; future write/update
-  command requires a separate spec.
+- Side effects: reads configured baseline path when present. Writing the baseline
+  is a separate explicit operation, `codereviewer baseline write`, defined under
+  *Baseline Generation* in `05-review-workflow-and-runtime.md`; the `review`
+  command must never write it.
 - Final state: admitted findings are marked new, existing, or unknown; resolved
   baseline entries are available in reports when configured.
 - Verification: baseline fixture tests for new, existing, resolved, and missing
@@ -275,21 +429,129 @@ whole-file review and a per-candidate refutation pass.
 
 ### CAP-EVAL-003 Semantic Judge Matching
 
-- Trigger: `codereviewer eval run --semantic-judge`.
-- Side effects: provider calls for eval matching only.
-- Final state: benchmark-parity matching metadata is recorded separately from
-  production admission decisions.
-- Verification: hermetic provider fixture semantic-judge tests.
+- Trigger: `codereviewer eval run` scoring a case that declares expected
+  findings, with a configured provider.
+- Side effects: provider calls for eval matching and judge calibration only.
+- Final state: every expected-finding match carries a judge decision and reason,
+  judge agreement and trustworthiness are recorded, undecided pairs are reported
+  as inconclusive, and a case with expected findings and no judge fails with a
+  config error. Matching metadata is recorded separately from production
+  admission decisions.
+- Verification: hermetic scripted-judge matcher, calibration, and CLI tests.
 
-### CAP-EVAL-004 Benchmark Posture
+### CAP-EVAL-005 Real-Repository Evaluation Corpus
+
+- Trigger: `codereviewer eval run` against the real-repository corpus under
+  `eval/corpora/`.
+- Contracts: `17-real-repository-eval-corpus.md`.
+- Side effects: provider calls for review and judge scoring; local eval artifacts
+  only.
+- Final state: recall and precision are measured against cases derived from real
+  repository history rather than hand-authored fixtures.
+- Verification: corpus manifest and eval runner tests.
+
+### CAP-EVAL-004 Per-Mechanism Security Measurement
+
+**One id named two capabilities until 2026-08-14.** The inventory row above assigned
+CAP-EVAL-004 to per-mechanism security measurement while the detail section below
+assigned it to Benchmark Posture. They are unrelated, and each was missing the other's
+half: this capability had a row and no detail section, Benchmark Posture had a detail
+section and no row, so a ticket or readiness review tracing the id resolved to two
+incompatible definitions. Benchmark Posture is now **CAP-EVAL-006** and has a row; no
+other document referenced either id.
+
+- Trigger: `codereviewer eval run` over the security corpus; reported per CWE
+  mechanism and per context depth.
+- Contracts: `15-security-focused-review.md` — *Measure By Mechanism Or Do Not
+  Claim Security* (rates by mechanism and by context depth), the bounded-rate rule
+  (*"a per-mechanism precision rate is published only when it is bounded"*; an
+  unbounded rate is `null` and the counts are what a reader uses), and the
+  anti-contamination policy (temporal cutoff, held-out seed unpublished and rotated).
+  `06-evaluation-and-quality-gates.md` owns the runner, the split declaration and the
+  `contaminationNote` requirement.
+- Preconditions: a corpus whose expected findings and detectors are labelled by
+  mechanism. Improvements are decided on the held-out set; the dev set is for
+  iteration only.
+- Side effects: provider calls for review and for eval matching/judging.
+- Final state: per-mechanism and per-depth rates on the eval report, each either
+  bounded or `null` with counts.
+- Verification: eval scoring and corpus manifest tests, plus spec 15's own recorded
+  divergences.
+
+### CAP-EVAL-006 Benchmark Posture
 
 - Trigger: `codereviewer eval run --review-mode pr --review-depth thorough`.
-- Side effects: provider calls for review, and optional semantic eval matching
-  when `--semantic-judge` is also supplied.
+- Side effects: provider calls for review, plus semantic eval matching and judge
+  calibration whenever a provider is configured.
 - Final state: benchmark runs can force the intended PR-review path without
   changing repository config. The default costly benchmark script uses this
   posture.
 - Verification: focused eval CLI override tests and package-script tests.
+
+### CAP-IMPACT-001 Change-Impact Review
+
+- Trigger: `codereviewer impact check`, and — since the lane moved in-process —
+  every `review` run with the capability enabled (`src/cli/advisory-lanes.ts`).
+- Contracts: `22-change-impact-review.md`. Deterministic reference traversal only;
+  no provider call. Bounded by `changeImpact.maxChangedSymbols`,
+  `maxReferenceCandidatesPerSymbol` (what the search collects),
+  `maxReferencesPerSymbol` (what the report lists, selected from those), and
+  `maxSearchDepth`.
+- Preconditions: `changeImpact.enabled`, **on by default since 2026-08-11**. When
+  disabled the command still exits `0` and reports itself disabled rather than
+  erroring, and the in-process lane runs nothing at all — not even a git call.
+- Side effects: repository reads only, all through the mediated retriever so
+  path containment, the eligibility gate, and redaction apply. A completed run
+  also writes `impact-report.md` and `impact-report.json` into an
+  `<artifactDir>/impact-<uuid>/` run directory, which is not entered in the run
+  index; a `disabled` run writes nothing.
+- Final state: exit `0` with the impact summary, or a structured error.
+- Verification: change-impact traversal and CLI tests.
+
+### CAP-INTENT-001 Intent-Fulfilment Review
+
+- Trigger: `codereviewer intent check`, and — since the lane moved in-process —
+  every `review` run with the capability enabled (`src/cli/advisory-lanes.ts`).
+- Contracts: `23-intent-fulfilment-review.md`. One extraction call, one judgement
+  call per obligation, one explanation call per run. `maxObligations` is the
+  primary spend bound and refuses rather than truncating when it binds.
+- Preconditions: `intentFulfilment.enabled`, **on by default since 2026-08-11**.
+  When disabled, or enabled with no provider configured, the lane reports that
+  rather than failing: nothing in it can fail the run.
+- What defaulting it on costs, corrected 2026-08-14. This entry read *"Defaulting it
+  on therefore costs a repository without a model provider nothing but a stated
+  status."* That is true and it is an argument about the population where the lane is
+  **inert**, offered for a default that only spends on the complementary population —
+  every repository that has a provider. For those, a default `review` issues one
+  extraction call, one judgement call **per obligation** (`maxObligations` default
+  100), and one explanation call. The bound is `review.maxCostUsd`, consumed as
+  headroom after the review's own spend (spec 04, *One Ceiling, Consumed As
+  Headroom*); with no cap configured there is no bound, which is the same position
+  the review itself is in.
+- Side effects: provider calls, and on a completed run `intent-report.md` and
+  `intent-report.json` written into an `<artifactDir>/intent-<uuid>/` run
+  directory, which is not entered in the run index. Every non-completed outcome
+  writes nothing.
+- Final state: advisory only. The command MUST NOT be able to fail a pipeline on
+  fulfilment grounds, and that is a requirement rather than a default: there is
+  deliberately no `blocking` configuration key, because the measured spurious-
+  rejection rate of model requirement-conformance judgement is not accurate
+  enough to gate on.
+- Verification: extraction, judgement, and CLI tests.
+
+### CAP-CONF-001 Invariant-Conformance Review — withdrawn
+
+Removed on 2026-08-02, together with the `conformance check` command, the
+`invariant-conformance` and `declaration-analysis` domains, the
+`invariantConformance` configuration block and the GitHub-integration stage. The
+identifier is retired and not reused. Step 1 of spec 24's own evaluation was run
+for the first time that day and the capability fired **7.0 reports per PR-sized
+range against a pre-registered kill criterion of ≈0.5** — 14x over — with **zero
+true positives across roughly 300 hand-judged divergences from five codebases**.
+The adjudicator cleared its own ≥95% rejection rule at 97.5% and every divergence
+it accepted was a false positive, so the rule it passed measured its silence
+rather than its judgement. `specs/24-invariant-conformance-review.md` is kept as a
+withdrawn spec and records the measurement in full.
 
 ### CAP-GATE-001 Quality Gate Result
 

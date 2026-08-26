@@ -1,0 +1,149 @@
+# Pull-request gate. Runs the four checks AGENTS.md requires of every change
+# (typecheck, tests, build, generated-artifact drift) plus a packaging check, so
+# a broken tarball is caught on the PR rather than on release day.
+#
+# This workflow needs no secrets. Nothing here contacts a model provider:
+# `npm test` is hermetic by design, and the live suite (`test:live`) is a
+# separate script that is deliberately not run in CI.
+name: PR checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Read-only. A PR from a fork gets the same token scope as one from a branch.
+permissions:
+  contents: read
+
+# A new push to the same PR supersedes the previous run.
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Single Node version, from `.nvmrc`. The project targets one runtime on
+      # purpose: `@purista/harness` requires >=24.15.0 and `engines.node`
+      # declares the same floor, so a matrix would only test versions this
+      # package refuses to install on.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      # `test:coverage`, not `test`. The thresholds in `vitest.config.ts` were
+      # configured and then run by nothing — no npm script and no workflow step —
+      # so the docs said coverage was "enforced at 80%" while a change could drop
+      # it to any figure and stay green. Same suite, same runtime; the only
+      # difference is that the floor now has something standing on it.
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Check generated schemas are up to date
+        run: npm run generate:schemas:check
+
+      # Documentation is a shipped artefact here: the README goes in the tarball,
+      # and the specs are the contract the implementation is held to. `drift check`
+      # fails on dead local links, stale artefact paths and documented commands the
+      # CLI does not dispatch. It runs from the build above rather than via tsx, so
+      # it exercises the same entry point users get.
+      - name: Check documentation drift
+        run: node dist/cli/main.js drift check
+
+      # `npm pack` runs `prepack`, which rebuilds `dist/` from a clean slate, so
+      # this proves the tarball matches the source rather than a stale build.
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP/pack"
+          mkdir -p "$PACK_DIR"
+          npm pack --pack-destination "$PACK_DIR" > /dev/null
+          TARBALL="$(find "$PACK_DIR" -name '*.tgz' -print -quit)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "Packed $TARBALL"
+          tar -tzf "$TARBALL" | sort
+
+      # Installs the tarball into an empty directory, so it exercises what a
+      # consumer gets — `files`, `bin`, `exports` and the whole module graph —
+      # and not the working tree.
+      #
+      # The CLI has no `--help`: unknown options are rejected on purpose (see
+      # `src/cli/args.ts`), so the no-op invocations are a bare call, which must
+      # fail with the usage contract, and `config validate`, which resolves the
+      # default configuration and contacts no provider.
+      - name: Smoke test the packed artefact
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          SMOKE_DIR="$(mktemp -d)"
+          cd "$SMOKE_DIR"
+          npm init --yes > /dev/null
+          npm install "$TARBALL" --no-audit --no-fund
+
+          CLI="$SMOKE_DIR/node_modules/.bin/codereviewer"
+          test -x "$CLI" || { echo "::error::bin/codereviewer is missing or not executable"; exit 1; }
+
+          set +e
+          USAGE_OUTPUT="$("$CLI" 2>&1)"
+          USAGE_STATUS=$?
+          set -e
+          if [ "$USAGE_STATUS" -ne 2 ] || ! printf '%s' "$USAGE_OUTPUT" | grep -q 'usage_error'; then
+            echo "::error::bare invocation should exit 2 with a usage_error; got $USAGE_STATUS: $USAGE_OUTPUT"
+            exit 1
+          fi
+
+          "$CLI" config validate > /dev/null
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer')"
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer/cli')"
+          echo "Packed artefact runs."
+
+          # The published DECLARATIONS must compile for a consumer too, which the
+          # runtime imports above cannot tell us. Three shipped declarations name
+          # `Buffer` in a public type position, and they once raised TS2591 inside
+          # our own `.d.ts` for anyone whose tsconfig did not set `"types":
+          # ["node"]` — a fix no consumer could guess. This compiles a real
+          # consumer with NO `types` field and NO `@types/node` of its own, so it
+          # fails if the types entry ever stops carrying the Node reference.
+          npm install --no-audit --no-fund typescript
+          cat > tsconfig.json <<'JSON'
+          {
+            "compilerOptions": {
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "strict": true,
+              "noEmit": true
+            },
+            "include": ["consumer.ts"]
+          }
+          JSON
+          cat > consumer.ts <<'TS'
+          import { projectName } from '@sebastianwessel/codereviewer'
+          import type { CliResult } from '@sebastianwessel/codereviewer/cli'
+          export const result: CliResult = {
+            exitCode: 0,
+            stdout: projectName,
+            stderr: ''
+          }
+          TS
+          ./node_modules/.bin/tsc --noEmit
+          echo "Published declarations compile for a consumer."

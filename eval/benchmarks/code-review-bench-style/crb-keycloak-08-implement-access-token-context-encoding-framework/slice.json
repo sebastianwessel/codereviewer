@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "critical",
       "semanticSummary": "Wrong parameter in null check (grantType vs. rawTokenId)",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -30,6 +32,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "In isAccessTokenId, the substring for the grant shortcut and the equality check look inverted: the grant shortcut occupies indices 4–5 (substring(4,6)), and a match should return true (combined with UUID check), not false.",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "logic"
     },

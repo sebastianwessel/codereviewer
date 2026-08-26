@@ -1,5 +1,5 @@
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import {
   isModelProposedCandidate,
   rejectedFindingForOutOfDiffScope
@@ -13,26 +13,19 @@ export const supportSignalArtifactOnlyCandidateIds = (
   candidates: readonly CandidateFinding[]
 ): readonly string[] =>
   candidates
-    .filter(
-      (candidate) =>
-        !isModelProposedCandidate(candidate) &&
-        candidate.proposedBy !== 'deterministic-trusted-rule'
-    )
+    .filter((candidate) => !isModelProposedCandidate(candidate))
     .map((candidate) => candidate.id)
 
 export const noRefuterAdmissionOutcome = (input: {
   readonly candidates: readonly CandidateFinding[]
   readonly workflowEvidence: readonly EvidenceRecord[]
 }): AdmissionCandidateOutcome => ({
+  ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: input.candidates,
   evidence: input.workflowEvidence,
-  rejectedFindings: [],
-  admissionDecisions: [],
   artifactOnlyCandidateIds: supportSignalArtifactOnlyCandidateIds(
     input.candidates
-  ),
-  refutationResults: [],
-  providerIssues: []
+  )
 })
 
 export const supportSignalCandidateOutcome = (
@@ -40,8 +33,7 @@ export const supportSignalCandidateOutcome = (
 ): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: [candidate],
-  artifactOnlyCandidateIds:
-    candidate.proposedBy === 'deterministic-trusted-rule' ? [] : [candidate.id]
+  artifactOnlyCandidateIds: [candidate.id]
 })
 
 export const outOfDiffScopeOutcome = (

@@ -1,4 +1,4 @@
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 
 export type ReviewRunnerProvenanceHashes = {
   readonly instructionHashes: readonly string[]

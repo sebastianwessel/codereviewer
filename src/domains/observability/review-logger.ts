@@ -22,6 +22,46 @@ export type ReviewLogSink = {
 const forbiddenLogKeyPattern =
   /(?:body|content|credential|env|environment|header|input|key|output|password|prompt|raw|request|response|secret|snippet|token)/iu
 
+// A short, explicit set of field names the key pattern would otherwise refuse,
+// each paired with the ONLY value type it may carry. The same exemption the
+// no-content recorder makes for `inputTokens`/`outputTokens`, in the snake_case
+// spellings the log call sites actually emit.
+//
+// This is not a loosening of the guard. The pattern asks "could this key name a
+// place content hides?", which is the right question for a free-form name and the
+// wrong one for `input_tokens`: a count of tokens is a number, and a number of
+// tokens discloses nothing about which tokens. `adjudication_requested` is the
+// same shape one step further — it trips on "request" while carrying a boolean
+// saying whether adjudication was asked for, never anything that was requested.
+// Because the pattern could not tell those apart, spec 07's required run-log
+// counts were deleted from every line that carried them.
+//
+// Two properties keep this safe, and both are load-bearing:
+//   - membership is by EXACT key, never by pattern, so no new name is admitted by
+//     resembling one of these;
+//   - an admitted key still has to carry its declared primitive type. A string
+//     parked under `input_tokens` is refused exactly as before, so the exemption
+//     cannot become a channel by changing the value's type.
+const exemptLogKeyValueTypes: ReadonlyMap<string, 'number' | 'boolean'> = new Map([
+  ['input_tokens', 'number'],
+  ['output_tokens', 'number'],
+  ['adjudication_requested', 'boolean']
+])
+
+const isExemptLogField = (key: string, value: unknown): boolean =>
+  exemptLogKeyValueTypes.get(key) === typeof value
+
+// What replaces a value refused by the key pattern. The KEY is kept and only the
+// value is replaced, rather than the pair being removed: a removed pair vanishes
+// without trace, so a reader of the line cannot tell a field that was withheld
+// from one the caller never emitted — which is the same silent-absence shape the
+// redaction rules exist to prevent, turned on the redactor itself. Nothing about
+// the value is disclosed, so the guarantee is unchanged.
+//
+// Deliberately worded without any term the pattern itself matches, so the marker
+// can never be mistaken for the thing it replaced.
+const droppedByKeyName = '[dropped: field name is not log-safe]'
+
 const maxStringLength = 500
 
 const noopLogger: Logger = {
@@ -35,8 +75,8 @@ const noopLogger: Logger = {
 }
 
 const sanitizeLogValue = (key: string, value: unknown): unknown => {
-  if (forbiddenLogKeyPattern.test(key)) {
-    return undefined
+  if (forbiddenLogKeyPattern.test(key) && !isExemptLogField(key, value)) {
+    return droppedByKeyName
   }
 
   if (

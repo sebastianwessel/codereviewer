@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type EvidenceRecord,
-  type RefutationResult
+import type { CandidateFinding } from '../../../admission/index.js'
+import type {
+  EvidenceRecord,
+  RefutationResult
 } from '../../../../shared/contracts/index.js'
-import { type FindingRefutationResult } from '../agent-contracts.js'
+import type { FindingRefutationResult } from '../agent-contracts.js'
 import { activeRefutationResultForCandidate } from './result.js'
 import {
   admissibleRefutationOutcome,
@@ -30,7 +30,7 @@ const candidate = (): CandidateFinding => ({
 
 const refutationEvidence: EvidenceRecord = {
   id: 'ev_refutation1',
-  kind: 'refutation',
+  kind: 'model-rationale',
   summary: 'The proof was checked.',
   source: 'review-agent',
   redactionApplied: true

@@ -1,0 +1,1643 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "intent-fulfilment-prewritten",
+  "description": "Intent-fulfilment cases (spec 23 §Evaluation) built from THIS repository's own history. The stated intent of a pre-written case is a verbatim slice of a `specs/*.md` section as it existed at a commit that is a strict ancestor of the change under test: a document approved before the implementation existed, written in the register a real ticket is, several sections of which contain clauses the project genuinely never implemented. The post-hoc arm judges the SAME diffs against each change's own commit message, and exists only to isolate intent provenance from case difficulty; the two arms are reported separately and never pooled. Every expectation is the fixed human enumeration of what a human read in the excerpt and found genuinely not done at head - never an engine's output, and never extended because a run surfaced something new. No case is synthetic: nothing was removed from, added to, or reworded in any excerpt to manufacture a leftover. Hydration is local git only: every commit named here is in this repository's history, so the corpus needs no network and spends nothing to materialise.",
+  "curation": {
+    "note": "Transcribed from the surviving instrument at `.codereviewer/eval/intent-corpus-realistic/`, which is gitignored and could not be reproduced from a clean checkout. Its case definitions and its fixed human enumeration are committed here; its PER-OBLIGATION hand labels are not, because those were written against engine-produced statements joined by positional obligation id and cannot be carried to a fresh run. The 21 pre-written cases were built from 13 commits across specs 05/11/13/15/19/20/21/22/23/24/25.",
+    "rejections": [
+      {
+        "candidate": "The per-obligation `truth` labels in `ground-truth.mjs` (roughly 470 rows)",
+        "reason": "They label statements an extraction produced, addressed by positional id (`obl_1`..`obl_N` in report order), which do not survive a re-run. Committing them would either fix the answer key to one stored round or require matching a hand label onto a statement a human never read - and the statements themselves are engine output, which this project forbids as a source of ground truth."
+      },
+      {
+        "candidate": "The commit-message corpus at `.codereviewer/eval/intent-corpus/`",
+        "reason": "Its own README records that obligations extracted from a commit message are addressed by construction, and that three rounds of measurement found ZERO genuinely-unaddressed obligations in its real arm. Its diffs survive here as the post-hoc control arm; its cases do not."
+      },
+      {
+        "candidate": "`pw08-spec15-signals` item 5 - \"no EvidenceRecord is produced by a security detection\"",
+        "reason": "It shares a source line with item 4 (\"no security support signal is emitted\"): one sentence asks for both, and no sentence boundary separates them. Anchors must partition the excerpt so one reported obligation cannot answer for two rows, so the less specific of the pair is left out rather than given an invented boundary."
+      },
+      {
+        "candidate": "`pw10-spec15-accept` item 2 - \"the acceptance bar 'before any detector ships' is breached\"",
+        "reason": "It is a statement about the same acceptance clause item 1 already anchors, not a second clause. Splitting one bullet across two rows would double-count a single reported obligation."
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "pw01-spec20-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "path": "specs/20-discovery-posture.md",
+        "title": "Spec 20: Discovery Posture — purpose, design, requirements",
+        "lineRanges": [
+          [
+            1,
+            55
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "headCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 9,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "pw02-spec20-matrix",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "path": "specs/20-discovery-posture.md",
+        "title": "Spec 20: Discovery Posture — measurement and verification matrix",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            72,
+            108
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "headCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 11,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the precise-vs-investigative measurement itself (three seeds, real-repository corpus, paired significance) is not run",
+          "intentLineRanges": [
+            [
+              74,
+              75
+            ]
+          ],
+          "rationale": "The clause names a concrete measurement — precise against investigative, three seeds each, real-repository corpus, paired finding-level significance. The change ships the posture and runs no arm of it, so the measurement the section asks for does not exist at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw03-spec21-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "path": "specs/21-independent-sampling.md",
+        "title": "Spec 21: Independent Sampling With Union Merge — purpose, design, requirements",
+        "lineRanges": [
+          [
+            1,
+            52
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30",
+        "headCommit": "ea100d91018496fde4addb7de259c527682080a6"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 12,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "pw04-spec21-matrix",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "path": "specs/21-independent-sampling.md",
+        "title": "Spec 21: Independent Sampling — honest limits, measurement, verification matrix",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            82,
+            119
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30",
+        "headCommit": "ea100d91018496fde4addb7de259c527682080a6"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 14,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the ~67% union figure is not re-measured on the current corpus",
+          "intentLineRanges": [
+            [
+              86,
+              87
+            ]
+          ],
+          "rationale": "The clause says the ~67% union figure was measured on a different corpus and configuration and MUST be re-measured rather than quoted. No re-measurement exists at head; the figure is still the one the clause refuses.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "the k=1 against k=3 measurement is not run",
+          "intentLineRanges": [
+            [
+              94,
+              95
+            ]
+          ],
+          "rationale": "The clause asks for the k=1 against k=3 arms, three seeds each, on the real-repository corpus with paired significance. The change adds the sampling capability and runs neither arm.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "it is not run on top of a selected discovery posture, because no posture has been selected",
+          "intentLineRanges": [
+            [
+              96,
+              97
+            ]
+          ],
+          "rationale": "The clause requires the arms to be run on top of whichever discovery posture spec 20 selects. No posture has been selected, so the condition the measurement is scoped by does not hold at head and the measurement is not run under it.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "the variance across seeds is not reported for either arm",
+          "intentLineRanges": [
+            [
+              107,
+              108
+            ]
+          ],
+          "rationale": "The clause requires the variance across seeds to be reported for both arms, calling reduced spread a claimed benefit that must be shown rather than assumed. No seed-variance figure is reported for either arm, because the arms were never run.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw05-spec25-trigger",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "2dbc705c66eaa80b9089b4977be8e3a268363fa0",
+        "path": "specs/25-guarded-region-context.md",
+        "title": "Spec 25: Guarded-Region Context — purpose, trigger, design, requirements",
+        "lineRanges": [
+          [
+            1,
+            11
+          ],
+          [
+            86,
+            170
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "e13a12128aa0f369f2bc653255079b03bad6b894",
+        "headCommit": "4c1e9ddb1e615dad14929e36d3004d5e4ece1fc1"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 20,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the second trigger shape — \"a call whose position is terminal for the declaration\" — is not implemented, and the module header says so",
+          "intentLineRanges": [
+            [
+              92,
+              93
+            ]
+          ],
+          "rationale": "The clause makes a changed declaration qualify on either of two trait shapes, the second being a call whose position is terminal for the declaration. Only the first shape is implemented, and the module header at head says so.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw06-spec25-measure",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "2dbc705c66eaa80b9089b4977be8e3a268363fa0",
+        "path": "specs/25-guarded-region-context.md",
+        "title": "Spec 25: Guarded-Region Context — measurement plan and relationship to spec 24",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            171,
+            218
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "e13a12128aa0f369f2bc653255079b03bad6b894",
+        "headCommit": "4c1e9ddb1e615dad14929e36d3004d5e4ece1fc1"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 12,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the three arms (0, A, B) are not run at all",
+          "intentLineRanges": [
+            [
+              177,
+              183
+            ]
+          ],
+          "rationale": "The clause defines three paired arms — 0 baseline, A trigger and signal only, B one-hop cross-file expansion — to be run with eval-significance.ts. None of the three is run in this change.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "cost is neither recorded nor reported for any arm",
+          "intentLineRanges": [
+            [
+              196,
+              197
+            ]
+          ],
+          "rationale": "The clause requires cost to be recorded and reported, and sets a referral bar at +25%. Cost is neither recorded nor reported for any arm.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the +/-4.8pp not-a-result band is not applied to anything",
+          "intentLineRanges": [
+            [
+              187,
+              188
+            ]
+          ],
+          "rationale": "The clause fixes a measured variance band (sd 2.4pp, 4.8pp on the wider sweep) and rules that a recall movement inside ±4.8pp is not a result. Nothing at head applies that band to anything, because no arm produced a movement to test against it.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw07-spec15-lens",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0005b95d8d8f311ba911d7be3c4f90c2c570b377",
+        "path": "specs/15-security-focused-review.md",
+        "title": "Spec 15: Security review — the non-negotiable and mechanism 1, the security lens",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            28,
+            37
+          ],
+          [
+            98,
+            117
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "fc16b2b82cd988a1a0c6199750c2da72ee648254",
+        "headCommit": "888e78bae02ac0160212a2de1375bb11e976f756"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 13,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "no improvement is shown to generalize on a held-out set — no held-out set exists",
+          "intentLineRanges": [
+            [
+              35,
+              36
+            ]
+          ],
+          "rationale": "The clause requires any improvement to be shown to generalize on a held-out set rather than on the set it was built against. No held-out set exists at head, so nothing can be shown on one.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "the lens's effect on precision is not measured in this change",
+          "intentLineRanges": [
+            [
+              113,
+              114
+            ]
+          ],
+          "rationale": "The clause says the lens's precision is protected by refutation and admission, and measured. The change adds the lens and measures no precision effect for it.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw08-spec15-signals",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0005b95d8d8f311ba911d7be3c4f90c2c570b377",
+        "path": "specs/15-security-focused-review.md",
+        "title": "Spec 15: Security review — mechanism 2, bounded agentic evidence, observability",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            118,
+            150
+          ],
+          [
+            159,
+            170
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "888e78bae02ac0160212a2de1375bb11e976f756",
+        "headCommit": "56099a79b129a4cb257245615b00426beb99317c"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 13,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "no deterministic security source/sink/sanitizer detector exists",
+          "intentLineRanges": [
+            [
+              120,
+              121
+            ]
+          ],
+          "rationale": "The clause asks for a generic, deterministic detector producing typed evidence on the analyzers-find-paths principle. No deterministic security source/sink/sanitizer detector exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "nothing runs on the ast-grep AST for this purpose",
+          "intentLineRanges": [
+            [
+              123,
+              125
+            ]
+          ],
+          "rationale": "The clause requires the language-neutral source/sink/sanitizer detection to run on the existing ast-grep AST, whose pattern API it names as supporting the needed metavariable queries. Nothing runs on the ast-grep AST for this purpose.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "nothing runs on the TypeScript AST for this purpose",
+          "intentLineRanges": [
+            [
+              126,
+              126
+            ]
+          ],
+          "rationale": "The same clause additionally requires the detection to run on the TypeScript AST for TS and JS. Nothing runs on the TypeScript AST for this purpose.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "no security support signal is emitted",
+          "intentLineRanges": [
+            [
+              127,
+              127
+            ]
+          ],
+          "rationale": "The clause requires each detection to emit a support signal. No security support signal is emitted at head, because no detection exists to emit one.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-6",
+          "statement": "ruleId / cwe / helpUri are still unused contract fields",
+          "intentLineRanges": [
+            [
+              128,
+              128
+            ]
+          ],
+          "rationale": "The clause names ruleId, cwe and helpUri as already-defined but unused contract fields that the evidence record must populate. They are still unused at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-7",
+          "statement": "relatedLocations / dataFlow / securitySeverity are still unused contract fields",
+          "intentLineRanges": [
+            [
+              129,
+              130
+            ]
+          ],
+          "rationale": "The same clause names relatedLocations, ordered dataFlow and securitySeverity as the remaining unused contract fields to populate. They are still unused at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-8",
+          "statement": "mechanism 2 does not exist to be deterministic, reproducible or measured",
+          "intentLineRanges": [
+            [
+              137,
+              138
+            ]
+          ],
+          "rationale": "The clause requires mechanism 2 to be deterministic and reproducible, and off by default until measured to help on the held-out set without materially reducing precision. Mechanism 2 does not exist at head, so it is none of those things.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw09-spec15-measure",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0005b95d8d8f311ba911d7be3c4f90c2c570b377",
+        "path": "specs/15-security-focused-review.md",
+        "title": "Spec 15: Security review — measurement first, anti-contamination, mechanisms",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            38,
+            97
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "0005b95d8d8f311ba911d7be3c4f90c2c570b377",
+        "headCommit": "fc16b2b82cd988a1a0c6199750c2da72ee648254"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 16,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "adjusted precision per mechanism and per context-depth is NOT reported — the commit states it is deliberately absent because admitted findings carry no mechanism label",
+          "intentLineRanges": [
+            [
+              46,
+              48
+            ]
+          ],
+          "rationale": "The clause requires the evaluation to report recall and adjusted precision per mechanism and per context-depth, not one aggregate security tier. Adjusted precision per mechanism is not reported, and the measurement commit states it is deliberately absent because admitted findings carry no mechanism label.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "no held-out security set is assembled",
+          "intentLineRanges": [
+            [
+              52,
+              54
+            ]
+          ],
+          "rationale": "The clause requires labels to be applied to a small held-out set assembled under the anti-contamination policy. No held-out security set is assembled at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "improvements are therefore not decided on a held-out set",
+          "intentLineRanges": [
+            [
+              55,
+              55
+            ]
+          ],
+          "rationale": "The clause requires improvements to be decided on the held-out set, with the dev set for iteration only. With no held-out set, no improvement is decided on one.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "no temporal cutoff against the model training cutoff exists",
+          "intentLineRanges": [
+            [
+              61,
+              62
+            ]
+          ],
+          "rationale": "The clause requires held-out cases to be derived only from fixes dated after the evaluated model's training cutoff, re-freshened each model generation. No temporal cutoff against a model training cutoff exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "no chronological split discipline exists",
+          "intentLineRanges": [
+            [
+              63,
+              64
+            ]
+          ],
+          "rationale": "The clause requires a chronological split rather than a random one, because near-duplicate fixes leak across a random split. No chronological split discipline exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-6",
+          "statement": "no exact / near-duplicate / derivative dedup exists",
+          "intentLineRanges": [
+            [
+              65,
+              66
+            ]
+          ],
+          "rationale": "The clause requires exact, near-duplicate (token-normalized) and derivative dedup, and dedup against likely-public popular repositories. No such dedup exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-7",
+          "statement": "famous CVEs are not excluded by any rule",
+          "intentLineRanges": [
+            [
+              67,
+              67
+            ]
+          ],
+          "rationale": "The clause requires famous and high-profile CVEs to be excluded as memorized. No rule at head excludes them.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-8",
+          "statement": "nothing holds the answer key out of the prompt for a held-out case",
+          "intentLineRanges": [
+            [
+              68,
+              69
+            ]
+          ],
+          "rationale": "The clause requires the answer key to be held out of the prompt — only the pre-fix diff and the intent, never the CVE id, advisory text or fix commit message. Nothing at head holds the answer key out of the prompt for a held-out case.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-9",
+          "statement": "no unpublished, partially-rotated held-out seed exists",
+          "intentLineRanges": [
+            [
+              70,
+              70
+            ]
+          ],
+          "rationale": "The clause requires the held-out seed to be kept unpublished with a fraction rotated each cycle. No unpublished, partially-rotated held-out seed exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-10",
+          "statement": "source, license and capture date are not recorded per imported case",
+          "intentLineRanges": [
+            [
+              71,
+              72
+            ]
+          ],
+          "rationale": "The clause requires source, license and capture date to be recorded per imported case, with permissive upstreams only for anything that might be published. None of the three is recorded per imported case at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw10-spec15-accept",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0005b95d8d8f311ba911d7be3c4f90c2c570b377",
+        "path": "specs/15-security-focused-review.md",
+        "title": "Spec 15: Security review — configuration and acceptance",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            151,
+            158
+          ],
+          [
+            185,
+            202
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "888e78bae02ac0160212a2de1375bb11e976f756",
+        "headCommit": "56099a79b129a4cb257245615b00426beb99317c"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 10,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the evaluation reports NO adjusted precision per mechanism — the measurement commit says so explicitly",
+          "intentLineRanges": [
+            [
+              187,
+              189
+            ]
+          ],
+          "rationale": "The acceptance clause requires the evaluation to report security recall and adjusted precision per mechanism and context-depth, with obvious-vs-hard tracked separately, before any detector ships. The evaluation reports no adjusted precision per mechanism, and the measurement commit says so explicitly.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "security-signal detections populating cwe/dataFlow/ruleId/securitySeverity do not exist — mechanism 2 was never built",
+          "intentLineRanges": [
+            [
+              195,
+              197
+            ]
+          ],
+          "rationale": "The acceptance clause requires security-signal detections to populate the existing cwe, dataFlow, ruleId and securitySeverity evidence fields. No such detections exist at head, because mechanism 2 was never built.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "no security improvement is demonstrated on a held-out set under the anti-contamination policy",
+          "intentLineRanges": [
+            [
+              201,
+              202
+            ]
+          ],
+          "rationale": "The acceptance clause requires any security improvement to be demonstrated on the held-out set under the anti-contamination policy, not on the set it was built against. No held-out demonstration exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "the configured key is no longer `lens.enabled`; this change renames it to `dedicatedPass.enabled`",
+          "intentLineRanges": [
+            [
+              153,
+              155
+            ]
+          ],
+          "rationale": "The configuration clause names the keys as lens.enabled and signals.enabled. At head the configured key is no longer lens.enabled: this change renames it to dedicatedPass.enabled, so the key the clause names does not exist.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw11-spec11-summary",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0665b06cbbf41da322f2da4433406512515ac4dc",
+        "path": "specs/11-external-context-ingestion.md",
+        "title": "Spec 11: External change-intent context — summarization and injection",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            108,
+            138
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "ebdd1337eeedc4c6691e7ac83eb1bd33d5ccf5dc",
+        "headCommit": "e7d3a9b731b8da2cef7d06d637187a6a7855ce96"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 16,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "pw12-spec11-providers",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "0665b06cbbf41da322f2da4433406512515ac4dc",
+        "path": "specs/11-external-context-ingestion.md",
+        "title": "Spec 11: External change-intent context — providers, stage placement, acceptance",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            58,
+            107
+          ],
+          [
+            176,
+            189
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "0665b06cbbf41da322f2da4433406512515ac4dc",
+        "headCommit": "ebdd1337eeedc4c6691e7ac83eb1bd33d5ccf5dc"
+      },
+      "maxObligations": 60,
+      "humanObligationCount": 19,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "the `platform` provider does not exist — the config schema says in a comment that it is a later phase",
+          "intentLineRanges": [
+            [
+              71,
+              72
+            ]
+          ],
+          "rationale": "The clause describes a platform provider wrapping a PlatformAdapter to read pull-request title, description and a configured subset of comments. The provider does not exist at head, and the config schema says in a comment that it is a later phase.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "the `event` transport (reading a CI payload file from disk) does not exist",
+          "intentLineRanges": [
+            [
+              74,
+              75
+            ]
+          ],
+          "rationale": "The clause describes an event transport that reads a continuous-integration payload file already present on disk, with no network access. That transport does not exist at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the allowed-root containment rule for an environment-supplied payload path does not exist",
+          "intentLineRanges": [
+            [
+              76,
+              77
+            ]
+          ],
+          "rationale": "The clause requires an environment-supplied payload path to resolve through path-service and to remain under a configured allowed root. No allowed-root containment rule for such a path exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "the `api` transport (authenticated read-only HTTP to an allowlisted host) does not exist",
+          "intentLineRanges": [
+            [
+              78,
+              81
+            ]
+          ],
+          "rationale": "The clause describes an api transport performing authenticated read-only HTTP to a configured, host-allowlisted platform host, with the credential read only from a configured environment variable name. That transport does not exist at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "linked-issue reference extraction by a configured pattern does not exist",
+          "intentLineRanges": [
+            [
+              82,
+              84
+            ]
+          ],
+          "rationale": "The clause allows the adapter to extract linked-issue references from metadata using a configured pattern without fetching them. No linked-issue reference extraction exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-6",
+          "statement": "no test injects an adversarial brief and proves admission, severity, gate and baseline are unchanged",
+          "intentLineRanges": [
+            [
+              182,
+              184
+            ]
+          ],
+          "rationale": "The acceptance clause requires a test that injects an adversarial brief and proves findings are unchanged, so external context never alters admission, severity, gate or baseline outcomes. No such test exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-7",
+          "statement": "no test drives the core with a stub adapter to prove there is no platform-specific branching",
+          "intentLineRanges": [
+            [
+              188,
+              189
+            ]
+          ],
+          "rationale": "The acceptance clause requires a test that drives the core with a stub adapter and asserts no platform-specific branching in the core path. No such test exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw13-spec22-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "19c310ea881fa816a2a83e809c3d2298044ee347",
+        "path": "specs/22-change-impact-review.md",
+        "title": "Spec 22: Change-Impact Review — command surface, design, requirements",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            28,
+            74
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "8d9ab55a236455535bfd9a421c2f8149c3ba06df",
+        "headCommit": "b92e38484db33d0dff241c6e8afcec982648d0f6"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 16,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "no contract delta is computed — the wave reports WHICH symbols changed, never how their contract differs",
+          "intentLineRanges": [
+            [
+              43,
+              45
+            ]
+          ],
+          "rationale": "The design step requires a contract delta: what each changed symbol's contract now is versus what it was, across nullability, return shape, errors, ordering, mutation, concurrency, ownership and visibility. No contract delta is computed at head; the wave reports which symbols changed and never how their contract differs.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "no impact adjudication exists — nothing decides whether a dependent relies on the part that changed",
+          "intentLineRanges": [
+            [
+              49,
+              50
+            ]
+          ],
+          "rationale": "The design step requires impact adjudication: for each dependent, decide whether it relies on the part of the contract that changed and what goes wrong if it does. No adjudication exists at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the report carries neither the specific reliance nor the consequence, only a reference site",
+          "intentLineRanges": [
+            [
+              51,
+              52
+            ]
+          ],
+          "rationale": "The design step requires the report to emit the dependent, the line, the specific reliance and the consequence. At head the report carries a reference site and neither the reliance nor the consequence.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "the named-dependent rejection rule does not exist, because no finding path exists",
+          "intentLineRanges": [
+            [
+              61,
+              63
+            ]
+          ],
+          "rationale": "The clause requires a finding without a named dependent to be rejected as not a change-impact finding. No such rejection rule exists at head, because no finding path exists to apply it to.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "blocking is NOT configurable: the commit records that no blocking key was added at all",
+          "intentLineRanges": [
+            [
+              66,
+              68
+            ]
+          ],
+          "rationale": "The clause requires blocking to be configurable and to default to non-blocking. At head blocking is not configurable at all: the change records that no blocking key was added.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw14-spec22-matrix",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "19c310ea881fa816a2a83e809c3d2298044ee347",
+        "path": "specs/22-change-impact-review.md",
+        "title": "Spec 22: Change-Impact Review — evaluation and verification matrix",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            85,
+            134
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "b92e38484db33d0dff241c6e8afcec982648d0f6",
+        "headCommit": "9b47b5a7ccd5fd52353a47f5961e205287eae780"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 16,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "no change-impact corpus exists — the candidate file states in its own title that it is NOT A CORPUS YET",
+          "intentLineRanges": [
+            [
+              91,
+              91
+            ]
+          ],
+          "rationale": "The clause requires a separate corpus with the inverse shape. No change-impact corpus exists at head; the candidate file states in its own title that it is not a corpus yet.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "forward-orientation hydration is unsupported, so base=introducingCommit^ cases cannot be run",
+          "intentLineRanges": [
+            [
+              93,
+              94
+            ]
+          ],
+          "rationale": "The clause fixes the orientation as base = introducingCommit^, head = introducingCommit — a real change reviewed as it was made. Forward-orientation hydration is unsupported at head, so such cases cannot be run.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "no case defines its reviewed paths, because no case is runnable",
+          "intentLineRanges": [
+            [
+              95,
+              95
+            ]
+          ],
+          "rationale": "The clause requires the reviewed paths P to be the files the change touches. No case defines its reviewed paths at head, because no case is runnable.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "the outside-the-diff expectation invariant is not enforced anywhere — the schema that would enforce it does not exist",
+          "intentLineRanges": [
+            [
+              96,
+              96
+            ]
+          ],
+          "rationale": "The clause requires every expectation to lie outside the reviewed diff. That invariant is enforced nowhere at head: the schema that would enforce it does not exist.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "local plausibility is not adjudicated for the parked candidates",
+          "intentLineRanges": [
+            [
+              97,
+              98
+            ]
+          ],
+          "rationale": "The clause requires the change to be locally plausible, because a diff that reveals the problem on its own belongs in the spec 17 corpus. Local plausibility is not adjudicated for the parked candidates at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-6",
+          "statement": "the required reachability label is listed as not-yet-done in the candidates README",
+          "intentLineRanges": [
+            [
+              106,
+              107
+            ]
+          ],
+          "rationale": "The clause requires each case to record a reachability label. At head the label is listed as not-yet-done in the candidates README.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-7",
+          "statement": "recall per reachability class is not reported anywhere",
+          "intentLineRanges": [
+            [
+              108,
+              110
+            ]
+          ],
+          "rationale": "The clause requires recall to be reported per reachability class, because finding direct callers and missing indirect ones is not the same problem. Recall per reachability class is reported nowhere at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-8",
+          "statement": "the ship-enabled / ship-disabled / remove decision rule is undischarged",
+          "intentLineRanges": [
+            [
+              114,
+              119
+            ]
+          ],
+          "rationale": "The clause fixes a three-way decision rule before the first measurement — ship enabled, ship disabled, or remove. No measurement has been made at head, so the rule is undischarged.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw15-spec23-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "19c310ea881fa816a2a83e809c3d2298044ee347",
+        "path": "specs/23-intent-fulfilment-review.md",
+        "title": "Spec 23: Intent-Fulfilment Review — command surface, design, requirements",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            35,
+            74
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "9e1334c58f38dca99b14016eaa0d18d763edd941",
+        "headCommit": "411c43837d973cae54692070aa5557f1ded7ca4e"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 14,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "pw16-spec23-matrix",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "19c310ea881fa816a2a83e809c3d2298044ee347",
+        "path": "specs/23-intent-fulfilment-review.md",
+        "title": "Spec 23: Intent-Fulfilment Review — failure mode, evaluation, verification matrix",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            75,
+            132
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "9e1334c58f38dca99b14016eaa0d18d763edd941",
+        "headCommit": "411c43837d973cae54692070aa5557f1ded7ca4e"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 20,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "no evaluation of this capability exists at all, so nothing treats a false-satisfied claim as the costlier error",
+          "intentLineRanges": [
+            [
+              80,
+              80
+            ]
+          ],
+          "rationale": "The clause requires the evaluation to treat a false satisfied claim as more costly than a false unaddressed one. No evaluation of this capability exists at head, so nothing treats it as costlier.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "false-satisfied and false-unaddressed are not reported separately, because neither is reported",
+          "intentLineRanges": [
+            [
+              81,
+              82
+            ]
+          ],
+          "rationale": "The same clause requires the two error kinds to be reported separately rather than in one accuracy figure. Neither is reported at head, so they are not reported separately.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the separate corpus this capability needs does not exist — it was built three days later",
+          "intentLineRanges": [
+            [
+              91,
+              93
+            ]
+          ],
+          "rationale": "The clause requires a separate corpus, and states it is harder to build than the change-impact one. That corpus does not exist at head; it was built three days later.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "no synthetic mismatch is marked, because none exists",
+          "intentLineRanges": [
+            [
+              99,
+              100
+            ]
+          ],
+          "rationale": "The clause permits synthetic mismatches but requires them to be marked. No synthetic mismatch is marked at head, because none exists.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-5",
+          "statement": "real and synthetic arms are not reported separately",
+          "intentLineRanges": [
+            [
+              101,
+              103
+            ]
+          ],
+          "rationale": "The clause requires synthetic and real cases to be reported separately, because pooling them would overstate the capability. Neither arm is reported at head, so they are not reported separately.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-6",
+          "statement": "the three metrics are not reported at all",
+          "intentLineRanges": [
+            [
+              105,
+              113
+            ]
+          ],
+          "rationale": "The clause names three metrics to be reported separately and never blended: obligation extraction, unaddressed detection, and the false-satisfied rate. None of the three is reported at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-7",
+          "statement": "no decision rule is written down anywhere in the change",
+          "intentLineRanges": [
+            [
+              115,
+              118
+            ]
+          ],
+          "rationale": "The clause fixes a decision rule before the first measurement: ship only if the false-satisfied rate is low. No decision rule is written down anywhere in the change.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw17-spec24-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "746df64647535c175819e05518f2d4037ce6a70b",
+        "path": "specs/24-invariant-conformance-review.md",
+        "title": "Spec 24: Invariant-Conformance Review — design and requirements",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            64,
+            106
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "746df64647535c175819e05518f2d4037ce6a70b",
+        "headCommit": "4a8aa21a682f2b774b19b63e0d455c2ea649b759"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 15,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "conformance adjudication — one model call per divergence — does not exist; the commit says there is no model call in this wave",
+          "intentLineRanges": [
+            [
+              72,
+              74
+            ]
+          ],
+          "rationale": "The design step requires conformance adjudication as one model call per divergence, judging whether the shared pattern is a convention the change should follow. It does not exist at head; the change states there is no model call in this wave.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "nothing can answer undetermined, because nothing judges",
+          "intentLineRanges": [
+            [
+              75,
+              75
+            ]
+          ],
+          "rationale": "The same step requires the judgement to be able to answer undetermined. Nothing at head can answer undetermined, because nothing judges.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the constraint that the model receives a divergence rather than a repository is undischarged along with the call itself",
+          "intentLineRanges": [
+            [
+              80,
+              82
+            ]
+          ],
+          "rationale": "The clause requires the model to receive a divergence to judge and never a repository to search. The constraint is undischarged at head along with the call it constrains.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-4",
+          "statement": "the prohibition on asking the model whether the code is vulnerable is likewise undischarged",
+          "intentLineRanges": [
+            [
+              86,
+              89
+            ]
+          ],
+          "rationale": "The clause prohibits asking the model whether the code is vulnerable, exploitable or insecure; it must be asked whether the peers constitute a convention. The prohibition is undischarged at head, because the model call it governs does not exist.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw18-spec24-traits",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "8af925bbb95172c51f561e4134f3ce2fb3009516",
+        "path": "specs/24-invariant-conformance-review.md",
+        "title": "Spec 24 amendment: traits must carry structural position",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            358,
+            403
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "8af925bbb95172c51f561e4134f3ce2fb3009516",
+        "headCommit": "395f95ab688196d95e1af80b8ffd7209a322538d"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 7,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "pw19-spec05-severity",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "cea1c83884e2026ebf5f539553482904ba717141",
+        "path": "specs/05-review-workflow-and-runtime.md",
+        "title": "Spec 05: the severity rubric",
+        "lineRanges": [
+          [
+            804,
+            911
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "0b0d73d5a40329c7823bf604bb06bb21c8281751",
+        "headCommit": "435593a49d9aed6caa5bc829caa3649c1a76bbc7"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 13,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "every producer assigns severity by this rubric — the deterministic-trusted-rule producer still carries its own severity, only the discovery prompt was changed",
+          "intentLineRanges": [
+            [
+              809,
+              813
+            ]
+          ],
+          "rationale": "The clause makes the rubric the single normative definition and requires every producer to assign severity by it — model discovery, trusted deterministic rules, and anything restating a finding downstream. At head the deterministic trusted-rule producer still carries its own severity; only the discovery prompt was changed.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-2",
+          "statement": "a missing defence-in-depth measure is silently wrong, not control defeated — absent from the prompt",
+          "intentLineRanges": [
+            [
+              845,
+              846
+            ]
+          ],
+          "rationale": "The clause decides that a missing defence-in-depth measure, whose absence causes harm only after another independent failure, is silently wrong and not control defeated. That rule is absent from the prompt at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        },
+        {
+          "id": "out-3",
+          "statement": "the error-path boundary case (an error path counts as exactly one condition, never a disqualification) is absent from the prompt",
+          "intentLineRanges": [
+            [
+              875,
+              879
+            ]
+          ],
+          "rationale": "The clause decides the error-path boundary case: the error path counts as exactly one condition and never as a disqualification. That rule is absent from the prompt at head.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw20-spec13-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "8408af93c14f971b9193081c51837f1ed4bd33ca",
+        "path": "specs/13-review-comments-and-suggestions.md",
+        "title": "Spec 13: Platform-neutral review comments — platform detection, renderers, artifacts, acceptance",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            63,
+            122
+          ],
+          [
+            138,
+            146
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "8408af93c14f971b9193081c51837f1ed4bd33ca",
+        "headCommit": "c4dcc85944dfeef1eddbf033d18e898736e16069"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 22,
+      "outstandingExpectations": [
+        {
+          "id": "out-1",
+          "statement": "building drafts records NO no-content observability step: the change adds no logger call, no draft or suggestion count, no resolved platform and no detection source",
+          "intentLineRanges": [
+            [
+              117,
+              119
+            ]
+          ],
+          "rationale": "The clause requires building drafts to record a no-content observability step carrying the draft count, the suggestion count, the resolved platform and the detection source. The change adds no logger call and none of the four values.",
+          "provenance": "Fixed human enumeration (`humanOutstanding`) established for the 2026-08-01 capped round of the intent corpus and never extended; transcribed verbatim. The intent line anchor was authored for this manifest by locating the clause in the source document at the declared intent commit."
+        }
+      ]
+    },
+    {
+      "id": "pw21-spec19-req",
+      "arm": "prewritten",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-spec-slice",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "document-slice",
+        "commit": "244983e634b47a4bba550b60cc2d59ca6b80460e",
+        "path": "specs/19-unanchored-discovery-pass.md",
+        "title": "Spec 19: Un-anchored discovery pass — design, requirements, configuration, verification matrix",
+        "lineRanges": [
+          [
+            1,
+            5
+          ],
+          [
+            42,
+            79
+          ],
+          [
+            124,
+            133
+          ]
+        ]
+      },
+      "change": {
+        "baseCommit": "244983e634b47a4bba550b60cc2d59ca6b80460e",
+        "headCommit": "454be5d76b5e1e05b784c2038e817bf83ef29c4b"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 18,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph01-435593a",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "435593a49d9aed6caa5bc829caa3649c1a76bbc7"
+      },
+      "change": {
+        "baseCommit": "0b0d73d5a40329c7823bf604bb06bb21c8281751",
+        "headCommit": "435593a49d9aed6caa5bc829caa3649c1a76bbc7"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 6,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph02-888e78b",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "888e78bae02ac0160212a2de1375bb11e976f756"
+      },
+      "change": {
+        "baseCommit": "fc16b2b82cd988a1a0c6199750c2da72ee648254",
+        "headCommit": "888e78bae02ac0160212a2de1375bb11e976f756"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 10,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph03-e7d3a9b",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "e7d3a9b731b8da2cef7d06d637187a6a7855ce96"
+      },
+      "change": {
+        "baseCommit": "ebdd1337eeedc4c6691e7ac83eb1bd33d5ccf5dc",
+        "headCommit": "e7d3a9b731b8da2cef7d06d637187a6a7855ce96"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 10,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph04-550ae54",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30"
+      },
+      "change": {
+        "baseCommit": "4def9ead324c6a57cc3d57ae3fea7639ab5adaf7",
+        "headCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 9,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph05-56099a7",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "56099a79b129a4cb257245615b00426beb99317c"
+      },
+      "change": {
+        "baseCommit": "888e78bae02ac0160212a2de1375bb11e976f756",
+        "headCommit": "56099a79b129a4cb257245615b00426beb99317c"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 11,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph07-ea100d9",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "ea100d91018496fde4addb7de259c527682080a6"
+      },
+      "change": {
+        "baseCommit": "550ae54c70e2d6d4dcb277be6578459a3aca0e30",
+        "headCommit": "ea100d91018496fde4addb7de259c527682080a6"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 12,
+      "outstandingExpectations": []
+    },
+    {
+      "id": "ph06-4c1e9dd",
+      "arm": "posthoc",
+      "split": "dev",
+      "mismatchOrigin": "natural",
+      "source": "repository-commit-message",
+      "capturedAt": "2026-08-01",
+      "intent": {
+        "kind": "commit-message",
+        "commit": "4c1e9ddb1e615dad14929e36d3004d5e4ece1fc1"
+      },
+      "change": {
+        "baseCommit": "e13a12128aa0f369f2bc653255079b03bad6b894",
+        "headCommit": "4c1e9ddb1e615dad14929e36d3004d5e4ece1fc1"
+      },
+      "maxObligations": 40,
+      "humanObligationCount": 10,
+      "outstandingExpectations": []
+    }
+  ]
+}

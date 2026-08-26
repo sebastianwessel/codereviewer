@@ -37,6 +37,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "The upsampling eligibility check passes the outer dataset instead of the actual dataset used by scoped_dataset. In paths where the query ultimately runs against discover (e.g., dashboard split) while the original dataset is metrics, upsampling may be skipped even when all projects are allowlisted.",
+      "securityMechanism": "authorization",
+      "contextDepth": "analyzer-path-dependent",
       "matchMode": "semantic-only",
       "tier": "logic"
     }

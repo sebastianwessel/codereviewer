@@ -1,14 +1,9 @@
-import type {
-  JsonValue,
-  Logger,
-  ModelAlias,
-  ModelProvider,
-  ObjectRequest,
-  ObjectResponse,
-  SkillsConfig
-} from '@purista/harness'
+import type { Logger, SkillsConfig } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { type RunTokenUsage } from '../../../costs/index.js'
+import {
+  createProviderUsageRecorder,
+  type RunTokenUsage
+} from '../../../costs/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
 import {
   resolveProviderModelAlias,
@@ -23,81 +18,6 @@ import {
 import { maxChildAgentCallsForReview } from '../../harness/config.js'
 
 const reviewWorkflowSessionId = 'review'
-
-type ProviderUsageRecorder = {
-  readonly modelAlias: ModelAlias
-  readonly usage: () => RunTokenUsage
-}
-
-const createProviderUsageRecorder = (
-  modelAlias: ModelAlias
-): ProviderUsageRecorder => {
-  let inputTokens = 0
-  let outputTokens = 0
-  let cachedInputTokens = 0
-  let reasoningTokens = 0
-  const provider = modelAlias.provider
-  const wrappedProvider: ModelProvider = {
-    ...provider,
-    id: provider.id,
-    genAiSystem: provider.genAiSystem,
-    ...(provider.info === undefined ? {} : { info: provider.info }),
-    ...(provider.text === undefined
-      ? {}
-      : {
-          text: async (request) => {
-            const response = await provider.text!(request)
-
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
-
-            return response
-          }
-        }),
-    ...(provider.object === undefined
-      ? {}
-      : {
-          object: async <T extends JsonValue = JsonValue>(
-            request: ObjectRequest<T>
-          ): Promise<ObjectResponse<T>> => {
-            const response = await provider.object!(request)
-
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
-
-            return response
-          }
-        }),
-    ...(provider.textStream === undefined
-      ? {}
-      : { textStream: provider.textStream.bind(provider) }),
-    ...(provider.objectStream === undefined
-      ? {}
-      : { objectStream: provider.objectStream.bind(provider) }),
-    ...(provider.embed === undefined ? {} : { embed: provider.embed.bind(provider) }),
-    ...(provider.rerank === undefined
-      ? {}
-      : { rerank: provider.rerank.bind(provider) }),
-    ...(provider.close === undefined ? {} : { close: provider.close.bind(provider) })
-  }
-
-  return {
-    modelAlias: {
-      ...modelAlias,
-      provider: wrappedProvider
-    },
-    usage: () => ({
-      inputTokens,
-      outputTokens,
-      cachedInputTokens,
-      reasoningTokens
-    })
-  }
-}
 
 export const runProviderWorkflow = async (
   input: {
@@ -121,7 +41,7 @@ export const runProviderWorkflow = async (
     }
   | undefined
 > => {
-  if (input.config.provider === undefined || input.config.aiReview.enabled === false) {
+  if (input.config.provider === undefined || !input.config.aiReview.enabled) {
     return undefined
   }
 
@@ -151,12 +71,20 @@ export const runProviderWorkflow = async (
   input.logger?.debug('Review harness creation started.', {
     task_count: input.workflowInput.tasks?.length ?? 0,
     max_concurrent_tasks: input.config.review.maxConcurrentTasks,
-    run_timeout_configured: input.config.review.runTimeoutMs !== undefined
   })
   const maxChildAgentCalls = maxChildAgentCallsForReview({
     taskCount:
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
-    maxConcurrentTasks: input.config.review.maxConcurrentTasks
+    maxConcurrentTasks: input.config.review.maxConcurrentTasks,
+    securityPassEnabled: input.config.security.dedicatedPass.enabled,
+    // Spec 27: partitioning multiplies discovery and refutation calls per task, and
+    // under-reserving here makes the workflow refuse a call mid-run.
+    ...(input.config.aiReview.maxFilesPerDiscoveryCall === undefined
+      ? {}
+      : {
+          maxFilesPerDiscoveryCall:
+            input.config.aiReview.maxFilesPerDiscoveryCall
+        })
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,
@@ -165,9 +93,7 @@ export const runProviderWorkflow = async (
     skillTools: input.config.skills.allowTools,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     maxChildAgentCalls,
-    ...(input.config.review.runTimeoutMs === undefined
-      ? {}
-      : { runTimeoutMs: input.config.review.runTimeoutMs }),
+    crossFileRetrieval: input.config.review.crossFileRetrieval,
     ...(input.logger === undefined ? {} : { logger: input.logger }),
     ...(input.onTaskEvent === undefined
       ? {}

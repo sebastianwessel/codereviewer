@@ -9,12 +9,10 @@ import {
 const allKinds: readonly ContextLedgerKind[] = [
   'file',
   'diff',
-  'symbol',
   'instruction',
   'skill',
   'support-signal-output',
-  'tool-result',
-  'prior-artifact'
+  'tool-result'
 ]
 
 const allDecisions: readonly ContextLedgerDecision[] = [

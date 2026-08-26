@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "critical",
       "semanticSummary": "NoMethodError before_validation in EmbeddableHost",
+      "securityMechanism": "unsafe-config",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "runtime-critical"
     },
@@ -44,6 +46,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "Because this migration inserts embeddable_hosts rows with raw SQL, any existing embeddable_hosts values that include http:// or /https:// or path segments won’t go through the EmbeddableHost model’s normalization, so the new host lookup (which compares only the bare host) may fail for migrated data. Consider ensuring that migrated hosts are normalized to the same format as newly created EmbeddableHost records so existing embedding configurations keep working.",
+      "securityMechanism": "unsafe-config",
+      "contextDepth": "cross-file",
       "matchMode": "semantic-only",
       "tier": "logic"
     }

@@ -9,10 +9,11 @@ import {
   type EvidenceRecord
 } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
+import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import type { CandidateFinding } from '../admission/index.js'
 import type { SupportSignalFact } from '../deterministic-signals/index.js'
 
-export const ReviewTaskKindSchema = z.enum([
+const ReviewTaskKindSchema = z.enum([
   'file',
   'dependency-cluster'
 ])
@@ -36,7 +37,7 @@ export const ReviewTaskSchema = z.strictObject({
 
 export type ReviewTask = z.infer<typeof ReviewTaskSchema>
 
-export type PlanReviewTasksOptions = {
+type PlanReviewTasksOptions = {
   readonly depth: CodeReviewerConfig['review']['depth']
   readonly files: readonly { readonly path: string }[]
   readonly facts: readonly SupportSignalFact[]
@@ -48,9 +49,6 @@ const taskIdFor = (
   kind: z.infer<typeof ReviewTaskKindSchema>,
   paths: readonly string[]
 ): string => `task_${sha256(`${kind}:${paths.join('|')}`).slice(0, 16)}`
-
-const sortedUnique = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
 
 const evidencePath = (evidence: EvidenceRecord): string | undefined =>
   evidence.location?.path
@@ -210,15 +208,19 @@ const connectedPathGroups = (
   return groups.sort((left, right) => left[0]!.localeCompare(right[0]!))
 }
 
-const maxPathsPerCluster = 8
+// The most paths any planned task can carry. Exported because the harness's
+// child-agent call budget has to bound the worst case a planned task presents, and
+// it used to mirror this number in a comment — a mirror agrees until it does not,
+// and the direction that disagreement fails in is a budget that under-reserves.
+export const MAX_PATHS_PER_REVIEW_TASK = 8
 
 const splitGroupIntoBoundedChunks = (
   group: readonly string[]
 ): readonly (readonly string[])[] => {
   const chunks: string[][] = []
 
-  for (let index = 0; index < group.length; index += maxPathsPerCluster) {
-    chunks.push(group.slice(index, index + maxPathsPerCluster))
+  for (let index = 0; index < group.length; index += MAX_PATHS_PER_REVIEW_TASK) {
+    chunks.push(group.slice(index, index + MAX_PATHS_PER_REVIEW_TASK))
   }
 
   return chunks
@@ -232,8 +234,8 @@ const packPathGroups = (
 
   const flushSingletons = (): void => {
     while (pendingSingletons.length > 0) {
-      packedGroups.push(pendingSingletons.slice(0, maxPathsPerCluster))
-      pendingSingletons = pendingSingletons.slice(maxPathsPerCluster)
+      packedGroups.push(pendingSingletons.slice(0, MAX_PATHS_PER_REVIEW_TASK))
+      pendingSingletons = pendingSingletons.slice(MAX_PATHS_PER_REVIEW_TASK)
     }
   }
 
@@ -265,7 +267,7 @@ const createTask = (
     readonly candidates: readonly CandidateFinding[]
   }
 ): ReviewTask => {
-  const taskPaths = sortedUnique(input.paths)
+  const taskPaths = uniqueSorted(input.paths)
 
   return ReviewTaskSchema.parse({
     id: taskIdFor(input.kind, taskPaths),
@@ -289,7 +291,7 @@ const createTask = (
 export const planReviewTasks = (
   options: PlanReviewTasksOptions
 ): readonly ReviewTask[] => {
-  const paths = sortedUnique(options.files.map((file) => file.path))
+  const paths = uniqueSorted(options.files.map((file) => file.path))
 
   if (paths.length === 0) {
     return []

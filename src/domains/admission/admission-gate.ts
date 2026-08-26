@@ -4,11 +4,14 @@ import {
   CandidateIdSchema,
   CodeLocationSchema,
   ContractIdSchema,
+  DataFlowPathSchema,
   EvidenceRecordSchema,
   FindingCategorySchema,
   FixEditSchema,
   FixProposalSchema,
   RejectedFindingSchema,
+  RelatedLocationSchema,
+  severityMeetsThreshold,
   SeveritySchema,
   TaskIdSchema,
   type AdmittedFinding,
@@ -21,7 +24,11 @@ import {
 } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { truncateForContract } from '../../shared/text/truncate.js'
+import { lineRangesOverlap } from '../../shared/text/line-ranges.js'
+import {
+  truncateToFieldBound,
+  type BoundedStringField
+} from '../../shared/text/truncate.js'
 
 export const CandidateFindingSchema = z.strictObject({
   id: CandidateIdSchema,
@@ -37,8 +44,32 @@ export const CandidateFindingSchema = z.strictObject({
   location: CodeLocationSchema,
   evidenceIds: z.array(ContractIdSchema),
   proposedBy: z.string().min(1),
-  suggestedFix: z.string().max(1200).optional(),
-  fixProposal: FixProposalSchema.optional()
+  fixProposal: FixProposalSchema.optional(),
+  // Classification and trace metadata, carried from the candidate to the admitted
+  // finding by the spread in `admitCandidate` and consumed by the SARIF reporter.
+  //
+  // `AdmittedFinding` has declared all six since the contract was written, and the
+  // SARIF spec requires mapping the last two into locations and code flows — but
+  // `CandidateFinding` did not declare them, and `AdmittedFindingSchema` is built
+  // by spreading a candidate. So no run could produce a finding carrying any of
+  // them, and the reporter's whole security-rule projection was unreachable.
+  //
+  // The producer is the CALLER: `ReviewWorkflowInput.candidates` is a published
+  // surface (see the `proposedBy` decision in the 2026-08-10 flow audit), and a
+  // deterministic signal that proposes a candidate is exactly the thing a rule id,
+  // a CWE list, and a source-to-sink path describe.
+  //
+  // Analyzer ingestion deliberately does NOT write these. Spec 15 keeps an ingested
+  // alert on its `EvidenceRecord` and out of the finding contract: joining a
+  // third-party alert to a model-authored finding by location would attach one
+  // defect's CWE to another defect that happens to share a line. The evidence
+  // record already carries the alert's own metadata, under the analyzer's name.
+  ruleId: z.string().optional(),
+  helpUri: z.url().optional(),
+  cwe: z.array(z.string().regex(/^CWE-[0-9]+$/)).optional(),
+  securitySeverity: z.number().min(0).max(10).optional(),
+  relatedLocations: z.array(RelatedLocationSchema).optional(),
+  dataFlow: z.array(DataFlowPathSchema).optional()
 })
 
 export type CandidateFinding = z.infer<typeof CandidateFindingSchema>
@@ -54,16 +85,39 @@ export type ReviewedDiffRange = {
   readonly startLine: number
   readonly endLine: number
   readonly changeKind?: 'new' | 'modified' | 'deleted' | undefined
+  // True when the hunk removed lines and added none. The range is then an ANCHOR
+  // at the head-side line the removal sits after, not a span of changed head-side
+  // lines: it puts the file into reviewed scope — a deletion is how a change
+  // breaks a caller — without claiming that line changed. See
+  // `locationDiffRangeIsInlineEligible`, which is the reason the flag exists, and
+  // `reviewedDiffRangesForDiffMaps`, which is the only thing that sets it.
+  readonly deletionAnchor?: boolean | undefined
+}
+
+// The absolute line span of one source chunk, tied to the review task that was
+// given that chunk. A file too large for one packet is split into chunks and each
+// chunk becomes its own task, so a task usually saw only part of its file.
+export type TaskSourceChunkRange = {
+  readonly taskId: string
+  readonly path: string
+  readonly startLine: number
+  readonly endLine: number
 }
 
 export type AdmissionPolicy = {
   readonly reviewedPaths: readonly string[]
   readonly reviewedLineRanges?: readonly ReviewedLineRange[]
   readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
+  // Per-task chunk provenance. Optional: when a task has no entry here (a
+  // deterministic candidate, or a task that carried no file context) the chunk
+  // check is skipped and admission behaves exactly as before.
+  readonly taskSourceChunkRanges?: readonly TaskSourceChunkRange[]
   readonly minimumSeverity?: Severity
-  // Minimum severity for a model-origin candidate to be admitted as actionable.
-  // Trusted deterministic-rule candidates are exempt. Below this, the candidate
-  // is rejected as below-threshold (recorded as a rejected finding).
+  // Minimum severity for a candidate to be admitted as actionable. Below this,
+  // the candidate is rejected as below-threshold (recorded as a rejected
+  // finding). No candidate is exempt — see the floor itself, which records why
+  // the "trusted deterministic rule" exemption was removed. This comment still
+  // claimed the exemption existed.
   readonly actionableSeverityThreshold?: Severity
   readonly inlineSeverityThreshold: Severity
   readonly provenance: Omit<FindingProvenance, 'instructionHashes' | 'skillHashes'> & {
@@ -92,14 +146,6 @@ export type AdmissionResult =
       readonly admittedFinding?: never
     }
 
-const severityRank: Readonly<Record<Severity, number>> = {
-  info: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4
-}
-
 const normalizeText = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim()
 
@@ -113,16 +159,29 @@ const makeRejectedFinding = (
     readonly reason: RejectedFinding['reason']
     readonly message: string
     readonly evidenceIds?: readonly string[]
+    // The candidate's own severity, when a parsed candidate was available at
+    // the call site (see spec 06 item 0.4 -- a candidate that failed schema
+    // validation before parsing has no severity to record).
+    readonly severity?: Severity
   }
 ): RejectedFinding =>
   RejectedFindingSchema.parse({
     candidateId: input.candidateId,
     status: input.status ?? 'rejected',
     reason: input.reason,
-    message: createRedactor().redact(input.message).slice(0, 500),
+    // The reason a finding was SUPPRESSED, and it is sourced from strings longer
+    // than its own bound, so cutting is routine rather than exotic. A bare
+    // `.slice(0, 500)` restated the contract's number here AND cut without a
+    // mark, so a reader saw a reason that stopped and could not tell the end had
+    // been removed.
+    message: truncateToFieldBound(
+      createRedactor().redact(input.message),
+      RejectedFindingSchema.shape.message
+    ),
     ...(input.evidenceIds === undefined
       ? {}
-      : { evidenceIds: [...input.evidenceIds] })
+      : { evidenceIds: [...input.evidenceIds] }),
+    ...(input.severity === undefined ? {} : { severity: input.severity })
   })
 
 const candidateIdFrom = (candidate: unknown): string =>
@@ -185,21 +244,83 @@ const locationLineRangeIsValid = (
   )
 }
 
-const lineRangesOverlap = (
-  left: { readonly startLine: number; readonly endLine: number },
-  right: { readonly startLine: number; readonly endLine: number }
-): boolean => left.startLine <= right.endLine && right.startLine <= left.endLine
+// The whole-file range above cannot catch a mis-numbered location from a split
+// file: a chunk-relative number still lands somewhere inside the file and looks
+// valid. Checking against the chunk the task was actually shown does catch it,
+// which matters beyond the reported number - the fingerprint anchors on the text
+// at that line, so a wrong line silently gives the finding a wrong identity and
+// breaks baseline suppression and cross-run matching.
+// Skipped when the task has no chunk provenance for the path, so this can only
+// reject locations the reviewer provably could not have seen. For a file that fits
+// in a single chunk the chunk range IS the whole-file range, so nothing changes.
+const locationChunkRangeIsValid = (
+  candidate: CandidateFinding,
+  ranges: readonly TaskSourceChunkRange[] | undefined
+): boolean => {
+  if (candidate.location.side === 'old' || ranges === undefined) {
+    return true
+  }
 
+  const chunkRanges = ranges.filter(
+    (range) =>
+      range.taskId === candidate.taskId &&
+      range.path === candidate.location.path
+  )
+
+  if (chunkRanges.length === 0) {
+    return true
+  }
+
+  const endLine = candidate.location.endLine ?? candidate.location.startLine
+
+  return chunkRanges.some(
+    (range) =>
+      candidate.location.startLine >= range.startLine && endLine <= range.endLine
+  )
+}
+
+// Whether the candidate's location can be anchored as an inline review comment.
+// This is presentation policy only: it never decides whether a candidate is
+// admitted, only how the reported finding may be surfaced.
+//
+// A whole-file location is the ordinary shape of a model-origin finding:
+// discovery shows the model line-numbered file content, not a diff, so it stamps
+// every candidate `side: 'file'` rather than have the model guess which side of
+// the diff a line belongs to. Requiring `side === 'new'` here therefore made
+// inline eligibility unreachable for model findings, and the review-comment
+// surface silently produced zero drafts on every run. Admission is the only
+// stage that holds the reviewed diff ranges, so it is the only stage that can
+// answer "was this line actually changed?" without guessing. A whole-file
+// location earns inline eligibility when its reported line provably falls inside
+// a reviewed hunk, and nothing else does: with no diff ranges at all there is no
+// hunk to prove it, and a defect merely exposed elsewhere in a changed file is
+// still reported, just with no changed line to anchor a comment to.
 const locationDiffRangeIsInlineEligible = (
   candidate: CandidateFinding,
   ranges: readonly ReviewedDiffRange[] | undefined
 ): boolean => {
-  if (ranges === undefined) {
-    return true
+  if (candidate.location.side === 'old') {
+    return false
   }
 
-  if (candidate.location.side !== 'new') {
-    return false
+  // A deletion anchor is present so its FILE is in reviewed scope; it marks a hunk
+  // that occupies no head-side line, so nothing can be anchored to it — the line it
+  // names is not part of the diff at all under `--unified=0`. Dropping it here is
+  // what keeps "in reviewed scope" and "commentable" separable while both are read
+  // off one array.
+  const changedRanges = ranges?.filter((range) => range.deletionAnchor !== true)
+
+  if (candidate.location.side === 'file') {
+    return (changedRanges ?? []).some(
+      (range) =>
+        range.path === candidate.location.path &&
+        candidate.location.startLine >= range.startLine &&
+        candidate.location.startLine <= range.endLine
+    )
+  }
+
+  if (changedRanges === undefined) {
+    return true
   }
 
   const candidateRange = {
@@ -207,7 +328,7 @@ const locationDiffRangeIsInlineEligible = (
     endLine: candidate.location.endLine ?? candidate.location.startLine
   }
 
-  return ranges
+  return changedRanges
     .filter((range) => range.path === candidate.location.path)
     .some((range) => lineRangesOverlap(candidateRange, range))
 }
@@ -240,16 +361,27 @@ const allEvidenceRedacted = (evidence: readonly EvidenceRecord[]): boolean =>
 // but not the anchor. Editing the anchored line itself does change the
 // fingerprint, which is the intended signal that the finding was addressed.
 // The emitted value is a truncated hash, so no source text is disclosed.
+//
+// THE TITLE IS DELIBERATELY NOT IN HERE, and v2 -- which included it -- could not
+// do the job described above. The title is model prose and is rewritten almost
+// every run: over ten identical runs of one pinned engine, 96% of cases produced a
+// different (category, path, title) set, and on the cases inspected not one title
+// repeated. So an unchanged, unfixed finding took a new fingerprint on every push,
+// which made the baseline report it as RESOLVED and the same defect as NEW in the
+// same run, and made inline comments re-post instead of dedupe.
+//
+// What remains is what the comment above always claimed: the line's own text. Two
+// findings sharing a category, a path AND an anchored line are treated as one, and
+// the semantic merge upstream exists to collapse exactly that case.
 const createFingerprint = (
   candidate: CandidateFinding,
   resolveAnchorText: AnchorTextResolver | undefined
 ): FindingFingerprint => ({
-  algorithm: 'v2-category-path-title-anchor',
+  algorithm: 'v3-category-path-anchor',
   value: sha256(
     [
       candidate.category,
       candidate.location.path,
-      normalizeText(candidate.title),
       normalizeText(resolveAnchorText?.(candidate.location) ?? '')
     ].join(':')
   ).slice(0, 32)
@@ -286,63 +418,73 @@ const hasDuplicateEvidenceLocation = (
   )
 }
 
+// The side check lives entirely in `locationDiffRangeIsInlineEligible` so there
+// is a single place that decides which locations can be anchored. Meeting the
+// inline severity threshold remains necessary on top of it: an anchorable
+// location is not by itself a reason to comment on the line.
 const reporterEligibilityFor = (
-  candidate: CandidateFinding,
   severity: Severity,
   threshold: Severity,
   lineRangeIsValid: boolean,
   diffRangeIsInlineEligible: boolean
 ): ReporterEligibility =>
-  candidate.location.side === 'new' &&
   lineRangeIsValid &&
   diffRangeIsInlineEligible &&
-  severityRank[severity] >= severityRank[threshold]
+  severityMeetsThreshold(severity, threshold)
     ? 'inline'
     : 'summary-only'
-
-// Read the `max(n)` length from a (possibly optional) Zod string field. Used so
-// redaction caps are derived from the destination schema rather than hard-coded,
-// keeping them from drifting away from the contract they must satisfy.
-const stringFieldMax = (schema: {
-  readonly maxLength?: number | null
-  readonly unwrap?: () => { readonly maxLength?: number | null }
-}): number => {
-  if (typeof schema.maxLength === 'number') {
-    return schema.maxLength
-  }
-
-  const unwrapped = schema.unwrap?.()
-
-  return typeof unwrapped?.maxLength === 'number'
-    ? unwrapped.maxLength
-    : Number.POSITIVE_INFINITY
-}
 
 // Redaction can lengthen text (a short configured secret becomes `[REDACTED]`),
 // so the result is truncated back to its contract cap. Without this, a redacted
 // title/description could exceed AdmittedFindingSchema's limit and fail
 // validation at admission time.
+//
+// This file invented deriving the cap from the destination field, which is the
+// right idea and is now shared: `truncateToFieldBound` is that helper, so the
+// four hard-coded copies of a bound elsewhere could be deleted rather than
+// audited. The local version returned `Number.POSITIVE_INFINITY` for a field with
+// no `.max(n)` — a bound that fails to bind, silently — and the shared one throws.
 const redactCandidateField = (
   value: string,
-  schema: Parameters<typeof stringFieldMax>[0]
-): string =>
-  truncateForContract(createRedactor().redact(value), stringFieldMax(schema))
+  field: BoundedStringField
+): string => truncateToFieldBound(createRedactor().redact(value), field)
+
+// `relatedLocations` and `dataFlow` messages are caller-authored free text that
+// lands verbatim in the report and the SARIF artifact, so they go through the same
+// redactor as the title and description. Their paths and line numbers are already
+// constrained by `CodeLocationSchema`; only the prose can carry a secret.
+const redactedRelatedLocation = <TLocation extends { readonly message: string }>(
+  related: TLocation
+): TLocation => ({
+  ...related,
+  message: redactCandidateField(
+    related.message,
+    RelatedLocationSchema.shape.message
+  )
+})
 
 const redactedCandidate = (candidate: CandidateFinding): CandidateFinding => ({
   ...candidate,
+  ...(candidate.relatedLocations === undefined
+    ? {}
+    : { relatedLocations: candidate.relatedLocations.map(redactedRelatedLocation) }),
+  ...(candidate.dataFlow === undefined
+    ? {}
+    : {
+        dataFlow: candidate.dataFlow.map((path) => ({
+          ...path,
+          label: redactCandidateField(
+            path.label,
+            DataFlowPathSchema.shape.label
+          ),
+          steps: path.steps.map(redactedRelatedLocation)
+        }))
+      }),
   title: redactCandidateField(candidate.title, CandidateFindingSchema.shape.title),
   description: redactCandidateField(
     candidate.description,
     CandidateFindingSchema.shape.description
   ),
-  ...(candidate.suggestedFix === undefined
-    ? {}
-    : {
-        suggestedFix: redactCandidateField(
-          candidate.suggestedFix,
-          CandidateFindingSchema.shape.suggestedFix
-        )
-      }),
   ...(candidate.fixProposal === undefined
     ? {}
     : {
@@ -404,28 +546,49 @@ export const admitCandidate = (
 
   const candidate = parsedCandidate.data
 
+  // Every post-parse rejection carries the candidate id and its evidence ids and
+  // differs only by reason and message, so build the result through one helper.
+  const reject = (
+    reason: RejectedFinding['reason'],
+    message: string
+  ): AdmissionResult => ({
+    status: 'rejected',
+    rejectedFinding: makeRejectedFinding({
+      candidateId: candidate.id,
+      reason,
+      message,
+      evidenceIds: candidate.evidenceIds,
+      severity: candidate.severity
+    })
+  })
+
+  const needsMoreEvidence = (
+    reason: RejectedFinding['reason'],
+    message: string
+  ): AdmissionResult => ({
+    status: 'needs-more-evidence',
+    rejectedFinding: makeRejectedFinding({
+      candidateId: candidate.id,
+      status: 'needs-more-evidence',
+      reason,
+      message,
+      evidenceIds: candidate.evidenceIds,
+      severity: candidate.severity
+    })
+  })
+
   if (hasUnknownFixProposalEvidence(candidate)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'schema-invalid',
-        message: 'Fix proposal references evidence outside the candidate evidence set.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'schema-invalid',
+      'Fix proposal references evidence outside the candidate evidence set.'
+    )
   }
 
   if (!isReviewedLocation(candidate.location.path, input.policy.reviewedPaths)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'location-invalid',
-        message: 'Candidate location is not part of reviewed repository input.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'location-invalid',
+      'Candidate location is not part of reviewed repository input.'
+    )
   }
 
   const lineRangeIsValid = locationLineRangeIsValid(
@@ -438,15 +601,19 @@ export const admitCandidate = (
   )
 
   if (!lineRangeIsValid) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'location-invalid',
-        message: 'Candidate location line range is outside reviewed source input.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'location-invalid',
+      'Candidate location line range is outside reviewed source input.'
+    )
+  }
+
+  if (
+    !locationChunkRangeIsValid(candidate, input.policy.taskSourceChunkRanges)
+  ) {
+    return reject(
+      'location-invalid',
+      'Candidate location is outside the source chunk its review task was given.'
+    )
   }
 
   const evidence = selectedEvidence(candidate, input.evidence).map((record) =>
@@ -454,52 +621,38 @@ export const admitCandidate = (
   )
 
   if (evidence.length === 0) {
-    return {
-      status: 'needs-more-evidence',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        status: 'needs-more-evidence',
-        reason: 'insufficient-evidence',
-        message: 'Candidate requires at least one evidence record.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return needsMoreEvidence(
+      'insufficient-evidence',
+      'Candidate requires at least one evidence record.'
+    )
   }
 
   if (!allEvidenceRedacted(evidence)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'unsafe-content',
-        message: 'Candidate evidence is not redacted for report-safe output.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'unsafe-content',
+      'Candidate evidence is not redacted for report-safe output.'
+    )
   }
 
-  // Trusted deterministic-rule findings bypass the model severity floor; every
-  // other (model-origin) candidate must meet `actionableSeverityThreshold` when
-  // set, otherwise the base `minimumSeverity`.
+  // Every candidate must meet `actionableSeverityThreshold` when set, otherwise
+  // the base `minimumSeverity`. There is deliberately no exemption: the one that
+  // existed was for deterministic "trusted rule" findings whose only producer was
+  // a map of benchmark-specific rule IDs, removed as eval-gaming. An exemption
+  // with no producer is not neutral — it is a bypass of the severity floor waiting
+  // for something to trigger it.
   const severityFloor =
-    candidate.proposedBy !== 'deterministic-trusted-rule' &&
     input.policy.actionableSeverityThreshold !== undefined
       ? input.policy.actionableSeverityThreshold
       : input.policy.minimumSeverity
 
   if (
     severityFloor !== undefined &&
-    severityRank[candidate.severity] < severityRank[severityFloor]
+    !severityMeetsThreshold(candidate.severity, severityFloor)
   ) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'below-threshold',
-        message: 'Candidate severity is below configured admission threshold.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'below-threshold',
+      'Candidate severity is below configured admission threshold.'
+    )
   }
 
   const fingerprint = createFingerprint(candidate, input.resolveAnchorText)
@@ -512,15 +665,10 @@ export const admitCandidate = (
       input.existingAdmittedFindings
     )
   ) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'duplicate',
-        message: 'Candidate duplicates an already admitted finding.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'duplicate',
+      'Candidate duplicates an already admitted finding.'
+    )
   }
 
   const safeCandidate = redactedCandidate(candidate)
@@ -531,7 +679,6 @@ export const admitCandidate = (
     admittedAt: input.policy.admittedAt,
     admissionEvidenceIds: evidence.map((record) => record.id),
     reporterEligibility: reporterEligibilityFor(
-      candidate,
       candidate.severity,
       input.policy.inlineSeverityThreshold,
       lineRangeIsValid,

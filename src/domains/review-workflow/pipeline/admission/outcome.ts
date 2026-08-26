@@ -1,11 +1,11 @@
-import {
-  type EvidenceRecord,
-  type RefutationResult,
-  type RejectedFinding
+import type {
+  EvidenceRecord,
+  RefutationResult,
+  RejectedFinding
 } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
-import { type AdmissionDecisionRecord } from '../../../shared-context/index.js'
-import { type ProviderIssue } from '../provider-issues.js'
+import type { CandidateFinding } from '../../../admission/index.js'
+import type { AdmissionDecisionRecord } from '../../../shared-context/index.js'
+import type { ProviderIssue } from '../provider-issues.js'
 
 export type AdmissionCandidateOutcome = {
   readonly admissionCandidates: readonly CandidateFinding[]

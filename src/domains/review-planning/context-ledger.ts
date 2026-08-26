@@ -3,58 +3,58 @@ import { normalizeRepositoryRelativePath } from '../../platform/repository-path.
 import { ContextLedgerIdSchema } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 
-export type ContextLedgerKind =
-  | 'file'
-  | 'diff'
-  | 'symbol'
-  | 'instruction'
-  | 'skill'
-  | 'support-signal-output'
-  | 'tool-result'
-  | 'prior-artifact'
+// The ledger answers one question: which bytes reached the model, and which were
+// held back. A kind that nothing writes therefore means one of two things, and
+// they get opposite treatment.
+//
+// `symbol` and `prior-artifact` were removed. Symbol facts are ledgered, inside
+// the `support-signal-output` entry that carries them, so a second kind for the
+// same bytes would double-count them. `prior-artifact` described reading a
+// previous invocation's artifacts back in — a persistence layer this engine
+// deliberately does not have; each run reads the repository, not its own history.
+//
+// `diff` was NOT removed, because its absence was a DEFECT and is now fixed. The
+// reviewed diff text goes into every discovery packet and was never ledgered, so
+// the accounting silently omitted one of the largest inputs the model sees and
+// any "how much context did this run send" answer read low.
+export const ContextLedgerKindSchema = z.enum([
+  'file',
+  'diff',
+  'instruction',
+  'skill',
+  'support-signal-output',
+  'tool-result'
+])
 
-export type ContextLedgerDecision =
-  | 'included'
-  | 'skipped'
-  | 'truncated'
-  | 'summarized'
+export type ContextLedgerKind = z.infer<typeof ContextLedgerKindSchema>
 
-export type ContextLedgerEntry = {
-  readonly id: string
-  readonly kind: ContextLedgerKind
-  readonly path?: string | undefined
-  readonly taskId?: string | undefined
-  readonly sourceLedgerEntryId?: string | undefined
-  readonly contentHash?: string | undefined
-  readonly decision: ContextLedgerDecision
-  readonly reason: string
-  readonly bytesConsidered: number
-  readonly bytesIncluded: number
-}
+export const ContextLedgerDecisionSchema = z.enum([
+  'included',
+  'skipped',
+  'truncated',
+  'summarized'
+])
+
+export type ContextLedgerDecision = z.infer<typeof ContextLedgerDecisionSchema>
 
 export const ContextLedgerEntrySchema = z.strictObject({
   id: ContextLedgerIdSchema,
-  kind: z.enum([
-    'file',
-    'diff',
-    'symbol',
-    'instruction',
-    'skill',
-    'support-signal-output',
-    'tool-result',
-    'prior-artifact'
-  ]),
+  kind: ContextLedgerKindSchema,
   path: z.string().min(1).optional(),
   taskId: z.string().min(1).optional(),
   sourceLedgerEntryId: z.string().min(1).optional(),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  decision: z.enum(['included', 'skipped', 'truncated', 'summarized']),
+  decision: ContextLedgerDecisionSchema,
   reason: z.string().min(1),
   bytesConsidered: z.int().min(0),
   bytesIncluded: z.int().min(0)
 })
 
-export type CreateContextLedgerEntryOptions = {
+// Derived from the schema rather than restated: the schema is what actually
+// validates a ledger entry, so a hand-written mirror can only ever drift from it.
+export type ContextLedgerEntry = Readonly<z.infer<typeof ContextLedgerEntrySchema>>
+
+type CreateContextLedgerEntryOptions = {
   readonly kind: ContextLedgerKind
   readonly decision: ContextLedgerDecision
   readonly reason: string
@@ -66,7 +66,7 @@ export type CreateContextLedgerEntryOptions = {
   readonly content?: string | Buffer
 }
 
-export type CreateTextContextLedgerEntryOptions = {
+type CreateTextContextLedgerEntryOptions = {
   readonly kind: ContextLedgerKind
   readonly path?: string
   readonly reason: string

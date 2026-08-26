@@ -15,6 +15,7 @@ import {
 import type {
   CodeReviewerConfig,
   EvidenceRecord,
+  QualityGateResult,
   ReviewReport
 } from '../../../shared/contracts/index.js'
 import {
@@ -23,9 +24,9 @@ import {
 } from '../../deterministic-signals/index.js'
 import {
   createReviewTaskQueue,
+  type ContextLedgerEntry,
   type ReviewTaskQueueRecord
 } from '../../review-planning/index.js'
-import type { ContextLedgerEntry } from '../../review-planning/context-ledger.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
 import type { NoContentEventRecorder } from '../../observability/index.js'
 import { qualityGateThresholdsFor } from './workflow-input.js'
@@ -34,11 +35,20 @@ import type { ReviewWorkflowOutput } from '../pipeline/contracts.js'
 
 export type ReviewRunnerAdmissionState = Pick<
   ReviewReport,
-  'admittedFindings' | 'rejectedFindings' | 'qualityGate'
+  'admittedFindings' | 'rejectedFindings'
 > & {
+  // Required, unlike `ReviewReport.qualityGate`, which is optional because a
+  // report can be written for a run that never reached the gate. Admission is
+  // past that point: both paths below call `evaluateQualityGate`, which returns
+  // a result unconditionally, and the provider workflow's output contract
+  // requires one. Inheriting the report's optionality here only handed every
+  // consumer a value it had to invent — and the invented one was `passed: true`.
+  readonly qualityGate: QualityGateResult
   readonly evidence: readonly EvidenceRecord[]
   readonly candidateFindings: readonly CandidateFinding[]
   readonly refutationResults: ReviewReport['refutationResults']
+  // Spec 27. Absent on the deterministic path, which issues no discovery call.
+  readonly discovery?: ReviewReport['discovery']
   readonly providerIssues: ReviewReport['providerIssues']
   readonly contextLedgerEntries: readonly ContextLedgerEntry[]
   readonly admissionDecisions: ReviewSharedContextSnapshot['admissionDecisions']
@@ -106,17 +116,11 @@ export const candidateFindingsFromTaskResults = (
 const deterministicTaskEventFromQueueRecord = (
   record: ReviewTaskQueueRecord<WorkflowReviewTask>
 ): ReviewSharedContextSnapshot['taskEvents'][number] =>
-  sharedTaskEventFromWorkflow({
-    id: record.id,
-    kind: record.kind,
-    round: record.round,
-    paths: record.paths,
-    state: record.state,
-    ...(record.workerId === undefined ? {} : { workerId: record.workerId }),
-    ...(record.message === undefined ? {} : { message: record.message })
-  })
+  // `sharedTaskEventFromWorkflow` already picks the event fields and omits the
+  // absent optional ones, so the queue record is passed straight through.
+  sharedTaskEventFromWorkflow(record)
 
-export const runDeterministicReviewTaskQueue = (
+const runDeterministicReviewTaskQueue = (
   input: {
     readonly tasks: readonly WorkflowReviewTask[]
     readonly maxConcurrentTasks: number
@@ -143,28 +147,6 @@ export const runDeterministicReviewTaskQueue = (
 
   return queue.snapshot().map(deterministicTaskEventFromQueueRecord)
 }
-
-export const timedOutTaskEventsFor = (
-  tasks: readonly WorkflowReviewTask[]
-): ReviewSharedContextSnapshot['taskEvents'] =>
-  tasks.flatMap((task) => [
-    sharedTaskEventFromWorkflow({
-      id: task.id,
-      kind: task.kind,
-      round: task.round,
-      paths: task.paths,
-      state: 'planned'
-    }),
-    sharedTaskEventFromWorkflow({
-      id: task.id,
-      kind: task.kind,
-      round: task.round,
-      paths: task.paths,
-      state: 'failed',
-      workerId: 'review-timeout',
-      message: 'review run timed out'
-    })
-  ])
 
 export const runDeterministicAdmission = (
   input: {
@@ -272,6 +254,7 @@ export const admissionFromProviderWorkflowOutput = (
   qualityGate: output.qualityGate,
   candidateFindings: output.candidateFindings,
   refutationResults: output.refutationResults,
+  ...(output.discovery === undefined ? {} : { discovery: output.discovery }),
   providerIssues: output.providerIssues,
   contextLedgerEntries: output.contextLedgerEntries,
   admissionDecisions: output.admissionDecisions.map(

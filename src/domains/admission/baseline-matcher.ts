@@ -1,5 +1,6 @@
 import {
   AdmittedFindingSchema,
+  fingerprintKey,
   type AdmittedFinding,
   type BaselineStatus,
   type FindingFingerprint
@@ -15,11 +16,13 @@ export type BaselineMatchResult = {
   readonly warnings: readonly string[]
 }
 
-const fingerprintKey = (fingerprint: FindingFingerprint): string =>
-  `${fingerprint.algorithm}:${fingerprint.value}`
-
-// Baseline entries whose fingerprints no longer appear among admitted findings
-// are considered resolved (fixed since the baseline was recorded).
+// Baseline entries whose fingerprints no longer appear among admitted findings.
+//
+// NOT "fixed". This function cannot tell a fixed defect from one this run simply
+// did not report: in-diff recall is about two thirds and two runs over the same
+// commit do not produce the same report, so a fingerprint that disappears is at
+// least as likely to be a miss as a repair. Every surface that renders this must
+// say "no longer reported", never "resolved" or "fixed".
 export const resolveBaselineFingerprints = (
   baselineFingerprints: readonly BaselineFingerprintRecord[],
   admittedFindings: readonly AdmittedFinding[]

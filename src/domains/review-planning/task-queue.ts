@@ -1,6 +1,6 @@
 import type { ReviewTask } from './task-planner.js'
 
-export type ReviewTaskQueueState = 'planned' | 'running' | 'completed' | 'failed'
+type ReviewTaskQueueState = 'planned' | 'running' | 'completed' | 'failed'
 
 export type ReviewTaskQueueRecord<TTask extends ReviewTask = ReviewTask> =
   TTask & {
@@ -9,7 +9,7 @@ export type ReviewTaskQueueRecord<TTask extends ReviewTask = ReviewTask> =
     readonly message?: string
   }
 
-export type ReviewTaskQueue<TTask extends ReviewTask = ReviewTask> = {
+type ReviewTaskQueue<TTask extends ReviewTask = ReviewTask> = {
   readonly claimBatch: (options: {
     readonly limit: number
     readonly workerId?: string
@@ -18,6 +18,14 @@ export type ReviewTaskQueue<TTask extends ReviewTask = ReviewTask> = {
   readonly complete: (taskId: string, message?: string) => void
   readonly fail: (taskId: string, message: string) => void
   readonly snapshot: () => readonly ReviewTaskQueueRecord<TTask>[]
+  // The most recent transition, which is what a caller emitting one task event
+  // per transition actually wants. `snapshot().at(-1)` answers the same question
+  // by copying the entire append-only history first — roughly three records per
+  // task — and workers ask it on every loop iteration.
+  readonly lastRecord: () => ReviewTaskQueueRecord<TTask> | undefined
+  // Whether any task is still `planned` or `running`. Answered from the current
+  // state rather than by rebuilding it from the whole history.
+  readonly hasOpenTasks: () => boolean
 }
 
 const sortTasks = <TTask extends ReviewTask>(
@@ -119,6 +127,17 @@ export const createReviewTaskQueue = <TTask extends ReviewTask>(
     fail: (taskId, message) => {
       transition(taskId, 'failed', message)
     },
-    snapshot: () => history.map((record) => ({ ...record }))
+    snapshot: () => history.map((record) => ({ ...record })),
+    lastRecord: () => {
+      const last = history.at(-1)
+
+      // Copied like `snapshot`'s records are, so no caller can reach into the
+      // queue's own history through the value it is handed.
+      return last === undefined ? undefined : { ...last }
+    },
+    hasOpenTasks: () =>
+      [...current.values()].some(
+        (task) => task.state === 'planned' || task.state === 'running'
+      )
   }
 }

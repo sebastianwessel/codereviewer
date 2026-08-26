@@ -44,7 +44,7 @@ const createDebugLogger = (): {
 
 const evidence: EvidenceRecord = {
   id: 'ev_diff1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed branch can return an incorrect value.',
   location: {
     path: 'src/app.ts',
@@ -87,6 +87,7 @@ const workflowTask: WorkflowReviewTask = {
   candidateIds: [],
   contextEntryIds: [],
   priority: 0,
+  instructions: [],
   reviewContext: []
 }
 
@@ -216,6 +217,78 @@ describe('review runner deterministic admission', () => {
     ])
     expect(admission.warnings).toEqual(['provider-warning'])
     expect(admission.qualityGate).toEqual(output.qualityGate)
+    // The provider workflow issued no discovery call in this fixture, so nothing
+    // is claimed either way (spec 27).
+    expect(admission.discovery).toBeUndefined()
+  })
+
+  test('carries discovery telemetry from the provider workflow into admission state', () => {
+    // The only step between the workflow output and the report. Dropping it here
+    // is silent: the report still validates, it just answers nothing.
+    const discovery = {
+      totals: {
+        callCount: 2,
+        rawFindingCount: 3,
+        rawFindingsPerCall: [2, 1],
+        candidateCount: 1,
+        droppedCount: 2,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        cappedByLimitCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: [
+        {
+          taskId: 'task_bug1',
+          callCount: 2,
+          rawFindingCount: 3,
+          rawFindingsPerCall: [2, 1],
+          candidateCount: 1,
+          droppedCount: 2,
+          suppressedByIdCount: 0,
+          suppressedByLocationCount: 0,
+          cappedByLimitCount: 0,
+          contextOverflowSplitCount: 0,
+          mergeCallCount: 0,
+          mergeGroupCount: 0,
+          mergedAwayCount: 0
+        }
+      ]
+    }
+    const output = ReviewWorkflowOutputSchema.parse({
+      admittedFindings: [],
+      rejectedFindings: [],
+      evidence: [],
+      candidateFindings: [candidate],
+      contextLedgerEntries: [],
+      refutationResults: [],
+      providerIssues: [],
+      admissionDecisions: [],
+      taskEvents: [],
+      discovery,
+      qualityGate: {
+        passed: true,
+        failingFindingIds: [],
+        thresholds: {
+          maxCritical: null,
+          maxHigh: null,
+          maxMedium: null,
+          failOnProviderError: true,
+          failOnNewOnly: false
+        },
+        baselineFilteringApplied: false
+      },
+      instructionHashes: [],
+      skillHashes: [],
+      warnings: []
+    })
+
+    expect(admissionFromProviderWorkflowOutput(output).discovery).toEqual(
+      discovery
+    )
   })
 
   test('prepares provider or deterministic admission state from runner inputs', () => {

@@ -30,6 +30,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "The deletion logic in scheduleSMSReminders.ts incorrectly deletes non-SMS workflow reminders (e.g., Email, WhatsApp) that have retryCount > 1. This occurs because the retryCount condition within the OR clause for deletion lacks a method: WorkflowMethods.SMS filter, causing it to apply to all reminder types instead of only SMS reminders, which is the intended scope of this function.",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "runtime-critical"
     }

@@ -1,7 +1,7 @@
 # 01: Architecture And Structure
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-31
 
 ## Topology
 
@@ -29,35 +29,113 @@ domain folders require a spec update.
 ```text
 src/
   index.ts
+  cli/
+    commands/
   platform/
     path-service.ts
+    repository-path.ts
+    repository-file-reader.ts
   domains/
     repository-intake/
     configuration/
     provider-resolution/
     deterministic-signals/
-      structural/
-      diff/
-      scope/
     review-planning/
     context-retrieval/
+    context-ingestion/
+    analyzer-ingestion/
+    verification/
+    change-impact/
+    intent-fulfilment/
     shared-context/
     review-workflow/
-    agentic-review/
-      discovery/
-      refutation/
+      harness/
+      pipeline/
+        admission/
+        discovery/
+        refutation/
+      run/
+        context/
+        intake/
+        planning/
+        provider/
+        results/
+        support/
     admission/
     reporting/
     evaluation/
-    security/
+      corpus/
+      judging/
+      scoring/
+      report/
+        versions/
+      rendering/
+        comparison/
+      run/
+      change-impact-eval/
+      intent-eval/
+    costs/
+    observability/
     drift/
   shared/
     contracts/
     errors/
+    glob/
+    hash/
+    json/
     redaction/
-    result/
     schema/
+    testing/
+    text/
 ```
+
+`shared/testing/` holds assertions a spec requires more than one domain to
+satisfy. It is compiled out of the published build (`tsconfig.build.json`
+excludes it) because nothing at runtime may import it.
+
+`cli/commands/` holds one module per dispatchable command, named after the
+command it implements (`eval-run.ts` for `eval run`, `impact-check.ts` for
+`impact check`). A command owns its option set, its error classification and its
+exit code, and no command imports another. What more than one command shares —
+the `CliResult`/`CliRunOptions` contract, error-to-exit-code mapping,
+configuration loading, logger construction, and the advisory `check` skeleton —
+stays in `cli/` beside `commands/`, so the dependency direction is one way:
+`index.ts` → `commands/*` → `cli/*`.
+
+`evaluation/` is grouped by what a module is FOR, not by the artifact it ends up
+in: `corpus/` defines and hydrates the cases, `judging/` holds the model-backed
+judges and their calibration, `scoring/` turns matches into numbers, `report/`
+owns the artifact contracts and provenance (`report/versions/` the
+metrics-version comparability rules), `rendering/` the Markdown surfaces
+(`rendering/comparison/` the `eval compare` ones), and `run/` the runner — the
+corpus runner, the per-case runner it drives, and the committed capability pin
+set a measured run is held to. `eval-warnings.ts` stays at the domain root
+because `run/`, `scoring/` and `index.ts` all read it.
+
+`run/eval-case-runner.ts` is the one module in this domain that must NOT appear
+on `evaluation/index.ts`. It imports `review-workflow`, whose preflight imports
+`drift`, whose artifact-example checker imports this barrel for the eval corpus
+contracts — so a barrel entry closes an import cycle. Its only consumer,
+`src/cli/commands/eval-run.ts`, imports it by module path instead; the CLI is
+the composition layer, not a sibling domain, so no domain reaches past a barrel.
+
+`evaluation/change-impact-eval/` and `evaluation/intent-eval/` are the groups
+defined by their CORPUS rather than by their role, and that is deliberate. Spec
+22's change-impact review and spec 23's intent-fulfilment review are each scored
+against a different corpus with a different answer key from the diff reviewer's,
+and none of the three may be pooled or run with another's
+`--slice-root`/`--manifest`. Distributing these modules by technical role would
+file each one next to its diff-reviewer counterpart — corpus schema beside
+corpus schema, scoring beside scoring — which is precisely the adjacency the
+separation exists to prevent. Keep them together. Do not "tidy" them back into
+the role folders.
+
+Each group also owns the per-case runner that drives its lane
+(`impact-eval-runner.ts`, `intent-eval-runner.ts`), moved here from `src/cli/` on
+2026-08-14. They had been extracted out of the command handlers to keep those
+thin, but extracted SIDEWAYS into the CLI rather than into the domain that owns
+the measurement, which left roughly two thousand lines of domain orchestration
+under `src/cli/`.
 
 ## Ownership Rules
 
@@ -70,24 +148,60 @@ src/
 | `deterministic-signals` | Cheap local facts used for changed-line anchoring, symbol spans, import/test hints, scope validation, de-duplication, known-noisy contradiction checks, and optional external-tool metadata summaries. | Primary issue discovery, replacement CodeQL/linter/build/test behavior, admission decisions, provider calls, or report rendering. |
 | `review-planning` | Review tasks and dependency-aware task grouping (change-unit clustering). | Model provider loading or publication. |
 | `context-retrieval` | Read/list/grep-style repository context tools exposed through bounded mediation to refutation and (when skills are enabled) holistic review. | Shell execution, filesystem writes, network access, provider loading, or admission. |
+| `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
+| `analyzer-ingestion` | Spec 15 Mechanism 2: reading SARIF 2.1.0 artifacts produced by an analyzer the operator already runs, normalizing them to a neutral alert shape (rule id, CWE, analyzer identity, locations), holding each alert against the run's changed ranges by changed-side attribution, and rendering the attributed remainder as evidence in a review task. Named apart from `context-ingestion` because the two ingest different things for different stages: `context-ingestion` brings in human intent, this brings in machine findings. | Detecting anything itself, seeding a candidate, admission or gate authority, provider calls, or writing to the repository. An alert is evidence a reviewer may weigh, never a finding. |
+| `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the fix lane's advisory `fixProposal` enrichment and its use of the deterministic apply-check, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, changing the general review's discovery path, or **owning the apply-check itself** — the primitive moved to `shared/text/apply-fix-edits.ts` on 2026-08-11 when spec 13's comment layer began gating every suggestion with it, and two notions of "does this edit still fit the file" would be worse than one. |
+| `change-impact` | Change-impact review (spec 22): the changed-symbol seed derived from support-signal facts intersected with diff hunks, bounded dependent discovery over those symbols, and its own report contract, admission, and metrics. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
+| `intent-fulfilment` | Intent-fulfilment review (spec 23): change-surface collection, obligation extraction from the stated intent, per-obligation judgement, judgement, the run explanation, and its own advisory report contract. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
 | `shared-context` | Run-local admitted facts/findings/evidence references. | Filesystem scanning or provider calls. |
-| `review-workflow` | Public harness facade, focused review-runner run-start state, focused review-runner run observability/start logging, focused review-runner preflight for drift and telemetry setup, focused review-runner source-state preparation for repository intake and source reads, focused review-runner planning-state preparation for deterministic signals and task planning, focused review-runner context-assembly step lifecycle, focused review-runner repository input preparation, focused review-runner deterministic signal preparation, focused review-runner task planning, focused review-runner static-context loading, focused review-runner context-state/provenance/metrics preparation, focused review-runner completion-state preparation, focused review-runner success-result/report-metrics/completion-log assembly, focused review-runner quality-gate partial failure assembly, focused review-runner provider-state execution/live task-event recovery, focused review-runner provider failure classification and partial recovery, focused review-runner admission-state preparation with deterministic fallback observability, focused review-runner provider workflow invocation/usage accounting/provider-step observability, focused deterministic runner admission/task-event conversion, focused provider workflow output admission mapping, focused review-runner error/timeout signal and terminal-error classification, focused review-runner partial failure-state assembly, focused review-runner finalization for cost/warnings/resolved baseline, focused review-runner provenance hash projection, focused review-runner baseline loading/configured-state/schema validation/baseline-load observability, focused review-runner drift warning and gate-error shaping, focused review-runner observability recording, focused provided-candidate harness construction, focused model-backed harness construction, focused ai-harness runtime config/delegation policy, focused workflow session invocation/error normalization, focused shared workflow handler orchestration, focused public workflow contracts, focused task planning, bounded workflow task queue execution, workflow completion/admission assembly, review-runner budget derivation, review-runner context assembly, review-runner workflow-input assembly, review-runner result assembly, holistic discovery and refutation packet shaping, refutation orchestration, candidate-finding conversion, provider-call logging/normalization adapters, report-safe provider issue normalization, shared model packet-budget errors, compact model shared-digest rendering, model-agent instruction and IO-contract modules, shared mediated context artifact shaping, and model-origin admission review. | Low-level git parsing, path normalization, artifact rendering. |
-| `agentic-review` | Model-facing holistic candidate-finding generation and refutation output schemas. | Deterministic path authority, publication, provider package loading, or report rendering. |
+| `review-workflow` | The public harness facade and the review runner: run-start state, preflight, source and planning state, context assembly, provider execution and failure classification, admission and completion state, baseline loading, cost and warning finalization. Also the model-facing stages it drives — holistic discovery, semantic finding merge, refutation, candidate conversion — with their packet shaping, agent instructions, and IO contracts. | Low-level git parsing, path normalization, artifact rendering, deterministic path authority, publication, provider package loading, or report rendering. |
 | `admission` | Refutation-result validation, deterministic safety checks, promotion policy, and admitted/rejected decisions. | Candidate generation or output formatting. |
-| `reporting` | JSON/Markdown artifacts and run summary rendering. | Admission decisions or provider calls. |
+| `reporting` | JSON/Markdown/SARIF artifacts, run summary rendering, and platform-neutral review-comment drafts with their platform detection, per-platform renderers, and the apply-check that gates every offered suggestion (spec 13). | Admission decisions, provider calls, publishing, or writing to the repository — it reads current file bytes to run the apply-check and for nothing else. |
 | `evaluation` | Focused eval report contracts, focused Markdown report rendering, golden fixtures, metrics, benchmark runner, quality scoring, semantic-judge scoring metadata, and provider issue visibility in eval artifacts. | Production admission logic. |
-| `security` | Redaction, permission models, safe command policy. | Business-domain review rules. |
+| `costs` | Token aggregation, the bundled model pricing snapshot, and cost calculation with its `cost-unavailable` warning. | Provider calls, admission decisions, or report rendering. |
+| `observability` | Sanitized run logging and the optional OpenTelemetry setup. | Raw source, prompt text, model output, env vars, or secrets in any emitted signal. |
 | `drift` | Deterministic checks for docs/specs/schema/security ambiguity and drift. | Provider calls, model judging, git mutations, or source writes. |
-| `shared` | Reusable contracts/helpers used by 2+ domains. | Domain-specific orchestration. |
+| `shared` | Reusable contracts/helpers used by 2+ domains: Zod contracts, the error taxonomy, glob matching, hashing, JSON values, the redactor, JSON Schema generation, cross-domain test assertions, and text/line utilities — including the deterministic fix-edit apply-check, which `verification` and `reporting` both ask the same question of. | Domain-specific orchestration. |
+
+There is no `security` domain folder. Redaction is `shared/redaction`, the
+permission model is the `security` configuration block plus the mediated
+`context-retrieval` tool surface, and there is no safe-command policy because R1
+executes no commands.
 
 ## Public Entrypoints
 
 | Entrypoint | Path | Contract |
 | --- | --- | --- |
-| Library entry | `src/index.ts` | Re-export stable public types and runtime helpers. No side effects. |
-| CLI entry | `src/cli/index.ts` | Parse args, call domain services, map errors to exit codes. |
+| Library entry | `src/index.ts` | Re-export stable public types and runtime helpers by name. No wildcards, no side effects. See *Public Surface* below. |
+| CLI entry | `src/cli/index.ts` | Dispatch a command line to one module in `src/cli/commands/`, which parses its own args, calls domain services, and maps errors to exit codes. Returns a `CliResult`; it never exits the process itself. |
+| CLI binary | `src/cli/main.ts` | The `codereviewer` bin (`dist/cli/main.js`). Calls `runCli`, writes stdout/stderr, sets `process.exitCode`, and holds no other logic. |
 | Specs | `specs/` | Source of truth until readiness approval and implementation. |
 | User docs | `docs/` | Implemented behavior only. |
+
+## Public Surface
+
+The package's public API is the explicit list of named re-exports in
+`src/index.ts`, plus `runCli` and its two types from `src/cli/index.ts`. There is
+no other definition of it, and nothing else counts as published.
+
+- `src/index.ts` must not contain `export *`. A wildcard makes the surface
+  unenumerable, so nobody can say whether a change to a domain is breaking.
+- A domain barrel (`src/domains/*/index.ts`) is an INTERNAL SEAM. It exists so a
+  sibling domain can import a domain without reaching into its files, and its
+  contents are decided by that need alone. Appearing on a barrel does not make a
+  symbol public.
+- Adding a symbol to `src/index.ts` is a deliberate act, reviewed as an addition
+  to the public API. A symbol earns its place by being needed to type or load a
+  configuration, to run a review, or to read, validate or render a report —
+  including any type named in the signature of something already published,
+  because a signature a caller cannot write down is not usable.
+- Removing a symbol from `src/index.ts` is a breaking change and must be stated
+  as one.
+
+This separation is what makes barrel narrowing safe. Once the public surface is
+stated independently of the barrels, removing an over-shared symbol from a domain
+barrel is an internal refactor with no effect on consumers, and it can be
+reviewed as one.
 
 ## Generated Outputs
 
@@ -96,8 +210,11 @@ src/
 | Build output | `dist/` | No |
 | Coverage | `coverage/` | No |
 | Local run artifacts | `.codereviewer/runs/<run-id>/` | No |
+| Hydrated eval slices | `.codereviewer/eval/` | No |
 | Generated config schema | `schema/codereviewer-config.schema.json` | Yes |
+| Generated contract copies | `specs/03-contracts/config.schema.json`, `specs/03-contracts/review-report.schema.json` | Yes |
 | Golden eval datasets | `eval/fixtures/` | Yes when hand-authored |
+| Eval benchmarks and corpora | `eval/benchmarks/`, `eval/corpora/` | Yes (manifests; slices are hydrated) |
 
 ## Shared Helper Policy
 
@@ -112,9 +229,72 @@ the owning domain.
 - Cross-domain access must use exported domain entrypoints.
 - `shared` must not import from `domains`.
 - Optional provider packages must only be imported by `provider-resolution`.
-- `agentic-review` may request repository context only through
-  `context-retrieval`; it must not perform direct filesystem, shell, git,
-  network, or write operations.
+- `change-impact` must not import from `review-workflow`, and `review-workflow`
+  must not import from it. It is reachable only from `src/cli/`.
+- `intent-fulfilment` must not import from `review-workflow`, and
+  `review-workflow` must not import from it. It is reachable only from
+  `src/cli/`.
+- `review-workflow` must not perform shell, git, network, or write operations,
+  and every repository path it reads must first be resolved inside the
+  repository root. See *Known Divergence* below on where that content is read.
+### Known Divergence: Where Repository Content Is Read
+
+The rule above is deliberately narrower than its predecessor, which required
+model-facing review to obtain repository context *only* through
+`context-retrieval`. That is not what the code does: `review-workflow` reads
+source directly through `node:fs/promises` in its context-assembly modules —
+task context, static context, and referenced definitions.
+
+The safety half of the original intent **is** met. Every one of those reads
+resolves its path inside the repository root first, and anything resolving
+outside is skipped, so no unvalidated path reaches the filesystem. What is not
+met is the layering half: retrieval policy lives in more than one place, so a
+future change to how repository content is selected or bounded has several sites
+to touch rather than one.
+
+This is recorded as an unmet architectural goal rather than written out of the
+spec, because consolidating those reads behind `context-retrieval` is a real
+improvement that nobody has done, and deleting the requirement would erase the
+reason to do it. It is not a security defect and should not be described as one.
+
+### Known Divergence: Git Seams Outside `repository-intake`
+
+The Ownership Rules give "Git refs" to `repository-intake`. Three other modules
+nevertheless spawn git, each for a different reason:
+
+| Module | Reads | Why not `repository-intake` |
+| --- | --- | --- |
+| `evaluation/report/engine-identity.ts` | the ENGINE's own checkout | stamps our commit and working-tree cleanliness onto every eval report |
+| `evaluation/corpus/git-corpus-plumbing.ts` | UPSTREAM corpus repositories | checks out corpus slices for all three git-backed corpora |
+| `reporting/review-comment-platform.ts` | `remote.origin.url` | picks the comment platform from a constant argument array; no ref and no interpolation reach git |
+
+**The invariant is not the count. It is exactly one module per reason**, and it
+is enforced by `src/git-seam-boundary.test.ts` rather than by this paragraph,
+because this paragraph has already failed at the job twice.
+
+It first said "two" while FOUR modules held a `child_process` import: each corpus
+hydrator had grown its own copy of the runner, and the record silently
+understated itself as the copies multiplied. Consolidating them on 2026-08-15
+made the count true rather than adjusting the number to match the drift. The test
+written that same day was then scoped to `domains/evaluation/` — and so was
+structurally blind to `reporting/review-comment-platform.ts`, which had been
+spawning git the whole time and appeared in no list. A guard that only looks
+where the last problem was found keeps finding only that problem. It is now
+scoped to all of `src/`.
+
+This is recorded rather than normalised, and it is not the same git.
+`repository-intake` reads the repository **under review** at the refs a run was
+pointed at, behind the read-only argument allowlist in `git-command-safety.ts`.
+The three above read the engine's own checkout, upstream corpus repositories, and
+one local config value. Routing them through `repository-intake` would widen that
+domain from "the repository we are reviewing" to "any repository", a larger
+change to the ownership model than the problem warrants.
+
+What is owed is a decision, not a refactor: either grant these callers a bounded
+git seam in the Ownership Rules and say what each may and may not read, or name
+another owner. Until then the divergence is not permission for a fourth; the
+table above is the whole list, and the test is what keeps it that way.
+
 - Deterministic signal extractors must be removable without changing core
   finding/report schemas. They can improve evidence quality but cannot be a
   required product-specific static-analysis tool for external CI-equivalent checks.

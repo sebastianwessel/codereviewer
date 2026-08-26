@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import { provenanceHashesFromContextLedger } from './provenance.js'
 
 const ledgerEntry = (

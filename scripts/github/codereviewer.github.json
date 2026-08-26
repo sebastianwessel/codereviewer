@@ -1,0 +1,9 @@
+{
+  "review": {
+    "mode": "pr"
+  },
+  "reporting": {
+    "sarif": { "target": "github" },
+    "reviewComments": { "platform": "github" }
+  }
+}

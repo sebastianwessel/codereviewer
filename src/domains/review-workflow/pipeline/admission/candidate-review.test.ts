@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
-import { type CandidateFinding } from '../../../admission/index.js'
-import { type WorkflowReviewTask } from '../agent-contracts.js'
+import type { EvidenceRecord } from '../../../../shared/contracts/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import { reviewCandidateForAdmission } from './candidate-review.js'
 import {
   ReviewWorkflowInputSchema,
@@ -48,26 +47,6 @@ const modelCandidate: CandidateFinding = {
   proposedBy: 'review-agent'
 }
 
-const task: WorkflowReviewTask = {
-  id: 'task_admissioncandidate',
-  kind: 'file',
-  round: 1,
-  paths: ['src/admission-candidate.ts'],
-  factIds: [],
-  evidenceIds: ['ev_admissioncandidate'],
-  candidateIds: ['cand_supportcandidate', 'cand_modelcandidate'],
-  contextEntryIds: ['ctx_adadadad'],
-  reviewContext: [
-    {
-      kind: 'file',
-      path: 'src/admission-candidate.ts',
-      content: 'export const changed = true\n',
-      ledgerEntryId: 'ctx_adadadad'
-    }
-  ],
-  priority: 1
-}
-
 const workflowInput = (): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
     runId: 'run-admission-candidate',
@@ -77,7 +56,6 @@ const workflowInput = (): ReviewWorkflowInput =>
     ],
     evidence: [supportEvidence],
     candidates: [supportSignalCandidate, modelCandidate],
-    instructions: [],
     skills: [],
     promotionPolicy: {
       modelWeakOrRefuted: 'rejected'
@@ -90,39 +68,49 @@ const workflowInput = (): ReviewWorkflowInput =>
   })
 
 describe('model admission candidate review', () => {
-  test('passes support-signal candidates through without refutation work', async () => {
-    let refutationCalls = 0
-    const outcome = await reviewCandidateForAdmission({
+  test('passes support-signal candidates through without consuming a verdict', () => {
+    const outcome = reviewCandidateForAdmission({
       workflowInput: workflowInput(),
-      tasks: [task],
       candidate: supportSignalCandidate,
-      allCandidates: [supportSignalCandidate, modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
-      reviewEvidence: [supportEvidence],
-      refuteFinding: async () => {
-        refutationCalls += 1
-        throw new Error('support-signal candidate should not be refuted')
+      // A support signal is decided by deterministic preflight rules; any verdict
+      // that reached it must be ignored rather than applied.
+      resolution: {
+        status: 'verdict',
+        refutation: {
+          verdict: 'refuted',
+          rationaleSummary: 'A support-signal candidate is never refuted.'
+        }
       }
     })
 
-    expect(refutationCalls).toBe(0)
     expect(outcome.admissionCandidates).toEqual([supportSignalCandidate])
     expect(outcome.artifactOnlyCandidateIds).toEqual(['cand_supportcandidate'])
+    expect(outcome.rejectedFindings).toEqual([])
   })
 
-  test('admits a proved model candidate with the refuter fix summary', async () => {
-    const outcome = await reviewCandidateForAdmission({
+  test('falls back to the no-refuter outcome when no resolution exists', () => {
+    const outcome = reviewCandidateForAdmission({
       workflowInput: workflowInput(),
-      tasks: [task],
       candidate: modelCandidate,
-      allCandidates: [supportSignalCandidate, modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
-      reviewEvidence: [supportEvidence],
-      refuteFinding: async () => ({
-        verdict: 'proved',
-        rationaleSummary: 'The active admission critic proved the claim.',
-        fixSummary: 'Preserve the existing state in the changed branch.'
-      })
+      resolution: undefined
+    })
+
+    expect(outcome.admissionCandidates).toEqual([modelCandidate])
+    expect(outcome.refutationResults).toEqual([])
+  })
+
+  test('admits a proved model candidate with the refuter fix summary', () => {
+    const outcome = reviewCandidateForAdmission({
+      workflowInput: workflowInput(),
+      candidate: modelCandidate,
+      resolution: {
+        status: 'verdict',
+        refutation: {
+          verdict: 'proved',
+          rationaleSummary: 'The active admission critic proved the claim.',
+          fixSummary: 'Preserve the existing state in the changed branch.'
+        }
+      }
     })
 
     expect(outcome.admissionCandidates).toEqual([
@@ -141,18 +129,17 @@ describe('model admission candidate review', () => {
     ])
   })
 
-  test('rejects a needs-more-evidence model candidate when policy rejects', async () => {
-    const outcome = await reviewCandidateForAdmission({
+  test('rejects a needs-more-evidence model candidate when policy rejects', () => {
+    const outcome = reviewCandidateForAdmission({
       workflowInput: workflowInput(),
-      tasks: [task],
       candidate: modelCandidate,
-      allCandidates: [supportSignalCandidate, modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
-      reviewEvidence: [supportEvidence],
-      refuteFinding: async () => ({
-        verdict: 'needs-more-evidence',
-        rationaleSummary: 'The refuter could not prove the claim.'
-      })
+      resolution: {
+        status: 'verdict',
+        refutation: {
+          verdict: 'needs-more-evidence',
+          rationaleSummary: 'The refuter could not prove the claim.'
+        }
+      }
     })
 
     expect(outcome.admissionCandidates).toEqual([])
@@ -162,6 +149,47 @@ describe('model admission candidate review', () => {
       expect.objectContaining({
         candidateId: 'cand_modelcandidate',
         verdict: 'needs-more-evidence'
+      })
+    ])
+  })
+
+  test('treats a candidate the batch never adjudicated as needs-more-evidence', () => {
+    const outcome = reviewCandidateForAdmission({
+      workflowInput: workflowInput(),
+      candidate: modelCandidate,
+      resolution: { status: 'missing-verdict' }
+    })
+
+    // The fail-safe: no verdict must never become an admitted, proved finding.
+    expect(outcome.admissionCandidates).toEqual([])
+    expect(outcome.rejectedFindings[0]?.reason).toBe('weak-evidence')
+    expect(outcome.refutationResults).toEqual([
+      expect.objectContaining({
+        candidateId: 'cand_modelcandidate',
+        verdict: 'needs-more-evidence'
+      })
+    ])
+  })
+
+  test('reports a provider-error resolution as an unrecovered provider issue', () => {
+    const outcome = reviewCandidateForAdmission({
+      workflowInput: workflowInput(),
+      candidate: modelCandidate,
+      resolution: {
+        status: 'provider-error',
+        error: new Error('provider timed out while refuting'),
+        stage: 'refutation-check'
+      }
+    })
+
+    expect(outcome.admissionCandidates).toEqual([])
+    expect(outcome.providerIssues).toEqual([
+      expect.objectContaining({ stage: 'refutation-check', recovered: false })
+    ])
+    expect(outcome.rejectedFindings).toEqual([
+      expect.objectContaining({
+        candidateId: 'cand_modelcandidate',
+        reason: 'provider-error'
       })
     ])
   })

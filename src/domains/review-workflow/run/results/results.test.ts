@@ -2,11 +2,13 @@ import type { Logger } from '@purista/harness'
 import { describe, expect, test } from 'vitest'
 import {
   CodeReviewerConfigSchema,
-  EvidenceRecordSchema
+  EvidenceRecordSchema,
+  type TestAdequacySignal
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { evaluateQualityGate } from '../../../admission/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
-import { createContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import { createContextLedgerEntry } from '../../../review-planning/index.js'
 import type { ReviewRunnerAdmissionState } from '../admission.js'
 import {
   createCoverageSummary,
@@ -41,6 +43,23 @@ const createInfoLogger = (): {
   return { logger, records }
 }
 
+// A completed run always carries a gate result, so the fixtures below use the one
+// a run with no admitted findings produces rather than omitting it.
+const emptyRunQualityGate = evaluateQualityGate({
+  admittedFindings: [],
+  thresholds: {}
+})
+
+// Spec 29. A completed run always carries the signal, so the fixtures below state
+// the shape a change with nothing to observe produces rather than omitting it.
+const emptyTestAdequacySignal: TestAdequacySignal = {
+  consideredFileCount: 0,
+  pairedFileCount: 0,
+  unpairedPaths: [],
+  changedTestFileCount: 0,
+  unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+}
+
 describe('review runner results', () => {
   test('creates run summaries with provider and cost metadata', () => {
     const startedAt = new Date('2026-06-22T10:00:00.000Z')
@@ -61,6 +80,7 @@ describe('review runner results', () => {
         completedAt,
         configHash: sha256('config'),
         warnings: ['cost-unavailable'],
+        modelSearch: 'performed',
         runCost: {
           warnings: [],
           costUsd: 0.0123,
@@ -80,12 +100,67 @@ describe('review runner results', () => {
       configHash: sha256('config'),
       provider: 'openai',
       model: 'review-model',
+      modelSearch: 'performed',
       durationMs: 2500,
       costUsd: 0.0123,
       inputTokens: 1000,
       outputTokens: 250,
       warnings: ['cost-unavailable']
     })
+  })
+
+  // With `aiReview.enabled: false` no model ever ran, and this summary stamped the
+  // CONFIGURED provider and model onto the run anyway. Every surface downstream
+  // reads those two fields as "the model that produced these findings", so the
+  // report asserted a model had searched a change no model had seen. Config states
+  // which model WOULD be used; provenance may only state which one WAS.
+  test('a run that performed no model search names no model as having produced it', () => {
+    const config = CodeReviewerConfigSchema.parse({
+      aiReview: { enabled: false },
+      provider: { id: 'openai', model: 'review-model' }
+    })
+    const summary = createReviewRunSummary({
+      repositoryRoot: '/repo/project',
+      config,
+      runId: 'run_test',
+      startedAt: new Date('2026-06-22T10:00:00.000Z'),
+      completedAt: new Date('2026-06-22T10:00:02.500Z'),
+      configHash: sha256('config'),
+      warnings: [],
+      modelSearch: 'not-performed'
+    })
+
+    expect(summary.modelSearch).toBe('not-performed')
+    expect(summary).not.toHaveProperty('provider')
+    expect(summary).not.toHaveProperty('model')
+  })
+
+  // A certificate that counts only the files which REACHED review can read
+  // "500 of 500 reviewable — complete" while three hundred were dropped before it.
+  // The Skipped Files section keeps `report.md` honest, but a CI step branching on
+  // `coverage.status` alone saw a clean proof.
+  test('the coverage certificate states how many files never reached review', () => {
+    const entry = createContextLedgerEntry({
+      kind: 'file',
+      path: 'src/a.ts',
+      taskId: 'task_a',
+      reason: 'task-context-source-chunk',
+      decision: 'included',
+      bytesConsidered: 7,
+      bytesIncluded: 7,
+      content: 'let a=1'
+    })
+    const coverage = createCoverageSummary({
+      sourceFiles: [{ path: 'src/a.ts', content: 'let a=1' }],
+      contextLedger: [entry],
+      skippedFileCount: 300
+    })
+
+    // Every file that DID reach review was covered, so the status is honest…
+    expect(coverage.status).toBe('complete')
+    expect(coverage.reviewableFileCount).toBe(1)
+    // …and the certificate now also says what it never opened.
+    expect(coverage.excludedFileCount).toBe(300)
   })
 
   test('summarizes complete and incomplete source coverage from ledger entries', () => {
@@ -115,7 +190,8 @@ describe('review runner results', () => {
         { path: 'src/a.ts', content: 'let a=1' },
         { path: 'src/b.ts', content: 'let b=22' }
       ],
-      contextLedger: [completeEntry, partialEntry]
+      contextLedger: [completeEntry, partialEntry],
+      skippedFileCount: 0
     })
 
     expect(coverage.status).toBe('incomplete')
@@ -147,7 +223,7 @@ describe('review runner results', () => {
   test('reconstructs shared context snapshots from runner artifacts', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',
-      kind: 'deterministic-signal',
+      kind: 'diagnostic',
       summary: 'Symbol alpha was detected.',
       location: { path: 'src/a.ts', startLine: 1, side: 'file' },
       source: 'deterministic-support-signal',
@@ -164,6 +240,7 @@ describe('review runner results', () => {
             path: 'src/a.ts',
             name: 'alpha',
             line: 1,
+            endLine: 1,
             summary: 'alpha declaration',
             contentHash: sha256('alpha')
           }
@@ -209,7 +286,8 @@ describe('review runner results', () => {
       startedAt: new Date('2026-06-22T10:00:00.000Z'),
       completedAt: new Date('2026-06-22T10:00:01.000Z'),
       configHash: sha256('config'),
-      warnings: []
+      warnings: [],
+      modelSearch: 'performed'
     })
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: 'let a=1' }],
@@ -224,7 +302,8 @@ describe('review runner results', () => {
           bytesIncluded: 7,
           content: 'let a=1'
         })
-      ]
+      ],
+      skippedFileCount: 0
     })
 
     const report = createReviewReport({
@@ -234,7 +313,8 @@ describe('review runner results', () => {
       rejectedFindings: [],
       evidence: [],
       skippedFiles: [],
-      qualityGate: undefined,
+      qualityGate: emptyRunQualityGate,
+      testAdequacy: emptyTestAdequacySignal,
       refutationResults: [],
       providerIssues: []
     })
@@ -243,6 +323,44 @@ describe('review runner results', () => {
     expect(report.run.runId).toBe('run_report')
     expect(report.coverage.status).toBe('complete')
     expect(report.artifacts).toEqual([])
+    // A run whose findings came from deterministic signals alone issued no
+    // discovery call, and must not claim a recorded zero.
+    expect(report.discovery).toBeUndefined()
+
+    const discovery = {
+      totals: {
+        callCount: 3,
+        rawFindingCount: 4,
+        rawFindingsPerCall: [2, 1, 1],
+        candidateCount: 2,
+        droppedCount: 2,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        cappedByLimitCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: []
+    }
+    const instrumentedReport = createReviewReport({
+      run,
+      coverage,
+      admittedFindings: [],
+      rejectedFindings: [],
+      evidence: [],
+      skippedFiles: [],
+      qualityGate: emptyRunQualityGate,
+      testAdequacy: emptyTestAdequacySignal,
+      refutationResults: [],
+      providerIssues: [],
+      discovery
+    })
+
+    // Spec 27: the report is where the counters have to arrive, because it is the
+    // only artefact an evaluation reads back.
+    expect(instrumentedReport.discovery).toEqual(discovery)
   })
 
   test('prepares successful runner result with report metrics and shared context', () => {
@@ -262,7 +380,7 @@ describe('review runner results', () => {
     })
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',
-      kind: 'deterministic-signal',
+      kind: 'diagnostic',
       summary: 'Symbol alpha was detected.',
       location: { path: 'src/a.ts', startLine: 1, side: 'file' },
       source: 'deterministic-support-signal',
@@ -273,7 +391,7 @@ describe('review runner results', () => {
       candidateFindings: [],
       admittedFindings: [],
       rejectedFindings: [],
-      qualityGate: undefined,
+      qualityGate: emptyRunQualityGate,
       refutationResults: [],
       providerIssues: [],
       contextLedgerEntries: [],
@@ -298,6 +416,7 @@ describe('review runner results', () => {
           path: 'src/a.ts',
           name: 'alpha',
           line: 1,
+          endLine: 1,
           summary: 'alpha declaration',
           contentHash: sha256(sourceContent)
         }
@@ -306,7 +425,8 @@ describe('review runner results', () => {
     } as const
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: sourceContent }],
-      contextLedger: [sourceEntry]
+      contextLedger: [sourceEntry],
+      skippedFileCount: 0
     })
     const observability = createNoContentEventRecorder()
     const { logger, records } = createInfoLogger()
@@ -319,9 +439,11 @@ describe('review runner results', () => {
       completedAt: new Date('2026-06-22T10:00:01.000Z'),
       configHash: sha256('config'),
       warnings: ['drift:documentation'],
+      modelSearch: 'performed',
       runCost: { warnings: [] },
       analysis,
       coverage,
+      testAdequacy: emptyTestAdequacySignal,
       contextLedger: [sourceEntry],
       skippedFiles: [],
       admission,

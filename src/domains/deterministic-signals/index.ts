@@ -5,19 +5,11 @@ export {
   discoverDeterministicSignalTestMappings
 } from './deterministic-signal-registry.js'
 export {
-  extractEcmascriptSignals,
-  detectEcmascriptSignalFiles,
-  discoverEcmascriptSignalTestMappings
-} from './ecmascript/ecmascript-signal-extractor.js'
-export {
   extractPolyglotSignals,
   detectPolyglotSignalFiles,
   discoverPolyglotSignalTestMappings
 } from './polyglot/polyglot-signal-extractor.js'
 export {
-  deterministicSignalEvidenceOwnsPath,
-  supportSignalFactOwnsPath,
-  supportSignalLanguageForSource,
   assertDeterministicSignalEvidenceOwnsPath,
   assertSupportSignalFactOwnsPath,
   supportedSignalLanguages,
@@ -26,14 +18,24 @@ export {
   normalizeSignalPath
 } from './shared/deterministic-signal-utils.js'
 export {
+  isLanguageTestFile,
+  isTestSideFile,
+  isTestTreePath
+} from './shared/test-discovery.js'
+export {
+  computeTestAdequacySignal
+} from './test-adequacy/test-adequacy-signal.js'
+export {
   supportedSignalLanguageForPath,
   routeFilesBySignalLanguage,
-  routeSignalSourceFilesByLanguage,
-  type SignalLanguageRoutingResult,
-  type RoutedSignalLanguageFiles
+  routeSignalSourceFilesByLanguage
 } from './shared/signal-language-router.js'
-export { astGrepVersion } from './ast-grep/ast-grep-parser.js'
-export { deterministicSignalExtractorVersions } from './deterministic-signal-metadata.js'
+export {
+  astGrepVersion
+} from './ast-grep/ast-grep-parser.js'
+export {
+  deterministicSignalExtractorVersions
+} from './deterministic-signal-metadata.js'
 export type {
   SupportSignalDetection,
   SupportedSignalLanguage,

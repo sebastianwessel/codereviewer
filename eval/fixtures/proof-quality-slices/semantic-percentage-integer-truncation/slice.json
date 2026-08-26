@@ -1,0 +1,33 @@
+{
+  "id": "semantic-percentage-integer-truncation",
+  "title": "Integer division truncates before scaling",
+  "description": "A project-owned semantic review case where a percentage is computed as an integer quotient before multiplying, collapsing the result to 0 or 100.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "rust",
+  "changedFiles": [
+    "src/stats.rs"
+  ],
+  "diff": "diff --git a/src/stats.rs b/src/stats.rs\n--- a/src/stats.rs\n+++ b/src/stats.rs\n@@ -5,5 +5,5 @@ pub fn pass_percentage(passed: u32, total: u32) -> u32 {\n         return 0;\n     }\n \n-    passed * 100 / total\n+    (passed / total) * 100\n }\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "src/stats.rs",
+      "lineRange": [
+        8,
+        8
+      ],
+      "semanticSummary": "passed / total truncates to 0 for any partial ratio before the * 100, so the percentage is almost always 0 (or 100); multiply before dividing as passed * 100 / total"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "logic",
+    "positive"
+  ]
+}

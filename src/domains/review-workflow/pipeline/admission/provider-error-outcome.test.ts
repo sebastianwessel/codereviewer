@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type CandidateFinding } from '../../../admission/index.js'
+import type { CandidateFinding } from '../../../admission/index.js'
 import {
   refutationProviderErrorOutcome,
   rejectedFindingForRefutationError
@@ -33,11 +33,12 @@ describe('model admission provider-error outcome', () => {
       status: 'needs-more-evidence',
       reason: 'provider-error',
       message: 'Refutation check failed: internal_timeout',
-      evidenceIds: ['ev_support1']
+      evidenceIds: ['ev_support1'],
+      severity: 'high'
     })
   })
 
-  test('creates recovered provider-error admission outcomes', () => {
+  test('reports the candidate as unadjudicated, not as recovered', () => {
     expect(
       refutationProviderErrorOutcome({
         candidate: candidate(),
@@ -53,7 +54,8 @@ describe('model admission provider-error outcome', () => {
           status: 'needs-more-evidence',
           reason: 'provider-error',
           message: 'Refutation check failed: internal_timeout',
-          evidenceIds: ['ev_support1']
+          evidenceIds: ['ev_support1'],
+          severity: 'high'
         }
       ],
       admissionDecisions: [
@@ -69,7 +71,7 @@ describe('model admission provider-error outcome', () => {
         {
           code: 'provider_timeout',
           stage: 'refutation-check',
-          recovered: true,
+          recovered: false,
           message: 'provider timed out'
         }
       ]

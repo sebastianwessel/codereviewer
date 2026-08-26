@@ -1,0 +1,35 @@
+{
+  "id": "semantic-path-traversal-resolve",
+  "title": "User filename resolved without containment check",
+  "description": "A project-owned semantic review case where path normalization and a base-directory containment check are removed from a user file read.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "java",
+  "changedFiles": [
+    "src/main/java/com/example/FileService.java"
+  ],
+  "diff": "diff --git a/src/main/java/com/example/FileService.java b/src/main/java/com/example/FileService.java\n--- a/src/main/java/com/example/FileService.java\n+++ b/src/main/java/com/example/FileService.java\n@@ -12,10 +12,7 @@ public class FileService {\n     }\n \n     public byte[] readUserFile(String fileName) throws IOException {\n-        Path target = baseDir.resolve(fileName).normalize();\n-        if (!target.startsWith(baseDir)) {\n-            throw new IOException(\"Access denied: \" + fileName);\n-        }\n+        Path target = baseDir.resolve(fileName);\n         return Files.readAllBytes(target);\n     }\n }\n",
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "high",
+      "path": "src/main/java/com/example/FileService.java",
+      "lineRange": [
+        15,
+        16
+      ],
+      "semanticSummary": "baseDir.resolve(fileName) accepts traversal sequences such as ../ with no normalization or startsWith(baseDir) check, so readUserFile can read files outside baseDir",
+      "securityMechanism": "path-traversal",
+      "contextDepth": "local"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "security",
+    "positive"
+  ]
+}

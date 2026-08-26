@@ -12,9 +12,9 @@ import {
   assembleContext,
   prepareReviewRunnerContextState,
   readChangedSourceFiles,
+  redactedReviewMaterialWarnings,
   reviewedDiffRangesForDiffMaps,
-  reviewedLineRangesForSourceFiles,
-  splitTextByUtf8Bytes
+  reviewedLineRangesForSourceFiles
 } from './context.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -35,15 +35,17 @@ const taskFor = (path: string): ReviewTask => ({
   priority: 0
 })
 
-describe('review runner context assembly', () => {
-  test('splits text on UTF-8 character boundaries', () => {
-    expect(splitTextByUtf8Bytes('a🙂b', 2)).toEqual(['a', '🙂', 'b'])
-    expect(splitTextByUtf8Bytes('', 10)).toEqual([''])
-    expect(() => splitTextByUtf8Bytes('abc', 0)).toThrow(
-      'maxBytes must be greater than 0'
-    )
-  })
+// A source file whose lines carry multi-byte UTF-8 characters, so byte counts and
+// line numbers cannot be conflated: a span derived by counting bytes drifts here
+// while looking correct on pure ASCII.
+const multiByteSource = (lineCount: number): string =>
+  `${Array.from(
+    { length: lineCount },
+    (_unused, index) =>
+      `const größe${index + 1} = 'Grüße 🙂 ${'ü'.repeat(30)}' // Zeile ${index + 1}`
+  ).join('\n')}\n`
 
+describe('review runner context assembly', () => {
   test('reads changed source files and derives reviewed ranges', async () => {
     const root = await createTempDir()
 
@@ -65,7 +67,7 @@ describe('review runner context assembly', () => {
     }
   })
 
-  test('converts diff maps to new-side reviewed ranges and skips deleted hunks', () => {
+  test('converts diff maps to new-side reviewed ranges and drops a hunk with no head-side position', () => {
     expect(
       reviewedDiffRangesForDiffMaps([
         {
@@ -78,6 +80,8 @@ describe('review runner context assembly', () => {
               newStartLine: 8,
               newLineCount: 3
             },
+            // A whole-file deletion: `newStartLine` 0 is not a line, and the file
+            // has no head side for a candidate to point at.
             {
               oldStartLine: 20,
               oldLineCount: 2,
@@ -97,6 +101,155 @@ describe('review runner context assembly', () => {
     ])
   })
 
+  // A hunk that only removes lines reports `newLineCount === 0` — the ordinary
+  // shape under intake's `--unified=0`, not an edge case. Dropping it took the
+  // whole FILE out of the reviewed-range list, and admission scope reads that list
+  // by path.
+  test('anchors a pure-deletion hunk at the removal point and marks it', () => {
+    expect(
+      reviewedDiffRangesForDiffMaps([
+        {
+          path: 'src/deleted-only.ts',
+          changeKind: 'modified',
+          hunks: [
+            {
+              oldStartLine: 10,
+              oldLineCount: 3,
+              newStartLine: 9,
+              newLineCount: 0
+            }
+          ]
+        }
+      ])
+    ).toEqual([
+      {
+        path: 'src/deleted-only.ts',
+        startLine: 9,
+        endLine: 9,
+        changeKind: 'modified',
+        deletionAnchor: true
+      }
+    ])
+  })
+
+  // Redaction can LENGTHEN text: a matched secret becomes `prefix + '[REDACTED]'`.
+  // The budget used to be measured on the raw file and then applied to the
+  // redacted string, so the tail of an instruction could be cut while the ledger
+  // recorded `included` and equal byte counts — a record asserting no loss while
+  // losing. Both now measure the text the model actually receives.
+  test('an instruction that redaction lengthens is not silently cut', async () => {
+    const root = await createTempDir()
+
+    try {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz012345'
+      await writeFile(
+        join(root, 'AGENTS.md'),
+        `Never leak ${secret}. Keep this trailing sentence intact.`
+      )
+      const config = CodeReviewerConfigSchema.parse({
+        instructions: { files: [{ path: 'AGENTS.md' }] }
+      })
+
+      const result = await prepareReviewRunnerContextState({
+        repositoryRoot: root,
+        config,
+        sourceFiles: [{ path: 'src/a.ts', content: 'export const a = 1\n' }],
+        analysis: { facts: [], evidence: [] },
+        reviewedDiffText: '',
+        tasks: [taskFor('src/a.ts')]
+      })
+      const instruction = result.assembledContext.instructions[0]
+
+      expect(instruction?.content).not.toContain(secret)
+      // The sentence AFTER the redaction survives: the budget grew with the text.
+      expect(instruction?.content).toContain('Keep this trailing sentence intact.')
+
+      const entry = result.assembledContext.contextLedger.find(
+        (ledgerEntry) => ledgerEntry.kind === 'instruction'
+      )
+
+      expect(entry?.decision).toBe('included')
+      expect(entry?.bytesIncluded).toBe(entry?.bytesConsidered)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A redaction inside packet-bound source is not the same event as a redaction
+  // in a log. The model reviews text the file does not contain, and every finding
+  // downstream of that span is derived from it — with nothing on the report to
+  // explain why the review said something the file cannot support. The ledger
+  // cannot answer it either: its `contentHash` and byte counts are taken from the
+  // content BEFORE redaction, so they describe a string the model never saw.
+  describe('redaction of packet-bound source', () => {
+    test('is counted so the run can disclose it', async () => {
+      const root = await createTempDir()
+
+      try {
+        const result = await prepareReviewRunnerContextState({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({}),
+          sourceFiles: [
+            {
+              path: 'src/a.ts',
+              content:
+                'const key = "sk-proj-abcdefghijklmnopqrstuvwxyz012345"\nexport const a = 1\n'
+            }
+          ],
+          analysis: { facts: [], evidence: [] },
+          reviewedDiffText: '',
+          tasks: [taskFor('src/a.ts')]
+        })
+
+        expect(result.metrics.redactedContextSpanCount).toBe(1)
+        expect(result.assembledContext.reviewContext[0]?.content).toContain(
+          '[REDACTED]'
+        )
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    test('counts nothing when nothing was replaced', async () => {
+      const root = await createTempDir()
+
+      try {
+        const result = await prepareReviewRunnerContextState({
+          repositoryRoot: root,
+          config: CodeReviewerConfigSchema.parse({}),
+          sourceFiles: [{ path: 'src/a.ts', content: 'export const a = 1\n' }],
+          analysis: { facts: [], evidence: [] },
+          reviewedDiffText: '',
+          tasks: [taskFor('src/a.ts')]
+        })
+
+        expect(result.metrics.redactedContextSpanCount).toBe(0)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
+
+    // Silent on a clean run, because a warning that fires every time is one
+    // nobody reads — the same rule the referenced-definition caps follow.
+    test('warns only when a span was actually replaced', () => {
+      expect(
+        redactedReviewMaterialWarnings({
+          redactedDiffSpanCount: 0,
+          redactedContextSpanCount: 0
+        })
+      ).toEqual([])
+
+      const warnings = redactedReviewMaterialWarnings({
+        redactedDiffSpanCount: 2,
+        redactedContextSpanCount: 3
+      })
+
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0]).toContain('5')
+      expect(warnings[0]).toContain('[REDACTED]')
+    })
+  })
+
   test('assembles instructions, source chunks, support-signal context, and ledger entries', async () => {
     const root = await createTempDir()
 
@@ -106,7 +259,7 @@ describe('review runner context assembly', () => {
       const sourceContent = 'export const alpha = 1\n'
       const evidence = EvidenceRecordSchema.parse({
         id: 'ev_alpha',
-        kind: 'deterministic-signal',
+        kind: 'diagnostic',
         summary: 'alpha declaration detected',
         location: { path: 'src/a.ts', startLine: 1, side: 'file' },
         source: 'deterministic-support-signal',
@@ -115,7 +268,7 @@ describe('review runner context assembly', () => {
       const config = CodeReviewerConfigSchema.parse({
         review: { contextMaxBytes: 10000 },
         instructions: {
-          files: ['AGENTS.md'],
+          files: [{ path: 'AGENTS.md' }],
           inline: 'Inline guidance'
         }
       })
@@ -133,12 +286,14 @@ describe('review runner context assembly', () => {
               path: 'src/a.ts',
               name: 'alpha',
               line: 1,
+              endLine: 1,
               summary: 'alpha declaration',
               contentHash: sha256(sourceContent)
             }
           ],
           evidence: [evidence]
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -160,6 +315,29 @@ describe('review runner context assembly', () => {
         'support-signal-output'
       ])
       expect(result.reviewContext).toHaveLength(2)
+
+      // The serialized support-signal document carries only what a model can use.
+      // Fact ids and the file content hash are internal bookkeeping — no prompt
+      // refers to either, and the hash is repeated verbatim on every fact for the
+      // file — so they must not reach a model packet. They stay on the fact
+      // records themselves, which clustering and evidence still need.
+      const supportSignalDocument = result.tasks[0]?.reviewContext.find(
+        (context) => context.kind === 'support-signal-output'
+      )
+      const serializedFacts = JSON.parse(supportSignalDocument?.content ?? '{}')
+
+      expect(serializedFacts.facts).toEqual([
+        {
+          language: 'typescript',
+          kind: 'declaration',
+          path: 'src/a.ts',
+          name: 'alpha',
+          line: 1,
+          summary: 'alpha declaration'
+        }
+      ])
+      expect(supportSignalDocument?.content).not.toContain('fact_alpha')
+      expect(supportSignalDocument?.content).not.toContain(sha256(sourceContent))
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -189,12 +367,14 @@ describe('review runner context assembly', () => {
               path: 'src/a.ts',
               name: 'alpha',
               line: 1,
+              endLine: 1,
               summary: 'alpha declaration',
               contentHash: sha256(sourceContent)
             }
           ],
           evidence: []
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -210,6 +390,78 @@ describe('review runner context assembly', () => {
     }
   })
 
+  // The support-signal document is ledgered `included`, with `bytesIncluded ===
+  // bytesConsidered`, on EVERY run. That is true of refutation, which is shown every
+  // reviewContext kind but `change-intent`, and false of discovery unless
+  // `review.signalFacts.enabled` renders the section into the packet — and the flag
+  // is off by default. So the entry was not false and could not be read correctly:
+  // a reader asking "was the reviewer shown the symbol map" found an `included`
+  // entry that meant a different stage. That is the shape that hid the
+  // reviewer-instructions defect, where context was ledgered, hashed, and dropped
+  // before the discovery call.
+  const supportSignalLedgerReason = async (
+    signalFactsEnabled: boolean
+  ): Promise<string | undefined> => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      const sourceContent = 'export const alpha = 1\n'
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          contextMaxBytes: 10000,
+          signalFacts: { enabled: signalFactsEnabled }
+        }
+      })
+
+      const result = await assembleContext({
+        repositoryRoot: root,
+        config,
+        sourceFiles: [{ path: 'src/a.ts', content: sourceContent }],
+        analysis: {
+          facts: [
+            {
+              id: 'fact_alpha',
+              language: 'typescript',
+              kind: 'declaration',
+              path: 'src/a.ts',
+              name: 'alpha',
+              line: 1,
+              endLine: 1,
+              summary: 'alpha declaration',
+              contentHash: sha256(sourceContent)
+            }
+          ],
+          evidence: []
+        },
+        reviewedDiffText: '',
+        tasks: [taskFor('src/a.ts')]
+      })
+
+      return result.contextLedger.find(
+        (entry) => entry.kind === 'support-signal-output'
+      )?.reason
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+
+  test('the support-signal ledger entry names the stage that actually reads it', async () => {
+    // Default configuration: these bytes reach refutation and NOT discovery.
+    expect(await supportSignalLedgerReason(false)).toBe(
+      'task-context-support-signal-chunk-refutation-only'
+    )
+  })
+
+  test('the same entry says so when signal facts do reach discovery', async () => {
+    // With `review.signalFacts.enabled` the packet renders the section, so the same
+    // bytes reach both stages. Both readings have to be distinguishable in the
+    // ledger, or naming the stage would just be a differently worded constant.
+    expect(await supportSignalLedgerReason(true)).toBe(
+      'task-context-support-signal-chunk-discovery-and-refutation'
+    )
+  })
+
   test('prepares context state with safe metrics and provenance hashes', async () => {
     const root = await createTempDir()
 
@@ -219,7 +471,7 @@ describe('review runner context assembly', () => {
       const sourceContent = 'export const alpha = 1\n'
       const evidence = EvidenceRecordSchema.parse({
         id: 'ev_alpha',
-        kind: 'deterministic-signal',
+        kind: 'diagnostic',
         summary: 'alpha declaration detected',
         location: { path: 'src/a.ts', startLine: 1, side: 'file' },
         source: 'deterministic-support-signal',
@@ -228,7 +480,7 @@ describe('review runner context assembly', () => {
       const config = CodeReviewerConfigSchema.parse({
         review: { contextMaxBytes: 10000 },
         instructions: {
-          files: ['AGENTS.md']
+          files: [{ path: 'AGENTS.md' }]
         }
       })
 
@@ -245,12 +497,14 @@ describe('review runner context assembly', () => {
               path: 'src/a.ts',
               name: 'alpha',
               line: 1,
+              endLine: 1,
               summary: 'alpha declaration',
               contentHash: sha256(sourceContent)
             }
           ],
           evidence: [evidence]
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -258,7 +512,18 @@ describe('review runner context assembly', () => {
         ledgerEntryCount: result.assembledContext.contextLedger.length,
         workflowTaskCount: result.assembledContext.tasks.length,
         instructionCount: result.assembledContext.instructions.length,
-        skillCount: result.assembledContext.skills.length
+        skillCount: result.assembledContext.skills.length,
+        // Nothing was dropped here, and the metric says so rather than being
+        // absent. The collector counted its own omissions all along; the call
+        // site discarded them, so a run whose dependency context was cut looked
+        // identical to one with no dependencies to add.
+        referencedDefinitionsDroppedCount: 0,
+        // Same reasoning for the read-failure count, which the dropped count used
+        // to absorb whenever the byte budget also bound.
+        referencedDefinitionsUnreadableCount: 0,
+        // And again for redaction: an ordinary run replaces nothing, and a zero
+        // that is stated is what makes a non-zero one mean something.
+        redactedContextSpanCount: 0
       })
       const instructionHash = result.assembledContext.contextLedger.find(
         (entry) => entry.kind === 'instruction'
@@ -272,7 +537,10 @@ describe('review runner context assembly', () => {
     }
   })
 
-  test('splits large source into multiple workflow tasks without truncating content', async () => {
+  test('assembles a large file WHOLE, however small the configured context is', async () => {
+    // Spec 26: assembly does not split on a byte budget. `contextMaxBytes` is set
+    // well below the file here, and it must make no difference — before this, the
+    // same input produced two partial tasks in place of one whole-file review.
     const config = CodeReviewerConfigSchema.parse({
       review: { contextMaxBytes: 10000 }
     })
@@ -283,6 +551,7 @@ describe('review runner context assembly', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: largeSource }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [taskFor('src/large.ts')]
     })
 
@@ -290,15 +559,45 @@ describe('review runner context assembly', () => {
       task.reviewContext.filter((context) => context.kind === 'file')
     )
 
-    expect(fileContexts).toHaveLength(2)
-    expect(fileContexts.map((context) => context.content).join('')).toBe(
-      largeSource
-    )
-    expect(result.contextLedger.filter((entry) => entry.kind === 'file')).toHaveLength(2)
+    expect(result.tasks).toHaveLength(1)
+    expect(fileContexts).toHaveLength(1)
+    expect(fileContexts[0]?.content).toBe(largeSource)
+    expect(
+      result.contextLedger.filter((entry) => entry.kind === 'file')
+    ).toHaveLength(1)
     expect(
       result.contextLedger
         .filter((entry) => entry.kind === 'file')
         .reduce((total, entry) => total + entry.bytesIncluded, 0)
     ).toBe(5000)
+  })
+
+  test('gives a whole-file document the file’s full line span, with multi-byte content', async () => {
+    // The span still matters after spec 26: a task the PROVIDER refuses is halved
+    // reactively, and the halves offset their line numbers from this origin. A span
+    // derived by counting bytes (or assuming one byte per character) lands on the
+    // wrong line for multi-byte content, which is why the fixture is multi-byte.
+    const config = CodeReviewerConfigSchema.parse({
+      review: { contextMaxBytes: 10000 }
+    })
+    const sourceContent = multiByteSource(200)
+
+    const result = await assembleContext({
+      repositoryRoot: '/unused',
+      config,
+      sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
+      analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
+      tasks: [taskFor('src/large.ts')]
+    })
+
+    const fileContexts = result.tasks.flatMap((task) =>
+      task.reviewContext.filter((context) => context.kind === 'file')
+    )
+
+    expect(fileContexts).toHaveLength(1)
+    expect(fileContexts[0]?.content).toBe(sourceContent)
+    expect(fileContexts[0]?.startLine).toBe(1)
+    expect(fileContexts[0]?.endLine).toBe(sourceContent.split('\n').length)
   })
 })
