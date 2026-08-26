@@ -35,9 +35,13 @@ on:
 permissions:
   contents: read
 
-# One review in flight per pull request. A push that lands while an earlier
-# review is running cancels it, so two runs can never race to create the
-# summary comment.
+# One review in flight per pull request. Whatever lands while an earlier review
+# is running cancels it, so two runs can never race to create the summary
+# comment. BOTH triggers above feed this group: a push arrives as
+# `pull_request: synchronize` and a reply as `pull_request_review_comment`, and
+# each event carries `pull_request.number`, so a reply cancels a push's review
+# and vice versa. This paragraph used to say only "a push", which was written
+# before the spec 30 reply trigger existed and was never revisited.
 #
 # THIS IS NOT SPEC 30 REQUIREMENT 5'S FLOOD BOUND, and this comment used to
 # claim it was. `cancel-in-progress` bounds the runs IN FLIGHT per pull request,
